@@ -1,0 +1,25 @@
+# Build output
+build/
+out/
+classes/
+*.class
+*.jar
+local.properties
+.gradle/
+
+# Android
+*.apk
+*.aab
+.cxx/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Spike scratch
+spikes/**/venv/
+spikes/**/ftproot/
+spikes/**/*.pem
+spikes/**/*.log
+spikes/**/*.pid
