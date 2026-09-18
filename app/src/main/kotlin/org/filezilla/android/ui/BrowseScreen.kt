@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Folder
@@ -41,6 +42,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -250,15 +252,20 @@ private fun EntryRow(
                 modifier = Modifier.padding(end = 4.dp),
             )
         }
+        // The icon is a second way into selection mode, and the quickest one:
+        // picking a folder otherwise means finding "select" in the overflow
+        // menu first. The checkbox beside it still shows the state.
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .background(chip.copy(alpha = 0.14f), RoundedCornerShape(11.dp)),
+                .clip(RoundedCornerShape(11.dp))
+                .background(chip.copy(alpha = 0.14f))
+                .clickable { actions.onToggleSelected(entry) },
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 if (entry.isDirectory) Icons.Filled.Folder else Icons.AutoMirrored.Filled.InsertDriveFile,
-                contentDescription = null,
+                contentDescription = stringResource(R.string.browse_select, entry.name),
                 tint = chip,
             )
         }
@@ -368,16 +375,24 @@ private fun GridTile(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        // A tile has no room for a checkbox beside it, so the icon carries the
+        // state as well as the tap: selected, it becomes a filled check.
         Box(
             modifier = Modifier
                 .size(48.dp)
-                .background(chip.copy(alpha = 0.14f), RoundedCornerShape(14.dp)),
+                .clip(RoundedCornerShape(14.dp))
+                .background(if (selected) chip else chip.copy(alpha = 0.14f))
+                .clickable { actions.onToggleSelected(entry) },
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                if (entry.isDirectory) Icons.Filled.Folder else Icons.AutoMirrored.Filled.InsertDriveFile,
-                contentDescription = null,
-                tint = chip,
+                when {
+                    selected -> Icons.Filled.Check
+                    entry.isDirectory -> Icons.Filled.Folder
+                    else -> Icons.AutoMirrored.Filled.InsertDriveFile
+                },
+                contentDescription = stringResource(R.string.browse_select, entry.name),
+                tint = if (selected) MaterialTheme.colorScheme.onPrimary else chip,
             )
         }
         Text(

@@ -118,6 +118,7 @@
     <string name="queued_skipped_links">%1$d개 대기열에 추가됨, 바로가기 %2$d개 건너뜀</string>
     <string name="queued_truncated">%1$d개 대기열에 추가됨. 폴더가 너무 커서 전부 담지 못했습니다</string>
     <string name="browse_download_folder">이 폴더 내려받기</string>
+    <string name="browse_select">%1$s 선택</string>
     <string name="listing_summary">폴더 %1$d · 파일 %2$d</string>
     <string name="action_rename">이름 변경</string>
     <string name="action_delete">삭제</string>

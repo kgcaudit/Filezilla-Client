@@ -38,6 +38,18 @@ data class BrowseState(
     /** Selection survives a refresh only for rows that are still there. */
     fun prunedSelection(rows: List<DirectoryEntry>): Set<String> =
         selection intersect rows.map { it.name }.toSet()
+
+    /**
+     * Picks or unpicks one row.
+     *
+     * Selecting always turns selection mode on, because tapping a row's icon
+     * is a way *into* selection mode -- otherwise the first tap would add to a
+     * selection the screen is not showing, and appear to do nothing.
+     */
+    fun withToggled(name: String): BrowseState = copy(
+        selecting = true,
+        selection = if (name in selection) selection - name else selection + name,
+    )
 }
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -162,8 +174,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleSelected(name: String) {
-        val next = if (name in browse.selection) browse.selection - name else browse.selection + name
-        browse = browse.copy(selecting = true, selection = next)
+        browse = browse.withToggled(name)
     }
 
     fun selectAll() {
