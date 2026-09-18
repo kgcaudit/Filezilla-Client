@@ -27,66 +27,85 @@ import javax.net.ssl.SSLException
 data class ConnectionFailure(
     @StringRes val title: Int,
     @StringRes val advice: Int,
-    /** The original message, shown small and last. May be blank. */
-    val technical: String,
+    /**
+     * The detail line, as a format string plus the one concrete value it
+     * carries -- the host, the endpoint, or the server's own reply.
+     *
+     * A format rather than finished text so the label around the value is
+     * translated too. What the value itself is depends on where it came from:
+     * a server's reply stays exactly as the server said it, because that is
+     * evidence, while a Java exception name is replaced, because
+     * "UnknownHostException" tells a user nothing they can act on.
+     */
+    @StringRes val detailFormat: Int,
+    val detailArg: String,
 )
 
 fun describeFailure(error: Throwable, online: Boolean): ConnectionFailure {
-    val technical = buildString {
-        append(error.javaClass.simpleName)
-        error.message?.takeIf { it.isNotBlank() }?.let { append(": ").append(it) }
-    }
+    val host = (error as? UnknownHostException)?.message.orEmpty()
+    val message = error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName
 
     // Offline is checked first: every network failure looks like a broken
     // server when the phone has no connection, and blaming the server would
     // send the user to fix something that is not wrong.
     if (!online && error is IOException) {
-        return ConnectionFailure(R.string.fail_offline, R.string.fail_offline_advice, technical)
+        return ConnectionFailure(
+            R.string.fail_offline, R.string.fail_offline_advice,
+            R.string.detail_plain, message,
+        )
     }
 
     return when (error) {
-        is UnknownHostException ->
-            ConnectionFailure(R.string.fail_host, R.string.fail_host_advice, technical)
+        is UnknownHostException -> ConnectionFailure(
+            R.string.fail_host, R.string.fail_host_advice,
+            R.string.detail_host, host,
+        )
 
-        is ConnectException, is NoRouteToHostException ->
-            ConnectionFailure(R.string.fail_refused, R.string.fail_refused_advice, technical)
+        is ConnectException, is NoRouteToHostException -> ConnectionFailure(
+            R.string.fail_refused, R.string.fail_refused_advice,
+            R.string.detail_refused, message,
+        )
 
-        is SocketTimeoutException ->
-            ConnectionFailure(R.string.fail_timeout, R.string.fail_timeout_advice, technical)
+        is SocketTimeoutException -> ConnectionFailure(
+            R.string.fail_timeout, R.string.fail_timeout_advice,
+            R.string.detail_timeout, message,
+        )
 
-        is SSLException ->
-            ConnectionFailure(R.string.fail_tls, R.string.fail_tls_advice, technical)
+        is SSLException -> ConnectionFailure(
+            R.string.fail_tls, R.string.fail_tls_advice,
+            R.string.detail_tls, message,
+        )
 
-        is FtpCommandException -> describeReply(error, technical)
+        is FtpCommandException -> describeReply(error)
 
-        is IOException ->
-            ConnectionFailure(R.string.fail_network, R.string.fail_network_advice, technical)
+        is IOException -> ConnectionFailure(
+            R.string.fail_network, R.string.fail_network_advice,
+            R.string.detail_plain, message,
+        )
 
-        else ->
-            ConnectionFailure(R.string.fail_unknown, R.string.fail_unknown_advice, technical)
+        else -> ConnectionFailure(
+            R.string.fail_unknown, R.string.fail_unknown_advice,
+            R.string.detail_plain, "${error.javaClass.simpleName}: $message",
+        )
     }
 }
 
 /**
  * A server that answered, and said no.
  *
- * The reply itself is the technical detail here rather than the exception
- * name: `530 Login incorrect` is worth more than `FtpCommandException`.
+ * The reply is carried through untranslated and unedited. "530 Login
+ * incorrect" is what the server said, and on an awkward server the exact
+ * wording is the only thing that explains the failure -- so it is evidence,
+ * not a message to be rewritten.
  */
-private fun describeReply(error: FtpCommandException, fallback: String): ConnectionFailure {
-    val raw = error.reply.raw.takeIf { it.isNotBlank() } ?: fallback
-    return when {
-        error.reply.code == 530 ->
-            ConnectionFailure(R.string.fail_login, R.string.fail_login_advice, raw)
-
-        error.reply.code == 550 ->
-            ConnectionFailure(R.string.fail_denied, R.string.fail_denied_advice, raw)
-
+private fun describeReply(error: FtpCommandException): ConnectionFailure {
+    val raw = error.reply.raw.takeIf { it.isNotBlank() } ?: error.message.orEmpty()
+    val (title, advice) = when {
+        error.reply.code == 530 -> R.string.fail_login to R.string.fail_login_advice
+        error.reply.code == 550 -> R.string.fail_denied to R.string.fail_denied_advice
         // 4yz is transient by RFC 959: the same request may well work later.
-        error.reply.category == 4 ->
-            ConnectionFailure(R.string.fail_busy, R.string.fail_busy_advice, raw)
-
-        else ->
-            ConnectionFailure(R.string.fail_refused_command, R.string.fail_refused_command_advice, raw)
+        error.reply.category == 4 -> R.string.fail_busy to R.string.fail_busy_advice
+        else -> R.string.fail_refused_command to R.string.fail_refused_command_advice
     }
+    return ConnectionFailure(title, advice, R.string.detail_server_reply, raw)
 }

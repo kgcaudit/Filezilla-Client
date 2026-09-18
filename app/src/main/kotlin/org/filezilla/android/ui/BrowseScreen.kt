@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -29,7 +32,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -46,6 +48,7 @@ import org.filezilla.android.R
 import androidx.compose.ui.unit.dp
 import org.filezilla.ftp.listing.DirectoryEntry
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BrowseScreen(
     state: BrowseState,
@@ -92,24 +95,31 @@ fun BrowseScreen(
             }
         }
 
-        if (state.loading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-
         state.error?.let { failure ->
             ErrorPanel(failure = failure, onRetry = onRefresh, onOpenLog = onOpenLog)
         }
 
         HorizontalDivider()
 
-        LazyColumn {
-            items(state.entries, key = { it.name }) { entry ->
-                EntryRow(
-                    entry = entry,
-                    onOpen = { onOpen(entry) },
-                    onDownload = { onDownload(entry) },
-                    onDelete = { onDelete(entry) },
-                    onRename = { renaming = entry },
-                )
-                HorizontalDivider()
+        // Pull down to reload, which is what a hand reaches for on a list of
+        // remote files. The refresh button stays: the gesture is invisible
+        // until someone tries it, and an empty directory has nothing to pull.
+        PullToRefreshBox(
+            isRefreshing = state.loading,
+            onRefresh = onRefresh,
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                items(state.entries, key = { it.name }) { entry ->
+                    EntryRow(
+                        entry = entry,
+                        onOpen = { onOpen(entry) },
+                        onDownload = { onDownload(entry) },
+                        onDelete = { onDelete(entry) },
+                        onRename = { renaming = entry },
+                    )
+                    HorizontalDivider()
+                }
             }
         }
     }

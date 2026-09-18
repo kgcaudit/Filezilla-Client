@@ -120,6 +120,12 @@
     <string name="fail_network_advice">The connection failed partway. Check the network and try again.</string>
     <string name="fail_unknown">Something went wrong</string>
     <string name="fail_unknown_advice">This was not a failure the app recognises. The Log tab has the whole exchange.</string>
+    <string name="detail_plain">%1$s</string>
+    <string name="detail_host">Host lookup failed: %1$s</string>
+    <string name="detail_refused">Connection refused: %1$s</string>
+    <string name="detail_timeout">Timed out: %1$s</string>
+    <string name="detail_tls">TLS error: %1$s</string>
+    <string name="detail_server_reply">Server replied: %1$s</string>
     <string name="action_retry">Try again</string>
     <string name="action_open_log">View log</string>
     <string name="fail_detail_label">Details</string>

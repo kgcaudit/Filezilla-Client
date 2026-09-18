@@ -67,14 +67,14 @@ fun ErrorPanel(
                 modifier = Modifier.padding(top = 8.dp),
             )
 
-            if (failure.technical.isNotBlank()) {
+            if (failure.detailArg.isNotBlank()) {
                 Text(
                     stringResource(R.string.fail_detail_label),
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.padding(top = 12.dp),
                 )
                 Text(
-                    failure.technical,
+                    stringResource(failure.detailFormat, failure.detailArg),
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Monospace,
                     modifier = Modifier.padding(top = 2.dp),

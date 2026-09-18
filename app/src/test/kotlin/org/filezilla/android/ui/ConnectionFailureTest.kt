@@ -29,8 +29,11 @@ class ConnectionFailureTest {
     fun `a mistyped host says so instead of echoing the host`() {
         val failure = describeFailure(UnknownHostException("ftp.exmaple.org"), online = true)
         assertEquals(R.string.fail_host, failure.title)
-        // The raw text is kept, but it is no longer the whole message.
-        assertTrue("ftp.exmaple.org" in failure.technical)
+        // The host is kept as the detail, but it is no longer the whole
+        // message, and the label around it is a translated format string
+        // rather than a Java class name.
+        assertEquals("ftp.exmaple.org", failure.detailArg)
+        assertEquals(R.string.detail_host, failure.detailFormat)
     }
 
     @Test
@@ -59,6 +62,29 @@ class ConnectionFailureTest {
     }
 
     @Test
+    fun `no failure is left without a detail label`() {
+        // Every branch has to name a format, or the panel would render a bare
+        // value with nothing saying what it is.
+        val errors = listOf<Throwable>(
+            UnknownHostException("h"),
+            ConnectException("refused"),
+            SocketTimeoutException("slow"),
+            SSLHandshakeException("tls"),
+            IOException("io"),
+            IllegalStateException("odd"),
+            FtpCommandException(reply(530, "Login incorrect"), "no"),
+            FtpCommandException(reply(421, "busy"), "no"),
+            FtpCommandException(reply(500, "what"), "no"),
+        )
+        for (online in listOf(true, false)) {
+            for (e in errors) {
+                val f = describeFailure(e, online)
+                assertTrue("$e had no detail format", f.detailFormat != 0)
+            }
+        }
+    }
+
+    @Test
     fun `a TLS failure points at the encryption setting`() {
         assertEquals(
             R.string.fail_tls,
@@ -73,8 +99,10 @@ class ConnectionFailureTest {
             online = true,
         )
         assertEquals(R.string.fail_login, failure.title)
-        // The server's own words, which are worth more than the exception's.
-        assertEquals("530 Login incorrect", failure.technical)
+        // The server's own words, carried through untranslated: they are
+        // evidence, not a message to be rewritten.
+        assertEquals("530 Login incorrect", failure.detailArg)
+        assertEquals(R.string.detail_server_reply, failure.detailFormat)
     }
 
     @Test
@@ -94,7 +122,9 @@ class ConnectionFailureTest {
     fun `an unrecognised failure still offers the log`() {
         val failure = describeFailure(IllegalStateException("something odd"), online = true)
         assertEquals(R.string.fail_unknown, failure.title)
-        assertTrue("IllegalStateException" in failure.technical)
+        // Nothing is known about this one, so the class name is all there is
+        // to offer -- and it is offered, rather than swallowed.
+        assertTrue("IllegalStateException" in failure.detailArg)
     }
 
     @Test
