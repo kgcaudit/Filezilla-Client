@@ -57,7 +57,19 @@ class FtpTransferEngine(
         resume: Boolean = true,
         binary: Boolean = true,
         progress: TransferProgressListener? = null,
-    ): TransferOutcome = writer.use { doDownload(remoteFile, it, resume, binary, progress) }
+        /**
+         * Start at exactly this offset instead of deriving one from the
+         * partial file's length.
+         *
+         * A caller that has checked the partial file against the server -- as
+         * [org.filezilla.ftp.journal.JournalledTransfer] does after a restart
+         * -- knows better than the file does how many of its bytes are still
+         * trustworthy. Passing 0 forces a full re-fetch and truncates whatever
+         * was there.
+         */
+        forcedResumeOffset: Long? = null,
+    ): TransferOutcome =
+        writer.use { doDownload(remoteFile, it, resume, binary, progress, forcedResumeOffset) }
 
     private fun doDownload(
         remoteFile: String,
@@ -65,6 +77,7 @@ class FtpTransferEngine(
         resume: Boolean,
         binary: Boolean,
         progress: TransferProgressListener?,
+        forcedResumeOffset: Long?,
     ): TransferOutcome {
         logger.log(LogLevel.STATUS, "Starting download of $remoteFile")
         control.setTransferType(binary)
@@ -75,7 +88,12 @@ class FtpTransferEngine(
         // filetransfer_resumetest
         val localSize = writer.existingSize
         var resumeOffset = 0L
-        if (resume && localSize != null && localSize > 0) {
+        if (forcedResumeOffset != null) {
+            resumeOffset = forcedResumeOffset
+            if (resumeOffset > 0) {
+                checkResumeCapability(remoteFile, resumeOffset, remoteSize)?.let { return it }
+            }
+        } else if (resume && localSize != null && localSize > 0) {
             when {
                 remoteSize == null -> {
                     // Without a remote size the partial file cannot be checked

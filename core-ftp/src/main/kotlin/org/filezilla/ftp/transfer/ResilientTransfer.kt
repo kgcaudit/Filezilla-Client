@@ -59,9 +59,21 @@ class ResilientTransfer(
         remoteFile: String,
         binary: Boolean = true,
         progress: TransferProgressListener? = null,
+        /** See [FtpTransferEngine.download]; null lets the engine decide. */
+        forcedResumeOffset: Long? = null,
         writerFactory: () -> TransferWriter,
     ): ResilientOutcome = withRetries(progress) { engine, tracked ->
-        engine.download(remoteFile, writerFactory(), resume = true, binary = binary, progress = tracked)
+        engine.download(
+            remoteFile = remoteFile,
+            writer = writerFactory(),
+            resume = true,
+            binary = binary,
+            progress = tracked,
+            // Only the first attempt is pinned to the caller's offset. After a
+            // dropped connection the partial file is the best evidence again,
+            // and it has already been checked against the server.
+            forcedResumeOffset = forcedResumeOffset.takeIf { engineAttempt == 1 },
+        )
     }
 
     /** Uploads to [remoteFile], reconnecting and resuming as needed. */
@@ -73,6 +85,9 @@ class ResilientTransfer(
     ): ResilientOutcome = withRetries(progress) { engine, tracked ->
         engine.upload(remoteFile, readerFactory(), resume = true, binary = binary, progress = tracked)
     }
+
+    /** Which attempt is running, so a pinned offset applies only to the first. */
+    private var engineAttempt = 1
 
     private fun withRetries(
         progress: TransferProgressListener?,
@@ -95,6 +110,7 @@ class ResilientTransfer(
             // Tracks what this attempt moved, so bytes lost to a dropped
             // connection still show up in the total. On a metered connection
             // that number is the cost of the retry, and worth reporting.
+            engineAttempt = attempt
             var movedThisAttempt = 0L
             val counting = TransferProgressListener { transferred, resumeOffset, totalSize ->
                 movedThisAttempt = transferred
