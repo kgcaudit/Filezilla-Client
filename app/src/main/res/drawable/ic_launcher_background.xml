@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!--
+        A diagonal gradient rather than a flat fill. Flat reads as unfinished
+        next to the icons it sits beside on a home screen, and the darker
+        bottom-right is what keeps the pale upload arrow legible where it
+        crosses it.
+    -->
+    <path android:pathData="M0,0 h108 v108 h-108 z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="11"
+                android:startY="0"
+                android:endX="97"
+                android:endY="108"
+                android:startColor="#2088DD"
+                android:endColor="#08417E" />
+        </aapt:attr>
+    </path>
+</vector>
