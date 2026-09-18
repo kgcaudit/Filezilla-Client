@@ -13,6 +13,7 @@ import kotlinx.coroutines.withContext
 import org.filezilla.android.data.AppDatabase
 import org.filezilla.android.data.PasswordCipher
 import org.filezilla.android.data.SiteEntity
+import org.filezilla.android.storage.DownloadDestination
 import org.filezilla.android.storage.PartialFiles
 import org.filezilla.android.storage.SafStorage
 import org.filezilla.ftp.io.asTransferWriter
@@ -95,11 +96,17 @@ class TransferManager(
 
     // ------------------------------------------------------------- enqueueing
 
+    /**
+     * @param subPath folders to mirror inside the chosen one. Empty for a file
+     *   the user picked directly; the path below the folder they picked when a
+     *   whole folder is being downloaded.
+     */
     suspend fun enqueueDownload(
         site: SiteEntity,
         remotePath: String,
         totalBytes: Long?,
         destinationTree: Uri,
+        subPath: List<String> = emptyList(),
     ): String = withContext(io) {
         val id = UUID.randomUUID().toString()
         journal.put(
@@ -114,7 +121,7 @@ class TransferManager(
                 // The folder, not a file in it. The document is created only
                 // once the transfer is complete, so a half-finished download
                 // never appears in the user's folder looking openable.
-                destination = destinationTree.toString(),
+                destination = DownloadDestination(destinationTree, subPath).encode(),
                 state = TransferState.PENDING,
                 totalBytes = totalBytes,
                 updatedAtMillis = System.currentTimeMillis(),
@@ -271,8 +278,8 @@ class TransferManager(
      * being downloaded again.
      */
     private fun publish(record: TransferRecord, partial: java.io.File) {
-        val tree = record.destination?.let(Uri::parse)
-        if (tree == null) {
+        val destination = record.destination?.let(DownloadDestination::decode)
+        if (destination == null) {
             log.log(LogLevel.ERROR, "${record.remotePath} has no destination folder; keeping it on the device")
             return
         }
@@ -280,7 +287,7 @@ class TransferManager(
 
         val name = record.remotePath.substringAfterLast('/').ifEmpty { record.id }
         try {
-            val saved = storage.publish(partial, tree, name)
+            val saved = storage.publish(partial, destination, name)
             partials.delete(record.id)
             log.log(LogLevel.STATUS, "Saved $name to $saved")
         } catch (e: IOException) {

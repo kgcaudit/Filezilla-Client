@@ -301,6 +301,17 @@ private fun EntryRow(
                 )
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                // A file has the download button beside it; a folder has
+                // nowhere else to be asked for on its own.
+                if (entry.isDirectory) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.browse_download_folder)) },
+                        onClick = {
+                            menuOpen = false
+                            actions.onDownload(entry)
+                        },
+                    )
+                }
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.menu_properties)) },
                     onClick = {

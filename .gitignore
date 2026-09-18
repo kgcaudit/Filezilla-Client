@@ -35,3 +35,4 @@ spikes/**/ftproot/
 spikes/**/*.pem
 spikes/**/*.log
 spikes/**/*.pid
+.kotlin/

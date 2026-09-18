@@ -68,12 +68,13 @@ class SafStorage(private val context: Context) {
      *
      * @return the URI of the created document.
      */
-    fun publish(partial: File, treeUri: Uri, displayName: String): Uri {
-        val folder = DocumentFile.fromTreeUri(context, treeUri)
+    fun publish(partial: File, destination: DownloadDestination, displayName: String): Uri {
+        val root = DocumentFile.fromTreeUri(context, destination.tree)
             ?: throw IOException("the destination folder is no longer available")
-        if (!folder.canWrite()) {
+        if (!root.canWrite()) {
             throw IOException("no permission to write to the destination folder")
         }
+        val folder = descend(root, destination.subPath)
 
         val created = folder.createFile(mimeTypeFor(displayName), displayName)
             ?: throw IOException("could not create $displayName in the destination folder")
@@ -90,6 +91,30 @@ class SafStorage(private val context: Context) {
             throw e
         }
         return created.uri
+    }
+
+    /**
+     * Walks down to the sub-folder a download belongs in, creating what is
+     * missing.
+     *
+     * Each level is looked up before it is created: a folder downloaded twice,
+     * or resumed after a restart, has to land back in the folder it already
+     * has rather than beside a second copy of it.
+     */
+    private fun descend(root: DocumentFile, subPath: List<String>): DocumentFile {
+        var folder = root
+        for (segment in subPath) {
+            val existing = folder.findFile(segment)
+            folder = when {
+                existing == null -> folder.createDirectory(segment)
+                    ?: throw IOException("could not create the folder $segment")
+                existing.isDirectory -> existing
+                // A file of that name is in the way. Writing into it is not
+                // possible and deleting it is not ours to do.
+                else -> throw IOException("$segment already exists as a file in the destination folder")
+            }
+        }
+        return folder
     }
 
     /** A [TransferReader] over a document the user picked, for uploads. */

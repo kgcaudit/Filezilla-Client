@@ -111,7 +111,14 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
     // works only until a translation happens to contain the same characters
     // somewhere else, and then it corrupts the wrong part of the sentence.
     fun queuedMessage(name: String) = context.getString(R.string.queue_queued_toast, name)
-    fun manyQueuedMessage(count: Int) = context.getString(R.string.queued_many, count)
+    /** What to say once a selection has been walked and queued. */
+    fun queuedPlanMessage(plan: DownloadPlan): String = when {
+        plan.files.isEmpty() -> context.getString(R.string.queued_none)
+        plan.truncated -> context.getString(R.string.queued_truncated, plan.files.size)
+        plan.skippedLinks > 0 ->
+            context.getString(R.string.queued_skipped_links, plan.files.size, plan.skippedLinks)
+        else -> context.getString(R.string.queued_many, plan.files.size)
+    }
 
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -124,7 +131,15 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
         model.chooseDownloadFolder(tree)
         pendingDownload?.let { entry ->
             pendingDownload = null
-            if (model.enqueueDownload(entry) { TransferService.start(context) }) {
+            // The same two cases as startDownload, which cannot be called from
+            // here: it is declared below, because it is what launches this
+            // picker when there is no folder yet.
+            if (entry.isDirectory) {
+                model.enqueueFolder(entry) { plan ->
+                    if (plan.files.isNotEmpty()) TransferService.start(context)
+                    scope.launch { snackbars.showSnackbar(queuedPlanMessage(plan)) }
+                }
+            } else if (model.enqueueDownload(entry) { TransferService.start(context) }) {
                 scope.launch { snackbars.showSnackbar(queuedMessage(entry.name)) }
             }
         }
@@ -146,10 +161,19 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
 
     fun startDownload(entry: org.filezilla.ftp.listing.DirectoryEntry) {
         requestNotifications()
-        val queued = model.enqueueDownload(entry) { TransferService.start(context) }
-        if (queued) {
-            scope.launch { snackbars.showSnackbar(queuedMessage(entry.name)) }
+        val queued = if (entry.isDirectory) {
+            // A folder has to be walked before anything can be queued, so it
+            // reports what it found rather than assuming one file.
+            model.enqueueFolder(entry) { plan ->
+                if (plan.files.isNotEmpty()) TransferService.start(context)
+                scope.launch { snackbars.showSnackbar(queuedPlanMessage(plan)) }
+            }
         } else {
+            model.enqueueDownload(entry) { TransferService.start(context) }.also { started ->
+                if (started) scope.launch { snackbars.showSnackbar(queuedMessage(entry.name)) }
+            }
+        }
+        if (!queued) {
             // Nowhere to put it yet: ask first, rather than spending the
             // user's data on a file with no destination.
             pendingDownload = entry
@@ -192,10 +216,10 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                     if (tab == Tab.BROWSE && model.browse.selecting) {
                         IconButton(onClick = {
                             requestNotifications()
-                            val queued = model.enqueueSelected { count ->
-                                TransferService.start(context)
+                            val queued = model.enqueueSelected { plan ->
+                                if (plan.files.isNotEmpty()) TransferService.start(context)
                                 scope.launch {
-                                    snackbars.showSnackbar(manyQueuedMessage(count))
+                                    snackbars.showSnackbar(queuedPlanMessage(plan))
                                 }
                             }
                             // No folder chosen yet: ask, exactly as a single

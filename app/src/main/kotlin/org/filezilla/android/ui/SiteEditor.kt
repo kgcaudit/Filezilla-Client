@@ -126,10 +126,8 @@ fun SiteEditor(
                     selected = securityLabel(security),
                     options = FtpSecurity.entries.map { it to securityLabel(it) },
                     onSelect = { chosen ->
+                        port = portAfterSecurityChange(port, security, chosen)
                         security = chosen
-                        // The default port follows the protocol, because
-                        // implicit FTPS on 21 is a connection that just hangs.
-                        port = defaultPortFor(chosen).toString()
                     },
                 )
 
@@ -277,8 +275,26 @@ private fun Hint(text: String) {
     )
 }
 
-private fun defaultPortFor(security: FtpSecurity): Int =
+fun defaultPortFor(security: FtpSecurity): Int =
     if (security == FtpSecurity.IMPLICIT_TLS) 990 else 21
+
+/**
+ * The port to show after the user changes the encryption setting.
+ *
+ * Following the protocol is a convenience, not a rule: implicit FTPS on 21 is
+ * a connection that simply hangs, so moving the port along with the protocol
+ * saves a confusing failure. But it used to overwrite the port unconditionally,
+ * which threw away a port the user had typed by hand -- and a server on a
+ * non-standard port is precisely the case someone is editing this field for.
+ *
+ * So the port moves only when it is still the default for the protocol being
+ * left, meaning nobody has chosen it. Anything else is the user's and is kept.
+ */
+fun portAfterSecurityChange(current: String, from: FtpSecurity, to: FtpSecurity): String {
+    val typed = current.toIntOrNull()
+    val wasUntouched = typed == null || typed == defaultPortFor(from)
+    return if (wasUntouched) defaultPortFor(to).toString() else current
+}
 
 @Composable
 fun securityLabel(security: FtpSecurity): String = stringResource(

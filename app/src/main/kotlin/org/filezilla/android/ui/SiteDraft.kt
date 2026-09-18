@@ -68,7 +68,7 @@ data class SiteDraft(
             // substituted at save time only if the fields are still empty.
             user = "",
             password = "",
-            security = FtpSecurity.EXPLICIT_TLS,
+            security = FtpSecurity.PLAIN,
             transferMode = TransferMode.DEFAULT,
             trustAllCertificates = false,
             initialPath = null,

@@ -198,24 +198,65 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun createDirectory(name: String) = mutate { it.createDirectory(name) }
 
-    /** Queues every selected file; directories are skipped, not recursed. */
-    fun enqueueSelected(onQueued: (Int) -> Unit): Boolean {
+    /**
+     * Queues everything selected, walking into any selected folder.
+     *
+     * The walk needs the network, so this reports through [onQueued] rather
+     * than returning a count: a folder of a thousand files takes a moment to
+     * list, and the alternative is a button that appears to do nothing while
+     * it works. The return value still says only whether there was anywhere to
+     * put the files, so the caller can ask for a folder first.
+     */
+    fun enqueueSelected(onQueued: (DownloadPlan) -> Unit): Boolean =
+        enqueuePicks(visibleEntries.filter { it.name in browse.selection }, onQueued)
+
+    /** Queues one folder and everything under it, without selection mode. */
+    fun enqueueFolder(entry: DirectoryEntry, onQueued: (DownloadPlan) -> Unit): Boolean =
+        enqueuePicks(listOf(entry), onQueued)
+
+    private fun enqueuePicks(picks: List<DirectoryEntry>, onQueued: (DownloadPlan) -> Unit): Boolean {
         val site = browse.site ?: return false
         val folder = downloadFolder ?: return false
-        val files = visibleEntries.filter { it.name in browse.selection && !it.isDirectory }
-        if (files.isEmpty()) return true
+        if (picks.isEmpty()) {
+            onQueued(DownloadPlan())
+            return true
+        }
         val directory = browse.path
+
+        browse = browse.copy(loading = true, error = null)
         viewModelScope.launch {
-            for (entry in files) {
-                graph.transfers.enqueueDownload(
-                    site,
-                    remotePathOf(directory, entry.name),
-                    entry.size.takeIf { it >= 0 },
-                    folder,
+            runCatching {
+                // One connection for the whole walk: a session per folder
+                // would reconnect for every level of the tree.
+                graph.transfers.browse(site) { session ->
+                    FolderDownload.plan(
+                        lister = { path ->
+                            session.changeDirectory(path)
+                            session.list()
+                        },
+                        directory = directory,
+                        picks = picks,
+                    )
+                }
+            }.onSuccess { plan ->
+                for (file in plan.files) {
+                    graph.transfers.enqueueDownload(
+                        site = site,
+                        remotePath = file.remotePath,
+                        totalBytes = file.size,
+                        destinationTree = folder,
+                        subPath = file.subPath,
+                    )
+                }
+                browse = browse.copy(loading = false)
+                clearSelection()
+                onQueued(plan)
+            }.onFailure { error ->
+                browse = browse.copy(
+                    loading = false,
+                    error = describeFailure(error, graph.networkGate.currentlyOnline()),
                 )
             }
-            clearSelection()
-            onQueued(files.size)
         }
         return true
     }
