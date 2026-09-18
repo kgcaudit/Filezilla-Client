@@ -39,6 +39,11 @@ IGNORE_REST = os.environ.get("IGNORE_REST", "0") == "1"
 # Cut the data connection after this many bytes, for the first DROP_TIMES
 # transfers, reproducing a connection that dies partway -- the ordinary case
 # on a phone that changes network or loses signal.
+# Drop "REST STREAM" from FEAT, as servers that only support appending do.
+# The engine then has to resume an upload with APPE instead of REST+STOR --
+# one of the six defences the README lists, and the only one no real server in
+# the compatibility matrix exercises, since all three advertise REST STREAM.
+NO_REST_STREAM = os.environ.get("NO_REST_STREAM", "0") == "1"
 DROP_AFTER_BYTES = int(os.environ.get("DROP_AFTER_BYTES", "0"))
 DROP_TIMES = int(os.environ.get("DROP_TIMES", "0"))
 
@@ -106,6 +111,23 @@ class ReuseCheckingDTPHandler(TLS_DTPHandler):
 
 class Handler(TLS_FTPHandler):
     dtp_handler = ReuseCheckingDTPHandler
+
+    def ftp_FEAT(self, line):
+        if not NO_REST_STREAM:
+            return super().ftp_FEAT(line)
+        # pyftpdlib appends "REST STREAM" unconditionally, so the reply is
+        # rebuilt rather than filtered. REST itself still works: the point is
+        # a server that does not advertise the capability, not one that has
+        # lost the command -- download resume must stay measurable.
+        feats = [
+            "UTF8", "TVFS", "EPRT", "EPSV", "MDTM", "MFMT", "SIZE",
+            "MLST type*;size*;modify*;", "MLSD",
+        ]
+        note("FEAT without REST STREAM, forcing the APPE path for uploads")
+        self.push("211-Features supported:\r\n")
+        for feat in feats:
+            self.push(" %s\r\n" % feat)
+        self.respond("211 End FEAT.")
 
     def ftp_REST(self, line):
         super().ftp_REST(line)

@@ -33,6 +33,12 @@ class FtpsTestServer(
      */
     private val dropAfterBytes: Int = 0,
     private val dropTimes: Int = 0,
+    /**
+     * Leave `REST STREAM` out of `FEAT`, so a resumed upload has to fall back
+     * to `APPE`. No real server in the compatibility matrix does this, which
+     * is why the option exists.
+     */
+    private val noRestStream: Boolean = false,
 ) {
     lateinit var root: File
         private set
@@ -64,6 +70,7 @@ class FtpsTestServer(
             put("TLS_MAX", tlsMax)
             put("NO_TICKET", if (noTicket) "1" else "0")
             put("IGNORE_REST", if (ignoreRest) "1" else "0")
+            put("NO_REST_STREAM", if (noRestStream) "1" else "0")
             put("DROP_AFTER_BYTES", dropAfterBytes.toString())
             put("DROP_TIMES", dropTimes.toString())
         }

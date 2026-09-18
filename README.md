@@ -18,7 +18,7 @@ GPL-3.0-or-later), specifically `src/engine/ftp/` and `src/engine/controlsocket.
 | 2 | Resume engine | **done** — verified against a live server, including a server that fakes `REST` |
 | 3 | Background transfers, persistence, network-change recovery | **done** — Room-backed journal, foreground service, SAF storage |
 | 4 | UI | **done** — sites, remote browser, transfer queue, message log |
-| 5 | Server compatibility matrix | |
+| 5 | Server compatibility matrix | **done** — vsftpd, Pure-FTPd and pyftpdlib, measured not assumed: [`docs/server-compatibility.md`](docs/server-compatibility.md) |
 
 ## Why the transfer logic is ported rather than written fresh
 
@@ -83,6 +83,17 @@ core-ftp/src/test/resources/ftps-server/setup.sh
 
 Without it those tests skip themselves and the unit tests still run.
 
+The Phase 5 compatibility matrix additionally drives vsftpd and Pure-FTPd. It
+needs root, because both authenticate against the system account database:
+
+```sh
+core-ftp/src/test/resources/compat-servers/setup-compat.sh
+```
+
+Those tests skip themselves too when it has not been run. See
+[`docs/server-compatibility.md`](docs/server-compatibility.md) for what each
+server was observed to do.
+
 `:app` needs the Android SDK. With `ANDROID_HOME` set (or `sdk.dir` in
 `local.properties`) it joins the build automatically:
 
@@ -96,7 +107,9 @@ builds and tests on a plain JDK.
 
 ### What has and has not been run
 
-`:core-ftp`'s 95 tests pass, the integration ones against a live FTPS server.
+`:core-ftp`'s 99 tests pass, the integration ones against live FTP servers --
+the scriptable Python one, and vsftpd and Pure-FTPd for the compatibility
+matrix.
 `:app`'s 24 unit tests pass on the JVM under Robolectric, and cover the pieces
 whose failure would be silent — that a `TransferRecord` survives the round trip
 through Room with its offset and fingerprint intact, that a `RUNNING` row left
