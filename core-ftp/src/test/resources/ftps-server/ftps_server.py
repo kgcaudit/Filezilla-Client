@@ -36,6 +36,13 @@ REQUIRE_SSL_REUSE = os.environ.get("REQUIRE_SSL_REUSE", "1") == "1"
 # with the 2 GB / 4 GB offset bug behave. The engine is supposed to catch this
 # with its one-byte probe rather than trusting the 350.
 IGNORE_REST = os.environ.get("IGNORE_REST", "0") == "1"
+# Cut the data connection after this many bytes, for the first DROP_TIMES
+# transfers, reproducing a connection that dies partway -- the ordinary case
+# on a phone that changes network or loses signal.
+DROP_AFTER_BYTES = int(os.environ.get("DROP_AFTER_BYTES", "0"))
+DROP_TIMES = int(os.environ.get("DROP_TIMES", "0"))
+
+_drops_remaining = DROP_TIMES
 TLS_MAX = os.environ.get("TLS_MAX", "1.2")
 PORT = int(os.environ.get("FTPS_PORT", "2121"))
 PASV_LO, PASV_HI = (
@@ -54,7 +61,34 @@ def note(msg):
 
 
 class ReuseCheckingDTPHandler(TLS_DTPHandler):
-    """Rejects a data connection whose TLS session was not resumed."""
+    """Rejects a data connection whose TLS session was not resumed, and
+    optionally cuts the connection partway through a transfer."""
+
+    def __init__(self, sock, cmd_channel):
+        super().__init__(sock, cmd_channel)
+        self._sent_bytes = 0
+        self._dropping = False
+
+    def send(self, data):
+        global _drops_remaining
+        if DROP_AFTER_BYTES <= 0 or _drops_remaining <= 0 or self._dropping:
+            return super().send(data)
+
+        remaining = DROP_AFTER_BYTES - self._sent_bytes
+        if remaining <= 0:
+            _drops_remaining -= 1
+            self._dropping = True
+            note(
+                f"cutting data connection after {self._sent_bytes} bytes "
+                f"({_drops_remaining} drop(s) left)"
+            )
+            self.close()
+            return 0
+        if len(data) > remaining:
+            data = data[:remaining]
+        sent = super().send(data)
+        self._sent_bytes += sent
+        return sent
 
     def handle_ssl_established(self):
         super().handle_ssl_established()
@@ -122,7 +156,8 @@ def main():
     note(
         f"listening on 127.0.0.1:{PORT} "
         f"require_ssl_reuse={REQUIRE_SSL_REUSE} tls_max={TLS_MAX} "
-        f"ignore_rest={IGNORE_REST} root={ROOT}"
+        f"ignore_rest={IGNORE_REST} drop_after={DROP_AFTER_BYTES}x{DROP_TIMES} "
+        f"root={ROOT}"
     )
     # Readiness marker the test harness waits for; stdout, not stderr.
     print(f"READY {PORT}", flush=True)

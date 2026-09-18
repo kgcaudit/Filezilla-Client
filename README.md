@@ -16,7 +16,7 @@ GPL-3.0-or-later), specifically `src/engine/ftp/` and `src/engine/controlsocket.
 | 0 | Project skeleton, module split | in progress |
 | 1 | FTP/FTPS protocol core, listing, directory operations | **done** |
 | 2 | Resume engine | **done** — verified against a live server, including a server that fakes `REST` |
-| 3 | Background transfers, persistence, network-change recovery | retry policy done; the rest needs the Android module |
+| 3 | Background transfers, persistence, network-change recovery | reconnect-and-resume done and verified; foreground service and persistence need the Android module |
 | 4 | UI | |
 | 5 | Server compatibility matrix | |
 
