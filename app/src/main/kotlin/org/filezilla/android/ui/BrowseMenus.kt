@@ -1,0 +1,307 @@
+package org.filezilla.android.ui
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import org.filezilla.android.R
+import org.filezilla.ftp.listing.DirectoryEntry
+
+/**
+ * Everything the Files screen can do, behind one ⋮.
+ *
+ * The app bar had four icons competing for a phone's width and no room for
+ * what a file manager is actually expected to offer. The two actions that are
+ * used constantly -- new directory and upload -- stay as icons; the rest moves
+ * in here, in the order a person reaches for them: work with what is listed,
+ * change how it is listed, then the occasional settings.
+ */
+@Composable
+fun BrowseOverflow(
+    options: BrowseOptions,
+    filterOpen: Boolean,
+    onSelectMode: () -> Unit,
+    onSelectAll: () -> Unit,
+    onToggleFilter: () -> Unit,
+    onViewOptions: () -> Unit,
+    onChooseFolder: () -> Unit,
+    onRefresh: () -> Unit,
+    onOptions: (BrowseOptions) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+
+    IconButton(onClick = { open = true }) {
+        Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.menu_more))
+    }
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        Item(R.string.menu_select, Icons.Filled.Checklist) {
+            open = false
+            onSelectMode()
+        }
+        Item(R.string.menu_select_all, Icons.Filled.Checklist) {
+            open = false
+            onSelectAll()
+        }
+        HorizontalDivider()
+        Item(
+            if (filterOpen) R.string.filter_clear else R.string.menu_filter,
+            Icons.Filled.FilterList,
+        ) {
+            open = false
+            onToggleFilter()
+        }
+        Item(R.string.menu_view_options, Icons.Filled.Tune) {
+            open = false
+            onViewOptions()
+        }
+        // The two folder options that get toggled often enough to deserve
+        // being one tap rather than two; the rest live in view options.
+        CheckItem(R.string.option_folders_first, options.foldersFirst) {
+            onOptions(options.copy(foldersFirst = it))
+        }
+        CheckItem(R.string.option_show_hidden, options.showHidden) {
+            onOptions(options.copy(showHidden = it))
+        }
+        HorizontalDivider()
+        Item(R.string.browse_choose_folder, Icons.Filled.Folder) {
+            open = false
+            onChooseFolder()
+        }
+        Item(R.string.browse_refresh, Icons.Filled.Refresh) {
+            open = false
+            onRefresh()
+        }
+    }
+}
+
+@Composable
+private fun Item(labelRes: Int, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(stringResource(labelRes)) },
+        leadingIcon = { Icon(icon, contentDescription = null) },
+        onClick = onClick,
+    )
+}
+
+@Composable
+private fun CheckItem(labelRes: Int, checked: Boolean, onChange: (Boolean) -> Unit) {
+    DropdownMenuItem(
+        text = { Text(stringResource(labelRes)) },
+        leadingIcon = { Icon(Icons.Filled.Visibility, contentDescription = null) },
+        trailingIcon = { Checkbox(checked = checked, onCheckedChange = null) },
+        onClick = { onChange(!checked) },
+    )
+}
+
+/**
+ * View and sort, laid out as a panel rather than a list of menu entries.
+ *
+ * Sorting has two parts -- what to sort by and which way round -- and a flat
+ * menu hides that: the user picks "size" and cannot see that it is still
+ * descending from last time. Shown together, the current state is one glance.
+ */
+@Composable
+fun ViewOptionsDialog(
+    options: BrowseOptions,
+    onDismiss: () -> Unit,
+    onApply: (BrowseOptions) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.menu_view_options)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Label(R.string.view_mode)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Choice(R.string.view_list, Icons.AutoMirrored.Filled.ViewList, options.viewMode == ViewMode.LIST) {
+                        onApply(options.copy(viewMode = ViewMode.LIST))
+                    }
+                    Choice(R.string.view_grid, Icons.Filled.GridView, options.viewMode == ViewMode.GRID) {
+                        onApply(options.copy(viewMode = ViewMode.GRID))
+                    }
+                }
+
+                Label(R.string.sort_mode)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SortChoice(R.string.sort_name, SortKey.NAME, options, onApply)
+                    SortChoice(R.string.sort_date, SortKey.DATE, options, onApply)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SortChoice(R.string.sort_size, SortKey.SIZE, options, onApply)
+                    SortChoice(R.string.sort_type, SortKey.TYPE, options, onApply)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Choice(R.string.sort_ascending, Icons.Filled.ArrowUpward, options.ascending) {
+                        onApply(options.copy(ascending = true))
+                    }
+                    Choice(R.string.sort_descending, Icons.Filled.ArrowDownward, !options.ascending) {
+                        onApply(options.copy(ascending = false))
+                    }
+                }
+
+                Label(R.string.menu_folder_options)
+                Toggle(R.string.option_folders_first, options.foldersFirst) {
+                    onApply(options.copy(foldersFirst = it))
+                }
+                Toggle(R.string.option_show_hidden, options.showHidden) {
+                    onApply(options.copy(showHidden = it))
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } },
+    )
+}
+
+@Composable
+private fun Label(res: Int) {
+    Text(
+        stringResource(res),
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+}
+
+@Composable
+private fun Choice(
+    labelRes: Int,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(stringResource(labelRes)) },
+        leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
+    )
+}
+
+@Composable
+private fun SortChoice(
+    labelRes: Int,
+    key: SortKey,
+    options: BrowseOptions,
+    onApply: (BrowseOptions) -> Unit,
+) {
+    FilterChip(
+        selected = options.sortKey == key,
+        onClick = { onApply(options.copy(sortKey = key)) },
+        label = { Text(stringResource(labelRes)) },
+        leadingIcon = {
+            Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = null, modifier = Modifier.size(18.dp))
+        },
+    )
+}
+
+@Composable
+private fun Toggle(labelRes: Int, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectable(selected = checked, onClick = { onChange(!checked) })
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked = checked, onCheckedChange = { onChange(it) })
+        Text(stringResource(labelRes), modifier = Modifier.padding(start = 4.dp))
+    }
+}
+
+/** Everything the listing knows about one entry, which is more than a row shows. */
+@Composable
+fun PropertiesDialog(entry: DirectoryEntry, path: String, onDismiss: () -> Unit) {
+    val unknown = stringResource(R.string.props_unknown)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Filled.Info, contentDescription = null) },
+        title = { Text(stringResource(R.string.props_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Field(R.string.props_name, entry.name)
+                Field(
+                    R.string.props_kind,
+                    stringResource(
+                        when {
+                            entry.isLink -> R.string.props_kind_link
+                            entry.isDirectory -> R.string.props_kind_folder
+                            else -> R.string.props_kind_file
+                        },
+                    ),
+                )
+                if (!entry.isDirectory) {
+                    Field(R.string.props_size, formatSize(entry.size).ifBlank { unknown })
+                }
+                Field(R.string.props_modified, formatEntryTime(entry).ifBlank { unknown })
+                Field(R.string.props_permissions, entry.permissions ?: unknown)
+                Field(R.string.props_owner, entry.ownerGroup ?: unknown)
+                Field(R.string.props_path, remotePathOf(path, entry.name))
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } },
+    )
+}
+
+@Composable
+private fun Field(labelRes: Int, value: String) {
+    Column {
+        Text(
+            stringResource(labelRes),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(value, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+/** The icons the app bar keeps, because they are used on every visit. */
+@Composable
+fun BrowseQuickActions(onNewDirectory: () -> Unit, onUpload: () -> Unit) {
+    IconButton(onClick = onNewDirectory) {
+        Icon(Icons.Filled.CreateNewFolder, contentDescription = stringResource(R.string.browse_new_directory))
+    }
+    IconButton(onClick = onUpload) {
+        Icon(Icons.Filled.Upload, contentDescription = stringResource(R.string.browse_upload))
+    }
+}

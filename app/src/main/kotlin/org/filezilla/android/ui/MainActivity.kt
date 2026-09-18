@@ -28,6 +28,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -86,6 +91,8 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
     var tab by remember { mutableStateOf(Tab.SITES) }
     var editingSite by remember { mutableStateOf<SiteDraft?>(null) }
     var creatingDirectory by remember { mutableStateOf(false) }
+    var viewOptionsOpen by remember { mutableStateOf(false) }
+    var confirmingDelete by remember { mutableStateOf(false) }
 
     val sites by model.sites.collectAsState()
     val transfers by model.transfers.collectAsState()
@@ -98,6 +105,7 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
     var pendingDownload by remember { mutableStateOf<org.filezilla.ftp.listing.DirectoryEntry?>(null) }
 
     val uploadQueuedMessage = stringResource(R.string.queue_upload_toast)
+    val manyQueuedTemplate = stringResource(R.string.queued_many, 0).replace("0", "%d")
     val queuedTemplate = stringResource(R.string.queue_queued_toast, "%s")
     fun queuedMessage(name: String) = queuedTemplate.replace("%s", name)
 
@@ -151,7 +159,11 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
             TopAppBar(
                 title = {
                     Text(
-                        titleFor(tab, model),
+                        if (tab == Tab.BROWSE && model.browse.selecting) {
+                            stringResource(R.string.menu_selected, model.browse.selection.size)
+                        } else {
+                            titleFor(tab, model)
+                        },
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -162,21 +174,66 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                     titleContentColor = MaterialTheme.colorScheme.onPrimary,
                     actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
                 ),
+                navigationIcon = {
+                    if (tab == Tab.BROWSE && model.browse.selecting) {
+                        IconButton(onClick = model::clearSelection) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = stringResource(R.string.menu_select_none),
+                            )
+                        }
+                    }
+                },
                 actions = {
+                    if (tab == Tab.BROWSE && model.browse.selecting) {
+                        IconButton(onClick = {
+                            requestNotifications()
+                            val queued = model.enqueueSelected { count ->
+                                TransferService.start(context)
+                                scope.launch {
+                                    snackbars.showSnackbar(manyQueuedTemplate.replace("%d", "$count"))
+                                }
+                            }
+                            // No folder chosen yet: ask, exactly as a single
+                            // download does, rather than failing quietly.
+                            if (!queued) folderPicker.launch(null)
+                        }) {
+                            Icon(
+                                Icons.Filled.Download,
+                                contentDescription = stringResource(R.string.action_download_selected),
+                            )
+                        }
+                        IconButton(
+                            onClick = { confirmingDelete = true },
+                            enabled = model.browse.selection.isNotEmpty(),
+                        ) {
+                            Icon(
+                                Icons.Filled.Delete,
+                                contentDescription = stringResource(R.string.action_delete_selected),
+                            )
+                        }
+                        return@TopAppBar
+                    }
                     when (tab) {
                         Tab.BROWSE -> if (model.browse.site != null) {
-                            IconButton(onClick = { creatingDirectory = true }) {
-                                Icon(Icons.Filled.CreateNewFolder, contentDescription = stringResource(R.string.browse_new_directory))
-                            }
-                            IconButton(onClick = {
-                                requestNotifications()
-                                uploadPicker.launch(arrayOf("*/*"))
-                            }) {
-                                Icon(Icons.Filled.Upload, contentDescription = stringResource(R.string.browse_upload))
-                            }
-                            IconButton(onClick = { folderPicker.launch(null) }) {
-                                Icon(Icons.Filled.Folder, contentDescription = stringResource(R.string.browse_choose_folder))
-                            }
+                            BrowseQuickActions(
+                                onNewDirectory = { creatingDirectory = true },
+                                onUpload = {
+                                    requestNotifications()
+                                    uploadPicker.launch(arrayOf("*/*"))
+                                },
+                            )
+                            BrowseOverflow(
+                                options = model.options,
+                                filterOpen = model.browse.filterOpen,
+                                onSelectMode = model::toggleSelectionMode,
+                                onSelectAll = model::selectAll,
+                                onToggleFilter = model::toggleFilter,
+                                onViewOptions = { viewOptionsOpen = true },
+                                onChooseFolder = { folderPicker.launch(null) },
+                                onRefresh = model::refresh,
+                                onOptions = model::applyOptions,
+                            )
                         }
 
                         Tab.QUEUE -> {
@@ -239,14 +296,22 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
 
             Tab.BROWSE -> BrowseScreen(
                 state = model.browse,
+                rows = model.visibleEntries,
+                options = model.options,
                 downloadFolderName = model.downloadFolderName,
                 onUp = model::goUp,
                 onRefresh = model::refresh,
                 onOpenLog = { tab = Tab.LOG },
-                onOpen = { model.openDirectory(it.name) },
-                onDownload = ::startDownload,
-                onDelete = model::delete,
-                onRename = model::rename,
+                onFilterChange = model::setFilter,
+                onCloseFilter = model::toggleFilter,
+                actions = EntryActions(
+                    onOpen = { model.openDirectory(it.name) },
+                    onDownload = ::startDownload,
+                    onDelete = model::delete,
+                    onRename = model::rename,
+                    onProperties = { model.showProperties(it) },
+                    onToggleSelected = { model.toggleSelected(it.name) },
+                ),
                 modifier = Modifier.padding(padding),
             )
 
@@ -264,6 +329,42 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
 
             Tab.LOG -> LogScreen(lines = logLines, modifier = Modifier.padding(padding))
         }
+    }
+
+    if (viewOptionsOpen) {
+        ViewOptionsDialog(
+            options = model.options,
+            onDismiss = { viewOptionsOpen = false },
+            onApply = model::applyOptions,
+        )
+    }
+
+    model.browse.properties?.let { entry ->
+        PropertiesDialog(
+            entry = entry,
+            path = model.browse.path,
+            onDismiss = { model.showProperties(null) },
+        )
+    }
+
+    if (confirmingDelete) {
+        val count = model.browse.selection.size
+        AlertDialog(
+            onDismissRequest = { confirmingDelete = false },
+            title = { Text(stringResource(R.string.confirm_delete_title, count)) },
+            text = { Text(stringResource(R.string.confirm_delete_body)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmingDelete = false
+                    model.deleteSelected()
+                }) { Text(stringResource(R.string.action_delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmingDelete = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
     }
 
     if (creatingDirectory) {

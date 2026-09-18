@@ -25,7 +25,20 @@ data class BrowseState(
     val entries: List<DirectoryEntry> = emptyList(),
     val loading: Boolean = false,
     val error: ConnectionFailure? = null,
-)
+
+    /** Names of the selected rows; empty means selection mode is off. */
+    val selection: Set<String> = emptySet(),
+    /** True once the user has entered selection mode, even with nothing picked. */
+    val selecting: Boolean = false,
+    val filter: String = "",
+    val filterOpen: Boolean = false,
+    /** The entry whose properties are being shown, if any. */
+    val properties: DirectoryEntry? = null,
+) {
+    /** Selection survives a refresh only for rows that are still there. */
+    fun prunedSelection(rows: List<DirectoryEntry>): Set<String> =
+        selection intersect rows.map { it.name }.toSet()
+}
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -43,6 +56,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     var browse by mutableStateOf(BrowseState())
         private set
+
+    /** Sort, view and folder options, remembered between runs. */
+    var options by mutableStateOf(graph.preferences.browseOptions)
+        private set
+
+    /** The listing as the screen shows it: filtered, sorted, arranged. */
+    val visibleEntries: List<DirectoryEntry>
+        get() = BrowseListing.arrange(browse.entries, options, browse.filter)
 
     /** Set once the user has picked a folder for downloads to land in. */
     var downloadFolder by mutableStateOf(graph.preferences.downloadFolder)
@@ -109,10 +130,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }.onSuccess { (here, entries) ->
                 browse = browse.copy(
                     path = here,
-                    entries = entries.sortedWith(
-                        compareByDescending<DirectoryEntry> { it.isDirectory }
-                            .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name },
-                    ),
+                    entries = entries,
+                    // A directory the user moved into has nothing selected,
+                    // and a refresh keeps only what is still there.
+                    selection = if (here == browse.path) browse.prunedSelection(entries) else emptySet(),
                     loading = false,
                     error = null,
                 )
@@ -125,7 +146,90 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun applyOptions(next: BrowseOptions) {
+        options = next
+        graph.preferences.browseOptions = next
+    }
+
+    // ------------------------------------------------------------- selection
+
+    fun toggleSelectionMode() {
+        browse = if (browse.selecting) {
+            browse.copy(selecting = false, selection = emptySet())
+        } else {
+            browse.copy(selecting = true)
+        }
+    }
+
+    fun toggleSelected(name: String) {
+        val next = if (name in browse.selection) browse.selection - name else browse.selection + name
+        browse = browse.copy(selecting = true, selection = next)
+    }
+
+    fun selectAll() {
+        browse = browse.copy(selecting = true, selection = visibleEntries.map { it.name }.toSet())
+    }
+
+    fun clearSelection() {
+        browse = browse.copy(selecting = false, selection = emptySet())
+    }
+
+    // ---------------------------------------------------------------- filter
+
+    fun setFilter(text: String) {
+        browse = browse.copy(filter = text)
+    }
+
+    fun toggleFilter() {
+        // Closing the bar clears the filter: leaving a hidden one applied is
+        // how a directory comes to look empty for no visible reason.
+        browse = if (browse.filterOpen) {
+            browse.copy(filterOpen = false, filter = "")
+        } else {
+            browse.copy(filterOpen = true)
+        }
+    }
+
+    // ------------------------------------------------------------ properties
+
+    fun showProperties(entry: DirectoryEntry?) {
+        browse = browse.copy(properties = entry)
+    }
+
     fun createDirectory(name: String) = mutate { it.createDirectory(name) }
+
+    /** Queues every selected file; directories are skipped, not recursed. */
+    fun enqueueSelected(onQueued: (Int) -> Unit): Boolean {
+        val site = browse.site ?: return false
+        val folder = downloadFolder ?: return false
+        val files = visibleEntries.filter { it.name in browse.selection && !it.isDirectory }
+        if (files.isEmpty()) return true
+        val directory = browse.path
+        viewModelScope.launch {
+            for (entry in files) {
+                graph.transfers.enqueueDownload(
+                    site,
+                    remotePathOf(directory, entry.name),
+                    entry.size.takeIf { it >= 0 },
+                    folder,
+                )
+            }
+            clearSelection()
+            onQueued(files.size)
+        }
+        return true
+    }
+
+    fun deleteSelected() {
+        val chosen = browse.selection.toSet()
+        val rows = browse.entries.filter { it.name in chosen }
+        mutate { session ->
+            for (entry in rows) {
+                if (entry.isDirectory) session.removeDirectory(entry.name) else session.deleteFile(entry.name)
+            }
+        }
+        clearSelection()
+    }
 
     fun delete(entry: DirectoryEntry) = mutate { session ->
         if (entry.isDirectory) session.removeDirectory(entry.name) else session.deleteFile(entry.name)
@@ -146,10 +250,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }.onSuccess { entries ->
                 browse = browse.copy(
-                    entries = entries.sortedWith(
-                        compareByDescending<DirectoryEntry> { it.isDirectory }
-                            .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name },
-                    ),
+                    entries = entries,
+                    selection = browse.prunedSelection(entries),
                     loading = false,
                 )
             }.onFailure { error ->
