@@ -32,6 +32,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import org.filezilla.android.R
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -51,8 +53,8 @@ fun SitesScreen(
 ) {
     if (sites.isEmpty()) {
         EmptyState(
-            title = "No servers yet",
-            detail = "Add one with the + button. FTP and FTPS are supported; FTPS explicit on port 21 is the usual choice.",
+            title = stringResource(R.string.sites_empty_title),
+            detail = stringResource(R.string.sites_empty_detail),
             modifier = modifier,
         )
     } else {
@@ -79,10 +81,10 @@ fun SitesScreen(
                             )
                         }
                         IconButton(onClick = { onEdit(site) }) {
-                            Icon(Icons.Filled.Edit, contentDescription = "Edit ${site.name}")
+                            Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.sites_edit, site.name))
                         }
                         IconButton(onClick = { onDelete(site) }) {
-                            Icon(Icons.Filled.Delete, contentDescription = "Delete ${site.name}")
+                            Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.sites_delete, site.name))
                         }
                     }
                 }
@@ -121,25 +123,25 @@ private fun SiteEditor(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (initial.host.isBlank()) "New server" else "Edit server") },
+        title = { Text(stringResource(if (initial.host.isBlank()) R.string.sites_new_title else R.string.sites_edit_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Name") },
+                    label = { Text(stringResource(R.string.field_name)) },
                     singleLine = true,
                 )
                 OutlinedTextField(
                     value = host,
                     onValueChange = { host = it },
-                    label = { Text("Host") },
+                    label = { Text(stringResource(R.string.field_host)) },
                     singleLine = true,
                 )
                 OutlinedTextField(
                     value = port,
                     onValueChange = { candidate -> port = candidate.filter { it.isDigit() }.take(5) },
-                    label = { Text("Port") },
+                    label = { Text(stringResource(R.string.field_port)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 )
@@ -152,7 +154,7 @@ private fun SiteEditor(
                         value = securityLabel(security),
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Encryption") },
+                        label = { Text(stringResource(R.string.field_encryption)) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(securityExpanded) },
                         modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
                     )
@@ -179,13 +181,13 @@ private fun SiteEditor(
                 OutlinedTextField(
                     value = user,
                     onValueChange = { user = it },
-                    label = { Text("User") },
+                    label = { Text(stringResource(R.string.field_user)) },
                     singleLine = true,
                 )
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text("Password") },
+                    label = { Text(stringResource(R.string.field_password)) },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     isError = initial.passwordUnreadable,
@@ -195,7 +197,7 @@ private fun SiteEditor(
                             // the keystore key went with the app's data. Say
                             // so, rather than letting an empty box look like
                             // a password that was never set.
-                            Text("The saved password could not be read back and needs entering again.")
+                            Text(stringResource(R.string.password_unreadable))
                         }
                     } else {
                         null
@@ -204,16 +206,15 @@ private fun SiteEditor(
                 OutlinedTextField(
                     value = initialPath,
                     onValueChange = { initialPath = it },
-                    label = { Text("Start directory (optional)") },
+                    label = { Text(stringResource(R.string.field_initial_path)) },
                     singleLine = true,
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(checked = trustAll, onCheckedChange = { trustAll = it })
                     Column(modifier = Modifier.padding(start = 8.dp)) {
-                        Text("Accept any certificate")
+                        Text(stringResource(R.string.trust_all_title))
                         Text(
-                            "Turns off certificate checking for this server. " +
-                                "Only for a server whose certificate you already know.",
+                            stringResource(R.string.trust_all_detail),
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
@@ -237,17 +238,20 @@ private fun SiteEditor(
                         ),
                     )
                 },
-            ) { Text("Save") }
+            ) { Text(stringResource(R.string.action_save)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
     )
 }
 
 private fun defaultPortFor(security: FtpSecurity): Int =
     if (security == FtpSecurity.IMPLICIT_TLS) 990 else 21
 
-fun securityLabel(security: FtpSecurity): String = when (security) {
-    FtpSecurity.PLAIN -> "Plain FTP"
-    FtpSecurity.EXPLICIT_TLS -> "FTPS explicit (AUTH TLS)"
-    FtpSecurity.IMPLICIT_TLS -> "FTPS implicit"
-}
+@Composable
+fun securityLabel(security: FtpSecurity): String = stringResource(
+    when (security) {
+        FtpSecurity.PLAIN -> R.string.security_plain
+        FtpSecurity.EXPLICIT_TLS -> R.string.security_explicit
+        FtpSecurity.IMPLICIT_TLS -> R.string.security_implicit
+    },
+)

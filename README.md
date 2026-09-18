@@ -1,4 +1,4 @@
-# FileZilla-Client for Android
+# OLO FTP Client for Android
 
 An Android FTP/FTPS client whose goal is that **connecting to a server and
 resuming an interrupted transfer work correctly, every time** — including the

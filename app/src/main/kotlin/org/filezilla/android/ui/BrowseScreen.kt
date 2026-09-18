@@ -35,6 +35,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import org.filezilla.android.R
 import androidx.compose.ui.unit.dp
 import org.filezilla.ftp.listing.DirectoryEntry
 
@@ -52,8 +54,8 @@ fun BrowseScreen(
 ) {
     if (state.site == null) {
         EmptyState(
-            title = "Not connected",
-            detail = "Pick a server on the Sites tab to browse it.",
+            title = stringResource(R.string.browse_not_connected_title),
+            detail = stringResource(R.string.browse_not_connected_detail),
             modifier = modifier,
         )
         return
@@ -67,19 +69,19 @@ fun BrowseScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onUp, enabled = state.path != "/") {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Up one directory")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.browse_up))
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(state.path, style = MaterialTheme.typography.titleSmall, maxLines = 1)
                 Text(
-                    downloadFolderName?.let { "Downloads go to $it" }
-                        ?: "No download folder chosen yet",
+                    downloadFolderName?.let { stringResource(R.string.browse_destination, it) }
+                        ?: stringResource(R.string.browse_no_destination),
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                 )
             }
             IconButton(onClick = onRefresh) {
-                Icon(Icons.Filled.Refresh, contentDescription = "Refresh listing")
+                Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.browse_refresh))
             }
         }
 
@@ -119,8 +121,8 @@ fun BrowseScreen(
 
     renaming?.let { entry ->
         TextPromptDialog(
-            title = "Rename ${entry.name}",
-            label = "New name",
+            title = stringResource(R.string.prompt_rename_title, entry.name),
+            label = stringResource(R.string.prompt_new_name),
             initial = entry.name,
             onDismiss = { renaming = null },
             onConfirm = { newName ->
@@ -165,22 +167,22 @@ private fun EntryRow(
         }
         if (!entry.isDirectory) {
             IconButton(onClick = onDownload) {
-                Icon(Icons.Filled.Download, contentDescription = "Download ${entry.name}")
+                Icon(Icons.Filled.Download, contentDescription = stringResource(R.string.browse_download, entry.name))
             }
         }
         IconButton(onClick = { menuOpen = true }) {
-            Icon(Icons.Filled.MoreVert, contentDescription = "More actions for ${entry.name}")
+            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.browse_more, entry.name))
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             DropdownMenuItem(
-                text = { Text("Rename") },
+                text = { Text(stringResource(R.string.action_rename)) },
                 onClick = {
                     menuOpen = false
                     onRename()
                 },
             )
             DropdownMenuItem(
-                text = { Text("Delete") },
+                text = { Text(stringResource(R.string.action_delete)) },
                 onClick = {
                     menuOpen = false
                     onDelete()
@@ -214,9 +216,9 @@ fun TextPromptDialog(
         },
         confirmButton = {
             TextButton(enabled = text.isNotBlank(), onClick = { onConfirm(text.trim()) }) {
-                Text("OK")
+                Text(stringResource(R.string.action_ok))
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
     )
 }

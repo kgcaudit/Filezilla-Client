@@ -36,19 +36,26 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import org.filezilla.android.data.SiteEntity
 import org.filezilla.android.service.TransferService
-import org.filezilla.android.ui.theme.FileZillaTheme
+import org.filezilla.android.R
+import org.filezilla.android.ui.theme.OloTheme
 
-private enum class Tab(val label: String) { SITES("Sites"), BROWSE("Browse"), QUEUE("Queue"), LOG("Log") }
+private enum class Tab(val label: Int) {
+    SITES(R.string.tab_sites),
+    BROWSE(R.string.tab_browse),
+    QUEUE(R.string.tab_queue),
+    LOG(R.string.tab_log),
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            FileZillaTheme {
+            OloTheme {
                 AppScreen()
             }
         }
@@ -76,6 +83,10 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
     // file again.
     var pendingDownload by remember { mutableStateOf<org.filezilla.ftp.listing.DirectoryEntry?>(null) }
 
+    val uploadQueuedMessage = stringResource(R.string.queue_upload_toast)
+    val queuedTemplate = stringResource(R.string.queue_queued_toast, "%s")
+    fun queuedMessage(name: String) = queuedTemplate.replace("%s", name)
+
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { /* The transfer runs either way; without it the progress is just invisible. */ }
@@ -88,7 +99,7 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
         pendingDownload?.let { entry ->
             pendingDownload = null
             if (model.enqueueDownload(entry) { TransferService.start(context) }) {
-                scope.launch { snackbars.showSnackbar("${entry.name} queued") }
+                scope.launch { snackbars.showSnackbar(queuedMessage(entry.name)) }
             }
         }
     }
@@ -98,7 +109,7 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
     ) { source: Uri? ->
         if (source == null) return@rememberLauncherForActivityResult
         model.enqueueUpload(source) { TransferService.start(context) }
-        scope.launch { snackbars.showSnackbar("Upload queued") }
+        scope.launch { snackbars.showSnackbar(uploadQueuedMessage) }
     }
 
     fun requestNotifications() {
@@ -111,7 +122,7 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
         requestNotifications()
         val queued = model.enqueueDownload(entry) { TransferService.start(context) }
         if (queued) {
-            scope.launch { snackbars.showSnackbar("${entry.name} queued") }
+            scope.launch { snackbars.showSnackbar(queuedMessage(entry.name)) }
         } else {
             // Nowhere to put it yet: ask first, rather than spending the
             // user's data on a file with no destination.
@@ -129,30 +140,30 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                     when (tab) {
                         Tab.BROWSE -> if (model.browse.site != null) {
                             IconButton(onClick = { creatingDirectory = true }) {
-                                Icon(Icons.Filled.CreateNewFolder, contentDescription = "New directory")
+                                Icon(Icons.Filled.CreateNewFolder, contentDescription = stringResource(R.string.browse_new_directory))
                             }
                             IconButton(onClick = {
                                 requestNotifications()
                                 uploadPicker.launch(arrayOf("*/*"))
                             }) {
-                                Icon(Icons.Filled.Upload, contentDescription = "Upload a file")
+                                Icon(Icons.Filled.Upload, contentDescription = stringResource(R.string.browse_upload))
                             }
                             IconButton(onClick = { folderPicker.launch(null) }) {
-                                Icon(Icons.Filled.Folder, contentDescription = "Choose the download folder")
+                                Icon(Icons.Filled.Folder, contentDescription = stringResource(R.string.browse_choose_folder))
                             }
                         }
 
                         Tab.QUEUE -> {
                             IconButton(onClick = { model.clearCompleted() }) {
-                                Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Clear finished transfers")
+                                Icon(Icons.AutoMirrored.Filled.List, contentDescription = stringResource(R.string.queue_clear_finished))
                             }
                             IconButton(onClick = { TransferService.start(context) }) {
-                                Icon(Icons.Filled.SwapVert, contentDescription = "Start the queue")
+                                Icon(Icons.Filled.SwapVert, contentDescription = stringResource(R.string.queue_start))
                             }
                         }
 
                         Tab.LOG -> IconButton(onClick = { model.clearLog() }) {
-                            Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Clear the log")
+                            Icon(Icons.AutoMirrored.Filled.List, contentDescription = stringResource(R.string.log_clear))
                         }
 
                         Tab.SITES -> Unit
@@ -163,7 +174,7 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
         floatingActionButton = {
             if (tab == Tab.SITES) {
                 FloatingActionButton(onClick = { editingSite = model.newSite() }) {
-                    Icon(Icons.Filled.Add, contentDescription = "Add a server")
+                    Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.sites_add))
                 }
             }
         },
@@ -174,7 +185,7 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                         selected = tab == candidate,
                         onClick = { tab = candidate },
                         icon = { Icon(iconFor(candidate), contentDescription = null) },
-                        label = { Text(candidate.label) },
+                        label = { Text(stringResource(candidate.label)) },
                     )
                 }
             }
@@ -224,8 +235,8 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
 
     if (creatingDirectory) {
         TextPromptDialog(
-            title = "New directory",
-            label = "Name",
+            title = stringResource(R.string.browse_new_directory),
+            label = stringResource(R.string.prompt_name),
             onDismiss = { creatingDirectory = false },
             onConfirm = { name ->
                 model.createDirectory(name)
@@ -235,11 +246,15 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
     }
 }
 
+@Composable
 private fun titleFor(tab: Tab, model: MainViewModel): String = when (tab) {
-    Tab.SITES -> "Servers"
-    Tab.BROWSE -> model.browse.site?.name?.ifBlank { model.browse.site?.host.orEmpty() } ?: "Browse"
-    Tab.QUEUE -> "Transfers"
-    Tab.LOG -> "Message log"
+    Tab.SITES -> stringResource(R.string.title_sites)
+    // The connected server's own name, when there is one: on this screen it
+    // says more than the word "Files" does.
+    Tab.BROWSE -> model.browse.site?.name?.ifBlank { model.browse.site?.host.orEmpty() }
+        ?: stringResource(R.string.title_browse)
+    Tab.QUEUE -> stringResource(R.string.title_queue)
+    Tab.LOG -> stringResource(R.string.title_log)
 }
 
 private fun iconFor(tab: Tab) = when (tab) {

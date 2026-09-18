@@ -1,20 +1,96 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">FileZilla</string>
+    <string name="app_name">OLO FTP Client</string>
 
+    <!-- Notification -->
     <string name="notification_channel_transfers">Transfers</string>
     <string name="notification_channel_transfers_description">Progress of running uploads and downloads</string>
     <string name="notification_preparing">Preparing transfer</string>
-    <string name="notification_progress">%1$s of %2$s (%3$d%%)</string>
+    <string name="notification_progress">%1$s / %2$s · %3$d%%</string>
     <string name="notification_progress_unknown">%1$s transferred</string>
     <plurals name="notification_queued">
-        <item quantity="one">%d more queued</item>
-        <item quantity="other">%d more queued</item>
+        <item quantity="one">%d more waiting</item>
+        <item quantity="other">%d more waiting</item>
     </plurals>
-
     <string name="action_stop">Stop</string>
-    <string name="tab_sites">Sites</string>
-    <string name="tab_browse">Browse</string>
-    <string name="tab_queue">Queue</string>
+
+    <!-- Tabs -->
+    <string name="tab_sites">Servers</string>
+    <string name="tab_browse">Files</string>
+    <string name="tab_queue">Transfers</string>
     <string name="tab_log">Log</string>
+
+    <!-- Titles -->
+    <string name="title_sites">Servers</string>
+    <string name="title_browse">Files</string>
+    <string name="title_queue">Transfers</string>
+    <string name="title_log">Message log</string>
+
+    <!-- Sites -->
+    <string name="sites_empty_title">No servers yet</string>
+    <string name="sites_empty_detail">Add one with the + button. FTP and FTPS are both supported; FTPS explicit on port 21 is the usual choice.</string>
+    <string name="sites_add">Add a server</string>
+    <string name="sites_edit">Edit %1$s</string>
+    <string name="sites_delete">Delete %1$s</string>
+    <string name="sites_new_title">New server</string>
+    <string name="sites_edit_title">Edit server</string>
+    <string name="field_name">Name</string>
+    <string name="field_host">Host</string>
+    <string name="field_port">Port</string>
+    <string name="field_encryption">Encryption</string>
+    <string name="field_user">User</string>
+    <string name="field_password">Password</string>
+    <string name="field_initial_path">Start directory (optional)</string>
+    <string name="password_unreadable">The saved password could not be read back and needs entering again.</string>
+    <string name="trust_all_title">Accept any certificate</string>
+    <string name="trust_all_detail">Turns off certificate checking for this server. Only for a server whose certificate you already know.</string>
+    <string name="security_plain">Plain FTP</string>
+    <string name="security_explicit">FTPS explicit (AUTH TLS)</string>
+    <string name="security_implicit">FTPS implicit</string>
+    <string name="action_save">Save</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_ok">OK</string>
+
+    <!-- Browse -->
+    <string name="browse_not_connected_title">Not connected</string>
+    <string name="browse_not_connected_detail">Pick a server on the Servers tab to browse it.</string>
+    <string name="browse_up">Up one directory</string>
+    <string name="browse_refresh">Refresh listing</string>
+    <string name="browse_destination">Saving to %1$s</string>
+    <string name="browse_no_destination">No download folder chosen yet</string>
+    <string name="browse_download">Download %1$s</string>
+    <string name="browse_more">More actions for %1$s</string>
+    <string name="browse_new_directory">New directory</string>
+    <string name="browse_upload">Upload a file</string>
+    <string name="browse_choose_folder">Choose the download folder</string>
+    <string name="action_rename">Rename</string>
+    <string name="action_delete">Delete</string>
+    <string name="prompt_rename_title">Rename %1$s</string>
+    <string name="prompt_new_name">New name</string>
+    <string name="prompt_name">Name</string>
+
+    <!-- Queue -->
+    <string name="queue_empty_title">Nothing queued</string>
+    <string name="queue_empty_detail">Tap a file on the Files tab to download it. Transfers keep running when you leave the app.</string>
+    <string name="queue_pause">Pause</string>
+    <string name="queue_resume">Resume</string>
+    <string name="queue_remove">Remove from the list</string>
+    <string name="queue_clear_finished">Clear finished transfers</string>
+    <string name="queue_start">Start the queue</string>
+    <string name="queue_queued_toast">%1$s queued</string>
+    <string name="queue_upload_toast">Upload queued</string>
+    <string name="direction_download">Download</string>
+    <string name="direction_upload">Upload</string>
+    <string name="state_pending">Waiting</string>
+    <string name="state_running">Transferring</string>
+    <string name="state_paused">Paused</string>
+    <string name="state_interrupted">Interrupted — will resume</string>
+    <string name="state_completed">Done</string>
+    <string name="state_failed">Failed</string>
+    <string name="queue_attempt">attempt %1$d</string>
+
+    <!-- Log -->
+    <string name="log_empty_title">Nothing logged yet</string>
+    <string name="log_empty_detail">Every command sent and every reply received shows up here once you connect.</string>
+    <string name="log_clear">Clear the log</string>
 </resources>

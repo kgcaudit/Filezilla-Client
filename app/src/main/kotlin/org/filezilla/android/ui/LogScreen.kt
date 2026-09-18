@@ -11,6 +11,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import org.filezilla.android.R
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -28,8 +30,8 @@ import org.filezilla.ftp.protocol.LogLevel
 fun LogScreen(lines: List<LogLine>, modifier: Modifier = Modifier) {
     if (lines.isEmpty()) {
         EmptyState(
-            title = "Nothing logged yet",
-            detail = "Every command sent and every reply received shows up here once you connect.",
+            title = stringResource(R.string.log_empty_title),
+            detail = stringResource(R.string.log_empty_detail),
             modifier = modifier,
         )
         return

@@ -75,6 +75,11 @@ class TransferManager(
     private val activeState = MutableStateFlow<ActiveProgress?>(null)
     val active: StateFlow<ActiveProgress?> = activeState.asStateFlow()
 
+    private val waitingState = MutableStateFlow(0)
+
+    /** How many transfers the queue still has to get to after the running one. */
+    val waitingCount: StateFlow<Int> = waitingState.asStateFlow()
+
     @Volatile
     private var stopRequested = false
 
@@ -170,12 +175,14 @@ class TransferManager(
 
             while (!stopRequested) {
                 val record = nextRunnable() ?: break
+                waitingState.value = (journal.resumable().size - 1).coerceAtLeast(0)
                 // runInterruptible so that cancelling this coroutine -- which
                 // is what stopping the service does -- interrupts a socket
                 // parked on a read, instead of waiting out its timeout.
                 runInterruptible { runOne(record) }
             }
             activeState.value = null
+            waitingState.value = 0
             partials.pruneOrphans(journal.all().map { it.id }.toSet())
         }
     }

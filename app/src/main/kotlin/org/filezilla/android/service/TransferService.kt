@@ -30,6 +30,8 @@ class TransferService : LifecycleService() {
     private lateinit var notifications: TransferNotifications
     private var queueJob: Job? = null
 
+    private var lastNotifiedAt = 0L
+
     override fun onCreate() {
         super.onCreate()
         graph = AppGraph.of(this)
@@ -38,12 +40,20 @@ class TransferService : LifecycleService() {
         graph.networkGate.start()
 
         // The notification is rebuilt as the transfer moves, so the user can
-        // see it is alive without opening the app.
+        // see it is alive without opening the app -- but not on every update.
+        //
+        // The engine reports progress every 64 KB, which on any real
+        // connection is tens or hundreds of times a second. Posting a
+        // notification that often does not make it smoother: Android rate
+        // limits notification updates and silently drops the excess, so the
+        // notification freezes at whatever it managed to show first while the
+        // in-app progress carries on. That is exactly the bug this throttle
+        // fixes -- the notification was stuck at 1% while the app showed 94%.
         lifecycleScope.launch {
             graph.transfers.active.collectLatest { progress ->
-                if (queueJob?.isActive == true) {
-                    notify(progress?.let { notifications.build(it, 0) })
-                }
+                if (queueJob?.isActive != true) return@collectLatest
+                if (progress != null && !shouldRepost()) return@collectLatest
+                notify(progress?.let { notifications.build(it, waitingCount()) })
             }
         }
     }
@@ -94,6 +104,24 @@ class TransferService : LifecycleService() {
         }
     }
 
+    /**
+     * True when this update is worth spending a notification post on.
+     *
+     * A plain interval floor, which is all that is needed: the bytes and the
+     * percentage both move continuously, so there is no update the user would
+     * miss by waiting half a second for it.
+     */
+    private fun shouldRepost(): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - lastNotifiedAt < MIN_NOTIFY_INTERVAL_MILLIS) return false
+        lastNotifiedAt = now
+        return true
+    }
+
+    /** Transfers the queue still has to get to, for the notification's subtext. */
+    private fun waitingCount(): Int =
+        graph.transfers.waitingCount.value
+
     private fun notify(notification: android.app.Notification?) {
         if (notification == null) return
         val manager = getSystemService(android.app.NotificationManager::class.java)
@@ -110,6 +138,13 @@ class TransferService : LifecycleService() {
 
     companion object {
         const val ACTION_STOP = "org.filezilla.android.action.STOP"
+
+        /**
+         * Android tolerates roughly ten notification posts a second before it
+         * starts dropping them; twice a second is smooth to read and leaves
+         * the budget untouched.
+         */
+        private const val MIN_NOTIFY_INTERVAL_MILLIS = 500L
 
         /**
          * Starts the queue.
