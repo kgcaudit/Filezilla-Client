@@ -10,6 +10,10 @@ import androidx.core.app.NotificationCompat
 import org.filezilla.android.R
 import org.filezilla.android.transfer.ActiveProgress
 import org.filezilla.android.ui.MainActivity
+import org.filezilla.android.ui.formatSize
+import org.filezilla.android.transfer.secondsRemaining
+import org.filezilla.android.ui.formatSpeed
+import org.filezilla.android.ui.formatDuration
 
 /** The notification the foreground service is required to show while it runs. */
 class TransferNotifications(private val context: Context) {
@@ -65,26 +69,43 @@ class TransferNotifications(private val context: Context) {
                 builder.setContentText(
                     context.getString(
                         R.string.notification_progress,
-                        formatBytes(progress.bytes),
-                        formatBytes(total),
+                        formatSize(progress.bytes),
+                        formatSize(total),
                         percent,
                     ),
                 )
+                // The speed goes on the second line rather than into the
+                // first, which is already close to the width a notification
+                // will show before it truncates.
+                speedText(progress)?.let(builder::setSubText)
             } else {
                 // No size from the server: an indeterminate bar is honest,
                 // where a made-up percentage would not be.
                 builder.setProgress(0, 0, true)
                 builder.setContentText(
-                    context.getString(R.string.notification_progress_unknown, formatBytes(progress.bytes)),
+                    context.getString(R.string.notification_progress_unknown, formatSize(progress.bytes)),
                 )
             }
         }
 
+        // The queue count matters more than the speed when there is one: it
+        // is the part the user cannot see from the progress bar.
         if (queued > 0) {
             builder.setSubText(context.resources.getQuantityString(R.plurals.notification_queued, queued, queued))
         }
 
         return builder.build()
+    }
+
+    private fun speedText(progress: ActiveProgress): String? {
+        val speed = progress.bytesPerSecond?.takeIf { it > 0 } ?: return null
+        val left = secondsRemaining(progress.bytes, progress.totalBytes, speed)
+            ?: return formatSpeed(speed)
+        return context.getString(
+            R.string.queue_speed_remaining,
+            formatSpeed(speed),
+            formatDuration(left),
+        )
     }
 
     companion object {
@@ -93,15 +114,3 @@ class TransferNotifications(private val context: Context) {
     }
 }
 
-/** Bytes as the queue screen and the notification both show them. */
-fun formatBytes(bytes: Long): String {
-    if (bytes < 1024) return "$bytes B"
-    val units = listOf("KiB", "MiB", "GiB", "TiB")
-    var value = bytes.toDouble() / 1024
-    var unit = 0
-    while (value >= 1024 && unit < units.lastIndex) {
-        value /= 1024
-        unit++
-    }
-    return String.format(java.util.Locale.US, "%.1f %s", value, units[unit])
-}

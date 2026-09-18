@@ -35,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.filezilla.android.R
 import org.filezilla.android.transfer.ActiveProgress
+import org.filezilla.android.transfer.secondsRemaining
 import org.filezilla.android.ui.theme.status
 import org.filezilla.ftp.journal.TransferDirection
 import org.filezilla.ftp.journal.TransferRecord
@@ -72,6 +73,9 @@ fun QueueScreen(
                 record = record,
                 bytes = if (live) active.bytes else record.bytesTransferred,
                 total = if (live) active.totalBytes else record.totalBytes,
+                // Only the running transfer has a speed; a paused or waiting
+                // one showing a leftover figure would be a lie.
+                bytesPerSecond = if (live) active.bytesPerSecond else null,
                 onPause = { onPause(record.id) },
                 onResume = { onResume(record.id) },
                 onCancel = { onCancel(record.id) },
@@ -85,6 +89,7 @@ private fun TransferCard(
     record: TransferRecord,
     bytes: Long,
     total: Long?,
+    bytesPerSecond: Long?,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onCancel: () -> Unit,
@@ -189,6 +194,16 @@ private fun TransferCard(
                 )
             }
 
+            speedLine(bytes, total, bytesPerSecond)?.let { line ->
+                Text(
+                    line,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                )
+            }
+
             if (record.attempts > 1 && record.state != TransferState.COMPLETED) {
                 Text(
                     stringResource(R.string.queue_attempt, record.attempts),
@@ -244,4 +259,14 @@ private fun sizeLine(bytes: Long, total: Long?, percent: Int?): String = when {
         "${formatSize(bytes)} / ${formatSize(total)} · $percent%"
 
     else -> formatSize(bytes)
+}
+
+/** Speed, and time left when the total makes that an honest thing to say. */
+@Composable
+private fun speedLine(bytes: Long, total: Long?, bytesPerSecond: Long?): String? {
+    if (bytesPerSecond == null || bytesPerSecond <= 0) return null
+    val speed = formatSpeed(bytesPerSecond)
+    val left = secondsRemaining(bytes, total, bytesPerSecond)
+        ?: return speed
+    return stringResource(R.string.queue_speed_remaining, speed, formatDuration(left))
 }

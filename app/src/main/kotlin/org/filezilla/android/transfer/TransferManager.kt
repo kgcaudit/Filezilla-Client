@@ -38,6 +38,8 @@ data class ActiveProgress(
     val direction: TransferDirection,
     val bytes: Long,
     val totalBytes: Long?,
+    /** Smoothed speed, or null until there is enough of the transfer to say. */
+    val bytesPerSecond: Long? = null,
 )
 
 /**
@@ -86,6 +88,9 @@ class TransferManager(
 
     /** Delivers a pause to the transfer thread; see [PauseSignal]. */
     private val pauseSignal = PauseSignal()
+
+    /** Speed of the transfer currently running. Reset between records. */
+    private val rate = TransferRate()
 
     /** Which transfer a thread is actually running, or null between records. */
     @Volatile
@@ -213,6 +218,7 @@ class TransferManager(
         )
 
         activeId = record.id
+        rate.reset()
         try {
             when (record.direction) {
                 TransferDirection.DOWNLOAD -> runDownload(record, site)
@@ -359,12 +365,16 @@ class TransferManager(
             // The one place a running transfer can be stopped promptly. The
             // engine calls this every 64 KB and does not catch what it throws.
             pauseSignal.stopIfRequested(record.id)
+            // Measured on what has moved this run, not on the resume offset:
+            // bytes fetched yesterday did not arrive at today's speed.
+            rate.update(transferred)
             activeState.value = ActiveProgress(
                 id = record.id,
                 remotePath = record.remotePath,
                 direction = record.direction,
                 bytes = resumeOffset + transferred,
                 totalBytes = totalSize ?: record.totalBytes,
+                bytesPerSecond = rate.bytesPerSecond,
             )
         }
 

@@ -116,6 +116,7 @@
     <string name="confirm_delete_body">This cannot be undone. Directories must be empty.</string>
     <string name="queued_many">%1$d queued</string>
     <string name="queued_none">Nothing to download in what you selected</string>
+    <string name="queue_speed_remaining">%1$s · %2$s left</string>
     <string name="queued_skipped_links">%1$d queued, %2$d shortcuts skipped</string>
     <string name="queued_truncated">%1$d queued; the folder was too large to take all of it</string>
     <string name="browse_download_folder">Download this folder</string>
