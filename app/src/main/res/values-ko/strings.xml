@@ -47,6 +47,7 @@
     <string name="field_encoding">파일명 인코딩</string>
     <string name="encoding_auto">자동 (UTF-8)</string>
     <string name="encoding_note">파일명이 깨질 때만 변경하세요. 국내 NAS는 EUC-KR로 저장하는 경우가 많습니다.</string>
+    <string name="password_hint">비워두면 익명 접속</string>
     <string name="field_initial_path">시작 디렉터리 (선택)</string>
     <string name="password_unreadable">저장된 비밀번호를 읽지 못했습니다. 다시 입력해 주세요.</string>
     <string name="trust_all_title">모든 인증서 허용</string>

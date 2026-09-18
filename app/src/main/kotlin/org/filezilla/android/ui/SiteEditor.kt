@@ -98,6 +98,9 @@ fun SiteEditor(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text(stringResource(R.string.field_name)) },
+                    // Left blank, the host becomes the name; saying so saves
+                    // the user inventing one.
+                    placeholder = { Text(host.ifBlank { stringResource(R.string.field_host) }) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -153,6 +156,9 @@ fun SiteEditor(
                     value = user,
                     onValueChange = { user = it },
                     label = { Text(stringResource(R.string.field_user)) },
+                    // A hint, so the field is empty and ready to type into,
+                    // while still saying what happens if it is left alone.
+                    placeholder = { Text(SiteDraft.ANONYMOUS_USER) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -160,6 +166,7 @@ fun SiteEditor(
                     value = password,
                     onValueChange = { password = it },
                     label = { Text(stringResource(R.string.field_password)) },
+                    placeholder = { Text(stringResource(R.string.password_hint)) },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     isError = initial.passwordUnreadable,

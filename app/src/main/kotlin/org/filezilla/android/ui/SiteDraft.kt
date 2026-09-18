@@ -39,8 +39,13 @@ data class SiteDraft(
         name = name.ifBlank { host },
         host = host.trim(),
         port = port,
-        user = user.ifBlank { "anonymous" },
-        passwordCipher = passwords.encrypt(password),
+        user = user.ifBlank { ANONYMOUS_USER },
+        // The anonymous convention only applies when the user left both
+        // blank. A named account with no password is a choice some servers
+        // allow, and substituting one would silently change what was typed.
+        passwordCipher = passwords.encrypt(
+            if (user.isBlank() && password.isBlank()) ANONYMOUS_PASSWORD else password,
+        ),
         security = security.name,
         transferMode = transferMode.name,
         trustAllCertificates = trustAllCertificates,
@@ -49,13 +54,20 @@ data class SiteDraft(
     )
 
     companion object {
+        const val ANONYMOUS_USER = "anonymous"
+        const val ANONYMOUS_PASSWORD = "anonymous@"
+
         fun blank() = SiteDraft(
             id = UUID.randomUUID().toString(),
             name = "",
             host = "",
             port = 21,
-            user = "anonymous",
-            password = "anonymous@",
+            // Blank, not prefilled. These used to arrive as real values, so
+            // anyone entering their own account had to backspace through
+            // them first. They are hints in the form instead, and are
+            // substituted at save time only if the fields are still empty.
+            user = "",
+            password = "",
             security = FtpSecurity.EXPLICIT_TLS,
             transferMode = TransferMode.DEFAULT,
             trustAllCertificates = false,

@@ -48,6 +48,7 @@
     <string name="field_encoding">Filename encoding</string>
     <string name="encoding_auto">Automatic (UTF-8)</string>
     <string name="encoding_note">Change this only if filenames come out garbled. Many Korean NAS boxes store them as EUC-KR.</string>
+    <string name="password_hint">Leave blank for anonymous</string>
     <string name="field_initial_path">Start directory (optional)</string>
     <string name="password_unreadable">The saved password could not be read back and needs entering again.</string>
     <string name="trust_all_title">Accept any certificate</string>
