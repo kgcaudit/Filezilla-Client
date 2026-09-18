@@ -1,0 +1,92 @@
+package org.filezilla.android.service
+
+import android.app.Notification
+import androidx.test.core.app.ApplicationProvider
+import org.filezilla.android.transfer.ActiveProgress
+import org.filezilla.ftp.journal.TransferDirection
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+
+@RunWith(RobolectricTestRunner::class)
+class TransferNotificationsTest {
+
+    private lateinit var notifications: TransferNotifications
+
+    @Before
+    fun setUp() {
+        notifications = TransferNotifications(ApplicationProvider.getApplicationContext())
+    }
+
+    private fun progress(speed: Long? = 6_500_000) = ActiveProgress(
+        id = "one",
+        remotePath = "/HDD1/One.Night.Only.mkv",
+        direction = TransferDirection.DOWNLOAD,
+        bytes = 102_100_000,
+        totalBytes = 2_000_000_000,
+        bytesPerSecond = speed,
+        startedAtMillis = 1,
+    )
+
+    private fun Notification.text(): String =
+        extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
+
+    private fun Notification.subText(): String =
+        extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString().orEmpty()
+
+    @Test
+    fun `the speed is on the line the user reads`() {
+        val text = notifications.build(progress(), queued = 0).text()
+
+        assertTrue("speed missing from \"$text\"", text.contains("6.5 MB/s"))
+        assertTrue("size missing from \"$text\"", text.contains("2.0 GB"))
+    }
+
+    /**
+     * The bug this pins: the speed and the queue count both wrote the
+     * notification's subtext, and the queue count won. Since a queue is the
+     * normal state while transfers run, the speed was missing almost whenever
+     * it mattered.
+     */
+    @Test
+    fun `a queued transfer does not take the speed away`() {
+        val notification = notifications.build(progress(), queued = 3)
+
+        assertTrue(
+            "speed missing from \"${notification.text()}\"",
+            notification.text().contains("6.5 MB/s"),
+        )
+        assertTrue(
+            "queue count missing from \"${notification.subText()}\"",
+            notification.subText().contains("3"),
+        )
+    }
+
+    /** A size the server never gave is no reason to hide how fast it is going. */
+    @Test
+    fun `the speed shows even when the total size is unknown`() {
+        val unsized = progress().copy(totalBytes = null)
+
+        val text = notifications.build(unsized, queued = 0).text()
+
+        assertTrue("speed missing from \"$text\"", text.contains("6.5 MB/s"))
+    }
+
+    /** Before there is enough of the transfer to measure, it says nothing. */
+    @Test
+    fun `no speed is claimed before one has been measured`() {
+        val text = notifications.build(progress(speed = null), queued = 0).text()
+
+        assertTrue("invented a speed: \"$text\"", !text.contains("/s"))
+        assertTrue("size missing from \"$text\"", text.contains("2.0 GB"))
+    }
+
+    @Test
+    fun `waiting for the network says so rather than showing a stale bar`() {
+        val text = notifications.build(progress = null, queued = 0, heldForNetwork = true).text()
+
+        assertTrue("\"$text\"", text.isNotBlank())
+    }
+}
