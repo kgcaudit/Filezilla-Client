@@ -24,7 +24,7 @@ data class BrowseState(
     val path: String = "/",
     val entries: List<DirectoryEntry> = emptyList(),
     val loading: Boolean = false,
-    val error: String? = null,
+    val error: ConnectionFailure? = null,
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -119,7 +119,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }.onFailure { error ->
                 browse = browse.copy(
                     loading = false,
-                    error = error.message ?: error.javaClass.simpleName,
+                    error = describeFailure(error, graph.networkGate.currentlyOnline()),
                 )
             }
         }
@@ -153,7 +153,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     loading = false,
                 )
             }.onFailure { error ->
-                browse = browse.copy(loading = false, error = error.message ?: error.javaClass.simpleName)
+                browse = browse.copy(
+                    loading = false,
+                    error = describeFailure(error, graph.networkGate.currentlyOnline()),
+                )
             }
         }
     }

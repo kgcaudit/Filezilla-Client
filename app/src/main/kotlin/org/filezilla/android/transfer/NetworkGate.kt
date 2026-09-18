@@ -59,6 +59,20 @@ class NetworkGate(context: Context) {
     val isOnline: Boolean get() = online
 
     /**
+     * Asks the platform right now, rather than reporting what the callback
+     * last saw.
+     *
+     * The UI needs this: [start] is called by the transfer service, so a
+     * screen that has never started one would otherwise be told the phone is
+     * offline and would blame the wrong thing for a failed connection.
+     */
+    fun currentlyOnline(): Boolean = runCatching {
+        val active = manager.activeNetwork ?: return@runCatching false
+        val caps = manager.getNetworkCapabilities(active) ?: return@runCatching false
+        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }.getOrDefault(false)
+
+    /**
      * The `sleep` an [org.filezilla.ftp.transfer.ResilientTransfer] is given.
      *
      * Serves [backoffMillis] in full, then keeps waiting while the phone is
@@ -85,12 +99,7 @@ class NetworkGate(context: Context) {
     }
 
     private fun update() {
-        val nowOnline = runCatching {
-            val active = manager.activeNetwork ?: return@runCatching false
-            val caps = manager.getNetworkCapabilities(active) ?: return@runCatching false
-            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-        }.getOrDefault(false)
-
+        val nowOnline = currentlyOnline()
         synchronized(lock) {
             online = nowOnline
             if (nowOnline) lock.notifyAll()

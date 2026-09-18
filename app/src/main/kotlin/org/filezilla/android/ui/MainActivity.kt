@@ -242,6 +242,7 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                 downloadFolderName = model.downloadFolderName,
                 onUp = model::goUp,
                 onRefresh = model::refresh,
+                onOpenLog = { tab = Tab.LOG },
                 onOpen = { model.openDirectory(it.name) },
                 onDownload = ::startDownload,
                 onDelete = model::delete,

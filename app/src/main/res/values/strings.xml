@@ -98,6 +98,32 @@
     <string name="state_failed">Failed</string>
     <string name="queue_attempt">attempt %1$d</string>
 
+    <string name="fail_offline">No network connection</string>
+    <string name="fail_offline_advice">This phone is not on a network. Turn on Wi\u2011Fi or mobile data and try again.</string>
+    <string name="fail_host">Server not found</string>
+    <string name="fail_host_advice">The host name could not be looked up. Check it for a typo, and that it has no http:// or ftp:// in front of it.</string>
+    <string name="fail_refused">Server refused the connection</string>
+    <string name="fail_refused_advice">Something answered at that address but not on this port. Check the port number, and that the server is running.</string>
+    <string name="fail_timeout">Server did not respond</string>
+    <string name="fail_timeout_advice">The address is reachable but nothing replied in time. Check the port, and whether a firewall is in the way.</string>
+    <string name="fail_tls">Encryption failed</string>
+    <string name="fail_tls_advice">The TLS handshake did not complete. Try a different Encryption setting, or turn on "Accept any certificate" if this is a server whose certificate you know.</string>
+    <string name="fail_login">Login rejected</string>
+    <string name="fail_login_advice">The server refused these credentials. Check the user name and password.</string>
+    <string name="fail_denied">Not available</string>
+    <string name="fail_denied_advice">The server would not give you that file or directory. It may not exist, or this account may not be allowed to see it.</string>
+    <string name="fail_busy">Server temporarily unavailable</string>
+    <string name="fail_busy_advice">The server says it cannot handle this right now, which usually clears on its own. Try again shortly.</string>
+    <string name="fail_refused_command">Server refused the request</string>
+    <string name="fail_refused_command_advice">The server answered with an error. Its exact words are below, and the Log tab has the whole exchange.</string>
+    <string name="fail_network">Connection problem</string>
+    <string name="fail_network_advice">The connection failed partway. Check the network and try again.</string>
+    <string name="fail_unknown">Something went wrong</string>
+    <string name="fail_unknown_advice">This was not a failure the app recognises. The Log tab has the whole exchange.</string>
+    <string name="action_retry">Try again</string>
+    <string name="action_open_log">View log</string>
+    <string name="fail_detail_label">Details</string>
+
     <!-- Log -->
     <string name="log_empty_title">Nothing logged yet</string>
     <string name="log_empty_detail">Every command sent and every reply received shows up here once you connect.</string>

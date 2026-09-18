@@ -52,6 +52,7 @@ fun BrowseScreen(
     downloadFolderName: String?,
     onUp: () -> Unit,
     onRefresh: () -> Unit,
+    onOpenLog: () -> Unit,
     onOpen: (DirectoryEntry) -> Unit,
     onDownload: (DirectoryEntry) -> Unit,
     onDelete: (DirectoryEntry) -> Unit,
@@ -93,20 +94,8 @@ fun BrowseScreen(
 
         if (state.loading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
 
-        state.error?.let { message ->
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(8.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                ),
-            ) {
-                Text(
-                    message,
-                    modifier = Modifier.padding(12.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                )
-            }
+        state.error?.let { failure ->
+            ErrorPanel(failure = failure, onRetry = onRefresh, onOpenLog = onOpenLog)
         }
 
         HorizontalDivider()
