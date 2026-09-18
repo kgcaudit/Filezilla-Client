@@ -28,6 +28,8 @@ data class SiteEntity(
     val transferMode: String,
     val trustAllCertificates: Boolean,
     val initialPath: String?,
+    /** Null negotiates UTF-8; a name pins it. See [FtpSettings.encoding]. */
+    val encoding: String? = null,
 ) {
     /**
      * The connection settings, with the password decrypted for the moment it
@@ -45,6 +47,7 @@ data class SiteEntity(
         security = enumValueOf<FtpSecurity>(security),
         trustAllCertificates = trustAllCertificates,
         transferMode = enumValueOf<TransferMode>(transferMode),
+        encoding = encoding,
     )
 
     val securityEnum: FtpSecurity get() = enumValueOf<FtpSecurity>(security)

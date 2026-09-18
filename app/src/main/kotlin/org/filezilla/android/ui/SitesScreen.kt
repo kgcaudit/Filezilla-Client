@@ -1,5 +1,13 @@
 package org.filezilla.android.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material3.CardDefaults
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -58,33 +66,75 @@ fun SitesScreen(
             modifier = modifier,
         )
     } else {
-        LazyColumn(modifier = modifier, contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp)) {
+        LazyColumn(
+            modifier = modifier,
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp),
+        ) {
             items(sites, key = { it.id }) { site ->
                 Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                        .clickable { onConnect(site) },
+                    modifier = Modifier.fillMaxWidth().clickable { onConnect(site) },
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
+                        // A filled icon chip, the way a file manager marks a
+                        // row: colour carries the "this is a server" before
+                        // any text is read.
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                    RoundedCornerShape(12.dp),
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Filled.Dns,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
                             Text(
                                 site.name.ifBlank { site.host },
                                 style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                "${site.user}@${site.host}:${site.port} · ${securityLabel(site.securityEnum)}",
+                                "${site.user}@${site.host}:${site.port}",
                                 style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                securityLabel(site.securityEnum),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
                             )
                         }
                         IconButton(onClick = { onEdit(site) }) {
-                            Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.sites_edit, site.name))
+                            Icon(
+                                Icons.Filled.Edit,
+                                contentDescription = stringResource(R.string.sites_edit, site.name),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                         IconButton(onClick = { onDelete(site) }) {
-                            Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.sites_delete, site.name))
+                            Icon(
+                                Icons.Filled.Delete,
+                                contentDescription = stringResource(R.string.sites_delete, site.name),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
                 }
@@ -103,155 +153,3 @@ fun SitesScreen(
         )
     }
 }
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SiteEditor(
-    initial: SiteDraft,
-    onDismiss: () -> Unit,
-    onSave: (SiteDraft) -> Unit,
-) {
-    var name by remember { mutableStateOf(initial.name) }
-    var host by remember { mutableStateOf(initial.host) }
-    var port by remember { mutableStateOf(initial.port.toString()) }
-    var user by remember { mutableStateOf(initial.user) }
-    var password by remember { mutableStateOf(initial.password) }
-    var security by remember { mutableStateOf(initial.security) }
-    var trustAll by remember { mutableStateOf(initial.trustAllCertificates) }
-    var initialPath by remember { mutableStateOf(initial.initialPath.orEmpty()) }
-    var securityExpanded by remember { mutableStateOf(false) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(if (initial.host.isBlank()) R.string.sites_new_title else R.string.sites_edit_title)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text(stringResource(R.string.field_name)) },
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = host,
-                    onValueChange = { host = it },
-                    label = { Text(stringResource(R.string.field_host)) },
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = port,
-                    onValueChange = { candidate -> port = candidate.filter { it.isDigit() }.take(5) },
-                    label = { Text(stringResource(R.string.field_port)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-
-                ExposedDropdownMenuBox(
-                    expanded = securityExpanded,
-                    onExpandedChange = { securityExpanded = it },
-                ) {
-                    OutlinedTextField(
-                        value = securityLabel(security),
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text(stringResource(R.string.field_encryption)) },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(securityExpanded) },
-                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
-                    )
-                    ExposedDropdownMenu(
-                        expanded = securityExpanded,
-                        onDismissRequest = { securityExpanded = false },
-                    ) {
-                        FtpSecurity.entries.forEach { option ->
-                            DropdownMenuItem(
-                                text = { Text(securityLabel(option)) },
-                                onClick = {
-                                    security = option
-                                    // The default port follows the protocol,
-                                    // because implicit FTPS on 21 is a
-                                    // connection that will simply hang.
-                                    port = defaultPortFor(option).toString()
-                                    securityExpanded = false
-                                },
-                            )
-                        }
-                    }
-                }
-
-                OutlinedTextField(
-                    value = user,
-                    onValueChange = { user = it },
-                    label = { Text(stringResource(R.string.field_user)) },
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = { Text(stringResource(R.string.field_password)) },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    isError = initial.passwordUnreadable,
-                    supportingText = if (initial.passwordUnreadable) {
-                        {
-                            // The saved password is not blank, it is gone --
-                            // the keystore key went with the app's data. Say
-                            // so, rather than letting an empty box look like
-                            // a password that was never set.
-                            Text(stringResource(R.string.password_unreadable))
-                        }
-                    } else {
-                        null
-                    },
-                )
-                OutlinedTextField(
-                    value = initialPath,
-                    onValueChange = { initialPath = it },
-                    label = { Text(stringResource(R.string.field_initial_path)) },
-                    singleLine = true,
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(checked = trustAll, onCheckedChange = { trustAll = it })
-                    Column(modifier = Modifier.padding(start = 8.dp)) {
-                        Text(stringResource(R.string.trust_all_title))
-                        Text(
-                            stringResource(R.string.trust_all_detail),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = host.isNotBlank() && port.isNotBlank(),
-                onClick = {
-                    onSave(
-                        initial.copy(
-                            name = name,
-                            host = host,
-                            port = port.toIntOrNull() ?: defaultPortFor(security),
-                            user = user,
-                            password = password,
-                            security = security,
-                            trustAllCertificates = trustAll,
-                            initialPath = initialPath,
-                        ),
-                    )
-                },
-            ) { Text(stringResource(R.string.action_save)) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
-    )
-}
-
-private fun defaultPortFor(security: FtpSecurity): Int =
-    if (security == FtpSecurity.IMPLICIT_TLS) 990 else 21
-
-@Composable
-fun securityLabel(security: FtpSecurity): String = stringResource(
-    when (security) {
-        FtpSecurity.PLAIN -> R.string.security_plain
-        FtpSecurity.EXPLICIT_TLS -> R.string.security_explicit
-        FtpSecurity.IMPLICIT_TLS -> R.string.security_implicit
-    },
-)

@@ -12,7 +12,15 @@ enum class FtpSecurity {
     IMPLICIT_TLS,
 }
 
-/** Data connection mode, mirroring `CServer::GetPasvMode`. */
+/**
+ * Data connection mode, mirroring `CServer::GetPasvMode`.
+ *
+ * [DEFAULT] means passive, which is what works from behind NAT -- the client
+ * opens the data connection outward. [ACTIVE] asks the server to connect back
+ * to the client, which needs the client to be reachable: on a phone that
+ * normally means the same LAN as the server, because a mobile carrier's NAT
+ * will not forward the inbound connection.
+ */
 enum class TransferMode { PASSIVE, ACTIVE, DEFAULT }
 
 /** Everything needed to open and drive one FTP connection. */
@@ -37,6 +45,17 @@ data class FtpSettings(
 
     /** Minutes to add to server-reported times, as in the Site Manager. */
     val timezoneOffsetMinutes: Int = 0,
+
+    /**
+     * Charset for the control connection, and so for filenames.
+     *
+     * Null negotiates it: UTF-8 when the server advertises `UTF8` in `FEAT`,
+     * as most do. Naming one overrides that and suppresses `OPTS UTF8 ON`,
+     * which is what a server storing filenames in a legacy encoding needs --
+     * EUC-KR on many Korean NAS boxes, and there is no way to detect it, so
+     * the user has to say.
+     */
+    val encoding: String? = null,
 
     val connectTimeoutMillis: Int = 20_000,
 

@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.core.view.WindowCompat
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -23,6 +24,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -54,6 +59,15 @@ private enum class Tab(val label: Int) {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The status bar was the same near-white as the content, so the clock
+        // and the signal icons sat on nothing and were hard to pick out. The
+        // app bar now runs under it in the brand colour, and the system icons
+        // are told to go light so they have something to contrast with.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        @Suppress("DEPRECATION")
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        WindowCompat.getInsetsController(window, window.decorView)
+            .isAppearanceLightStatusBars = false
         setContent {
             OloTheme {
                 AppScreen()
@@ -135,7 +149,19 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
         snackbarHost = { SnackbarHost(snackbars) },
         topBar = {
             TopAppBar(
-                title = { Text(titleFor(tab, model)) },
+                title = {
+                    Text(
+                        titleFor(tab, model),
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
                 actions = {
                     when (tab) {
                         Tab.BROWSE -> if (model.browse.site != null) {
@@ -173,13 +199,19 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
         },
         floatingActionButton = {
             if (tab == Tab.SITES) {
-                FloatingActionButton(onClick = { editingSite = model.newSite() }) {
+                FloatingActionButton(
+                    onClick = { editingSite = model.newSite() },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ) {
                     Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.sites_add))
                 }
             }
         },
         bottomBar = {
-            NavigationBar {
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            ) {
                 Tab.entries.forEach { candidate ->
                     NavigationBarItem(
                         selected = tab == candidate,

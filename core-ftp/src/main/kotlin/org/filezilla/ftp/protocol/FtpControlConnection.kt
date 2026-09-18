@@ -63,6 +63,13 @@ class FtpControlConnection(
     lateinit var peerAddress: InetAddress
         private set
 
+    /**
+     * Our own address on this connection, which is what an active-mode data
+     * connection tells the server to come back to.
+     */
+    val localAddress: InetAddress
+        get() = socket?.localAddress ?: error("not connected")
+
     val peerHost: String get() = peerAddress.hostAddress
 
     // ---------------------------------------------------------------- connect
@@ -75,6 +82,18 @@ class FtpControlConnection(
         plain.tcpNoDelay = true
         plainSocket = plain
         peerAddress = plain.inetAddress
+
+        // A forced encoding applies from the welcome message onwards: a server
+        // whose filenames are EUC-KR usually greets in it too.
+        settings.encoding?.let { name ->
+            val forced = runCatching { Charset.forName(name) }.getOrNull()
+            if (forced == null) {
+                logger.log(LogLevel.ERROR, "Unknown encoding '$name'; falling back to UTF-8")
+            } else {
+                charset = forced
+                logger.log(LogLevel.STATUS, "Using $name for the control connection")
+            }
+        }
 
         if (settings.security == FtpSecurity.IMPLICIT_TLS) {
             val tls = tlsFactory.upgradeControl(plain, settings.host, settings.port)
@@ -132,7 +151,12 @@ class FtpControlConnection(
             isDataProtected = true
         }
 
-        if (capabilities.get(settings.serverKey, CapabilityName.UTF8_COMMAND) == Capability.YES) {
+        // Only negotiate UTF-8 when the user has not pinned an encoding.
+        // Asking for UTF-8 and then decoding as EUC-KR would be worse than
+        // either on its own.
+        if (settings.encoding == null &&
+            capabilities.get(settings.serverKey, CapabilityName.UTF8_COMMAND) == Capability.YES
+        ) {
             send("OPTS UTF8 ON")
             charset = StandardCharsets.UTF_8
             rebindStreams()

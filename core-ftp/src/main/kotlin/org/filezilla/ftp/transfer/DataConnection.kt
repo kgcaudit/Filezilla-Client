@@ -10,9 +10,11 @@ import org.filezilla.ftp.protocol.FtpReply
 import org.filezilla.ftp.protocol.LogLevel
 import org.filezilla.ftp.protocol.PasvResponseParser
 import org.filezilla.ftp.protocol.ServerCapabilities
+import org.filezilla.ftp.protocol.TransferMode
 import java.io.Closeable
 import java.io.IOException
 import java.net.InetSocketAddress
+import java.net.ServerSocket
 import java.net.Socket
 import javax.net.ssl.SSLSocket
 
@@ -46,6 +48,7 @@ internal class DataConnection(
 ) : Closeable {
 
     private var socket: Socket? = null
+    private var listener: ServerSocket? = null
 
     /**
      * Opens a data connection and issues [transferCommand].
@@ -54,6 +57,18 @@ internal class DataConnection(
      * @return the connected data socket, ready to read or write.
      */
     fun open(transferCommand: String, resumeOffset: Long): Socket {
+        return if (control.settings.transferMode == TransferMode.ACTIVE) {
+            openActive(transferCommand, resumeOffset)
+        } else {
+            openPassive(transferCommand, resumeOffset)
+        }
+    }
+
+    /**
+     * The usual case: the server names an address and the client connects to
+     * it, which is the only thing that works from behind NAT.
+     */
+    private fun openPassive(transferCommand: String, resumeOffset: Long): Socket {
         val endpoint = negotiatePassiveEndpoint()
         logger.log(LogLevel.DEBUG, "Data connection to ${endpoint.host}:${endpoint.port}")
 
@@ -63,53 +78,125 @@ internal class DataConnection(
             control.settings.connectTimeoutMillis,
         )
         plain.soTimeout = control.settings.readTimeoutMillis
-
-        val wrapped: Socket = if (control.isDataProtected) {
-            control.tlsFactory.wrapDataChannel(
-                plain = plain,
-                controlHost = control.settings.host,
-                controlAddress = control.peerAddress,
-                controlPort = control.settings.port,
-                reuseControlSession = true,
-            )
-        } else {
-            plain
-        }
+        val wrapped = wrap(plain)
         socket = wrapped
 
         try {
-            if (resumeOffset > 0) {
-                val rest = control.send("REST $resumeOffset")
-                if (!rest.isSuccess) {
-                    throw ResumeNotHonouredException(
-                        "server refused REST $resumeOffset: ${rest.raw}",
-                    )
-                }
-            }
-
-            val pre = control.send(transferCommand)
-            // 1yz is the expected preliminary reply; a few broken servers omit
-            // it and answer 2yz/3yz straight away (rawtransfer.cpp:224-227).
-            if (!pre.isPositivePreliminary && !pre.isSuccess) {
-                throw FtpCommandException(pre, "transfer command refused: ${pre.raw}")
-            }
-
-            if (wrapped is SSLSocket) {
-                // Must follow the transfer command, and resumes the control
-                // session -- servers with require_ssl_reuse answer 522 here if
-                // it did not.
-                wrapped.startHandshake()
-                capabilities.set(
-                    control.settings.serverKey,
-                    CapabilityName.TLS_RESUMPTION,
-                    Capability.YES,
-                )
-            }
+            sendRestAndCommand(transferCommand, resumeOffset)
+            handshake(wrapped)
             return wrapped
         } catch (e: Throwable) {
             close()
             throw e
         }
+    }
+
+    /**
+     * Active mode: the client listens and the server connects back.
+     *
+     * The order is the mirror image of passive and it matters. The listening
+     * socket has to exist before `PORT`/`EPRT` names its port, and the accept
+     * has to come *after* the transfer command, because the server does not
+     * connect until it has one. Accepting earlier would simply block.
+     *
+     * This needs the server to be able to reach the client, so on a phone it
+     * is for a server on the same network. A carrier NAT will not forward the
+     * inbound connection, and the symptom is a transfer command that succeeds
+     * followed by an accept that times out -- which is what the error below
+     * says, rather than leaving the user with a bare timeout.
+     */
+    private fun openActive(transferCommand: String, resumeOffset: Long): Socket {
+        val listener = ServerSocket(0, 1, control.localAddress)
+        listener.soTimeout = control.settings.connectTimeoutMillis
+        this.listener = listener
+
+        try {
+            val local = control.localAddress
+            val port = listener.localPort
+            logger.log(LogLevel.DEBUG, "Listening for the data connection on ${local.hostAddress}:$port")
+
+            // EPRT carries the address family explicitly and is the only one
+            // that can express IPv6; PORT is the older form every server takes.
+            val useEprt = local.address.size == 16
+            val reply = if (useEprt) {
+                control.send("EPRT |2|${local.hostAddress}|$port|")
+            } else {
+                val octets = local.address.joinToString(",") { (it.toInt() and 0xFF).toString() }
+                control.send("PORT $octets,${port shr 8},${port and 0xFF}")
+            }
+            if (!reply.isSuccess) {
+                throw FtpCommandException(
+                    reply,
+                    "server refused the active-mode data port: ${reply.raw}",
+                )
+            }
+
+            sendRestAndCommand(transferCommand, resumeOffset)
+
+            val plain = try {
+                listener.accept()
+            } catch (e: IOException) {
+                throw IOException(
+                    "the server did not connect back for the data transfer. Active mode needs " +
+                        "the server to be able to reach this device; on mobile data, or behind " +
+                        "a router without a forwarded port, use passive mode.",
+                    e,
+                )
+            }
+            plain.soTimeout = control.settings.readTimeoutMillis
+            val wrapped = wrap(plain)
+            socket = wrapped
+            handshake(wrapped)
+            return wrapped
+        } catch (e: Throwable) {
+            close()
+            throw e
+        } finally {
+            runCatching { listener.close() }
+            this.listener = null
+        }
+    }
+
+    private fun wrap(plain: Socket): Socket = if (control.isDataProtected) {
+        control.tlsFactory.wrapDataChannel(
+            plain = plain,
+            controlHost = control.settings.host,
+            controlAddress = control.peerAddress,
+            controlPort = control.settings.port,
+            reuseControlSession = true,
+        )
+    } else {
+        plain
+    }
+
+    private fun sendRestAndCommand(transferCommand: String, resumeOffset: Long) {
+        if (resumeOffset > 0) {
+            val rest = control.send("REST $resumeOffset")
+            if (!rest.isSuccess) {
+                throw ResumeNotHonouredException(
+                    "server refused REST $resumeOffset: ${rest.raw}",
+                )
+            }
+        }
+
+        val pre = control.send(transferCommand)
+        // 1yz is the expected preliminary reply; a few broken servers omit
+        // it and answer 2yz/3yz straight away (rawtransfer.cpp:224-227).
+        if (!pre.isPositivePreliminary && !pre.isSuccess) {
+            throw FtpCommandException(pre, "transfer command refused: ${pre.raw}")
+        }
+    }
+
+    private fun handshake(wrapped: Socket) {
+        if (wrapped !is SSLSocket) return
+        // Must follow the transfer command, and resumes the control session --
+        // servers with require_ssl_reuse answer 522 here if it did not.
+        wrapped.startHandshake()
+        capabilities.set(
+            control.settings.serverKey,
+            CapabilityName.TLS_RESUMPTION,
+            Capability.YES,
+        )
     }
 
     /**
@@ -157,5 +244,7 @@ internal class DataConnection(
     override fun close() {
         runCatching { socket?.close() }
         socket = null
+        runCatching { listener?.close() }
+        listener = null
     }
 }

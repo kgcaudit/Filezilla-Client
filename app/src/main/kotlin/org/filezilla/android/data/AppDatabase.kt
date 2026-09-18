@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [TransferEntity::class, SiteEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -25,12 +25,25 @@ abstract class AppDatabase : RoomDatabase() {
                 AppDatabase::class.java,
                 "filezilla.db",
             )
-                .addMigrations(encryptPasswords(passwords))
+                .addMigrations(encryptPasswords(passwords), ADD_ENCODING)
                 // No fallbackToDestructiveMigration: dropping this database
                 // throws away the offsets that make a resume safe, which
                 // would turn a schema change into silently re-downloading
                 // everything in the queue -- and now the saved passwords too.
                 .build()
+
+        /**
+         * Version 3 adds the per-site encoding.
+         *
+         * A plain added column, nullable, defaulting to null -- which is the
+         * "negotiate UTF-8 as before" behaviour, so every existing site keeps
+         * working exactly as it did.
+         */
+        internal val ADD_ENCODING = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `sites` ADD COLUMN `encoding` TEXT")
+            }
+        }
 
         /**
          * Version 2 moves site passwords out of a plaintext column and behind

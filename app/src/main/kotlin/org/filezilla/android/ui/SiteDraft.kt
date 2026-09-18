@@ -24,6 +24,8 @@ data class SiteDraft(
     val transferMode: TransferMode,
     val trustAllCertificates: Boolean,
     val initialPath: String?,
+    /** Null means "negotiate", which is what most servers want. */
+    val encoding: String? = null,
     /**
      * True when the saved password could not be decrypted, so the field is
      * empty because the secret is gone -- not because the user cleared it.
@@ -43,6 +45,7 @@ data class SiteDraft(
         transferMode = transferMode.name,
         trustAllCertificates = trustAllCertificates,
         initialPath = initialPath?.ifBlank { null },
+        encoding = encoding?.ifBlank { null },
     )
 
     companion object {
@@ -57,6 +60,7 @@ data class SiteDraft(
             transferMode = TransferMode.DEFAULT,
             trustAllCertificates = false,
             initialPath = null,
+            encoding = null,
         )
 
         fun of(site: SiteEntity, passwords: PasswordCipher): SiteDraft {
@@ -72,6 +76,7 @@ data class SiteDraft(
                 transferMode = enumValueOf(site.transferMode),
                 trustAllCertificates = site.trustAllCertificates,
                 initialPath = site.initialPath,
+                encoding = site.encoding,
                 passwordUnreadable = plaintext == null,
             )
         }

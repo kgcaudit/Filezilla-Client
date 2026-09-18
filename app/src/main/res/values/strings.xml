@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">OLO FTP Client</string>
+    <string name="app_name">OLD FTP</string>
 
     <!-- Notification -->
     <string name="notification_channel_transfers">Transfers</string>
@@ -40,6 +40,14 @@
     <string name="field_encryption">Encryption</string>
     <string name="field_user">User</string>
     <string name="field_password">Password</string>
+    <string name="field_transfer_mode">Connection mode</string>
+    <string name="mode_default">Passive (recommended)</string>
+    <string name="mode_passive">Passive</string>
+    <string name="mode_active">Active (server connects back)</string>
+    <string name="mode_active_note">Active mode needs the server to reach this phone, so it only works on the same network. Use passive on mobile data.</string>
+    <string name="field_encoding">Filename encoding</string>
+    <string name="encoding_auto">Automatic (UTF-8)</string>
+    <string name="encoding_note">Change this only if filenames come out garbled. Many Korean NAS boxes store them as EUC-KR.</string>
     <string name="field_initial_path">Start directory (optional)</string>
     <string name="password_unreadable">The saved password could not be read back and needs entering again.</string>
     <string name="trust_all_title">Accept any certificate</string>

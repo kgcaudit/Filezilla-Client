@@ -1,0 +1,295 @@
+package org.filezilla.android.ui
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
+import org.filezilla.android.R
+import org.filezilla.ftp.protocol.FtpSecurity
+import org.filezilla.ftp.protocol.TransferMode
+
+/**
+ * The encodings worth offering.
+ *
+ * Not every charset the JVM knows: a list of two hundred is not a choice, it
+ * is an obstacle. These are the ones an FTP server in this part of the world
+ * actually stores filenames in, and the note beside the field says to leave it
+ * alone unless the names come out wrong.
+ */
+private val ENCODINGS = listOf(
+    null to R.string.encoding_auto,
+    "UTF-8" to null,
+    "EUC-KR" to null,
+    "x-windows-949" to null,
+    "Shift_JIS" to null,
+    "GBK" to null,
+    "Big5" to null,
+    "windows-1252" to null,
+    "ISO-8859-1" to null,
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SiteEditor(
+    initial: SiteDraft,
+    onDismiss: () -> Unit,
+    onSave: (SiteDraft) -> Unit,
+) {
+    var name by remember { mutableStateOf(initial.name) }
+    var host by remember { mutableStateOf(initial.host) }
+    var port by remember { mutableStateOf(initial.port.toString()) }
+    var user by remember { mutableStateOf(initial.user) }
+    var password by remember { mutableStateOf(initial.password) }
+    var security by remember { mutableStateOf(initial.security) }
+    var mode by remember { mutableStateOf(initial.transferMode) }
+    var encoding by remember { mutableStateOf(initial.encoding) }
+    var trustAll by remember { mutableStateOf(initial.trustAllCertificates) }
+    var initialPath by remember { mutableStateOf(initial.initialPath.orEmpty()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                stringResource(
+                    if (initial.host.isBlank()) R.string.sites_new_title else R.string.sites_edit_title,
+                ),
+            )
+        },
+        text = {
+            // Scrollable, and bounded. The form is taller than a phone screen
+            // once encryption, connection mode and encoding are all on it, and
+            // an AlertDialog does not scroll its content by itself -- it just
+            // clips the bottom off, which is what it was doing to the
+            // certificate switch.
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 460.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(stringResource(R.string.field_name)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = host,
+                    onValueChange = { host = it },
+                    label = { Text(stringResource(R.string.field_host)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = port,
+                    onValueChange = { candidate -> port = candidate.filter { it.isDigit() }.take(5) },
+                    label = { Text(stringResource(R.string.field_port)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Picker(
+                    label = stringResource(R.string.field_encryption),
+                    selected = securityLabel(security),
+                    options = FtpSecurity.entries.map { it to securityLabel(it) },
+                    onSelect = { chosen ->
+                        security = chosen
+                        // The default port follows the protocol, because
+                        // implicit FTPS on 21 is a connection that just hangs.
+                        port = defaultPortFor(chosen).toString()
+                    },
+                )
+
+                Picker(
+                    label = stringResource(R.string.field_transfer_mode),
+                    selected = modeLabel(mode),
+                    options = TransferMode.entries.map { it to modeLabel(it) },
+                    onSelect = { mode = it },
+                )
+                if (mode == TransferMode.ACTIVE) {
+                    Hint(stringResource(R.string.mode_active_note))
+                }
+
+                Picker(
+                    label = stringResource(R.string.field_encoding),
+                    selected = encodingLabel(encoding),
+                    options = ENCODINGS.map { (value, _) -> value to encodingLabel(value) },
+                    onSelect = { encoding = it },
+                )
+                if (encoding != null) {
+                    Hint(stringResource(R.string.encoding_note))
+                }
+
+                OutlinedTextField(
+                    value = user,
+                    onValueChange = { user = it },
+                    label = { Text(stringResource(R.string.field_user)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text(stringResource(R.string.field_password)) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    isError = initial.passwordUnreadable,
+                    supportingText = if (initial.passwordUnreadable) {
+                        { Text(stringResource(R.string.password_unreadable)) }
+                    } else {
+                        null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = initialPath,
+                    onValueChange = { initialPath = it },
+                    label = { Text(stringResource(R.string.field_initial_path)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Switch(checked = trustAll, onCheckedChange = { trustAll = it })
+                    Column(modifier = Modifier.padding(start = 10.dp)) {
+                        Text(
+                            stringResource(R.string.trust_all_title),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Text(
+                            stringResource(R.string.trust_all_detail),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = host.isNotBlank() && port.isNotBlank(),
+                onClick = {
+                    onSave(
+                        initial.copy(
+                            name = name,
+                            host = host,
+                            port = port.toIntOrNull() ?: defaultPortFor(security),
+                            user = user,
+                            password = password,
+                            security = security,
+                            transferMode = mode,
+                            encoding = encoding,
+                            trustAllCertificates = trustAll,
+                            initialPath = initialPath,
+                        ),
+                    )
+                },
+            ) { Text(stringResource(R.string.action_save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
+}
+
+/** A read-only field that opens a menu; the same shape for all three choices. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun <T> Picker(
+    label: String,
+    selected: String,
+    options: List<Pair<T, String>>,
+    onSelect: (T) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = selected,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { (value, text) ->
+                DropdownMenuItem(
+                    text = { Text(text) },
+                    onClick = {
+                        onSelect(value)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun Hint(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 4.dp),
+    )
+}
+
+private fun defaultPortFor(security: FtpSecurity): Int =
+    if (security == FtpSecurity.IMPLICIT_TLS) 990 else 21
+
+@Composable
+fun securityLabel(security: FtpSecurity): String = stringResource(
+    when (security) {
+        FtpSecurity.PLAIN -> R.string.security_plain
+        FtpSecurity.EXPLICIT_TLS -> R.string.security_explicit
+        FtpSecurity.IMPLICIT_TLS -> R.string.security_implicit
+    },
+)
+
+@Composable
+private fun modeLabel(mode: TransferMode): String = stringResource(
+    when (mode) {
+        TransferMode.DEFAULT -> R.string.mode_default
+        TransferMode.PASSIVE -> R.string.mode_passive
+        TransferMode.ACTIVE -> R.string.mode_active
+    },
+)
+
+@Composable
+private fun encodingLabel(encoding: String?): String =
+    encoding ?: stringResource(R.string.encoding_auto)

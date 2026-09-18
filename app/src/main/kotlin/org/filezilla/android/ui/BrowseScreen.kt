@@ -1,5 +1,11 @@
 package org.filezilla.android.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -142,6 +148,13 @@ private fun EntryRow(
     onRename: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    // Folders and files get different colours, which is the single thing that
+    // makes a long listing scannable: the eye sorts by colour before it reads.
+    val chip = if (entry.isDirectory) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.secondary
+    }
 
     Row(
         modifier = Modifier
@@ -150,28 +163,54 @@ private fun EntryRow(
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            if (entry.isDirectory) Icons.Filled.Folder else Icons.AutoMirrored.Filled.InsertDriveFile,
-            contentDescription = null,
-        )
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(chip.copy(alpha = 0.14f), RoundedCornerShape(11.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                if (entry.isDirectory) Icons.Filled.Folder else Icons.AutoMirrored.Filled.InsertDriveFile,
+                contentDescription = null,
+                tint = chip,
+            )
+        }
         Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-            Text(entry.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+            Text(
+                entry.name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = if (entry.isDirectory) FontWeight.Medium else FontWeight.Normal,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             val detail = listOfNotNull(
                 if (entry.isDirectory) null else formatSize(entry.size).ifBlank { null },
                 formatEntryTime(entry).ifBlank { null },
-                entry.permissions,
             ).joinToString("  ·  ")
             if (detail.isNotBlank()) {
-                Text(detail, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                Text(
+                    detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
             }
         }
         if (!entry.isDirectory) {
             IconButton(onClick = onDownload) {
-                Icon(Icons.Filled.Download, contentDescription = stringResource(R.string.browse_download, entry.name))
+                Icon(
+                    Icons.Filled.Download,
+                    contentDescription = stringResource(R.string.browse_download, entry.name),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
             }
         }
         IconButton(onClick = { menuOpen = true }) {
-            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.browse_more, entry.name))
+            Icon(
+                Icons.Filled.MoreVert,
+                contentDescription = stringResource(R.string.browse_more, entry.name),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             DropdownMenuItem(

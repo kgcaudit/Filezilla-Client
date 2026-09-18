@@ -18,7 +18,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * Version 1 stored site passwords in plaintext. Version 2 does not.
+ * Version 1 stored site passwords in plaintext. Version 2 does not, and
+ * version 3 adds the per-site encoding, so this drives the whole chain a
+ * phone upgrading from the first build would actually run.
  *
  * This is the migration people lose their saved servers to if it is wrong, and
  * every way it can be wrong is quiet: a dropped table, columns in the wrong
@@ -61,6 +63,9 @@ class PasswordMigrationTest {
         assertEquals("EXPLICIT_TLS", site.security)
         assertEquals(true, site.trustAllCertificates)
         assertEquals("/pub", site.initialPath)
+        // The column version 3 added defaults to null, which is the same
+        // "negotiate UTF-8" behaviour the site had before it existed.
+        assertEquals(null, site.encoding)
 
         // ...and the password is no longer in the clear, but is still the
         // password. Both halves matter: encrypting it and losing it would pass
@@ -99,6 +104,8 @@ class PasswordMigrationTest {
                 buildList { while (cursor.moveToNext()) add(cursor.getString(1)) }
             }
             assertTrue("password_cipher" in columns)
+            // Version 3 rode along in the same open.
+            assertTrue("encoding" in columns)
             // The reason the table is rebuilt rather than given a new column:
             // a plaintext column left behind is a plaintext column.
             assertFalse("password" in columns)
@@ -162,7 +169,7 @@ class PasswordMigrationTest {
      */
     private fun readSite(host: String, port: Int, user: String): SiteEntity? {
         val database = Room.databaseBuilder(context, AppDatabase::class.java, DB)
-            .addMigrations(AppDatabase.encryptPasswords(passwords))
+            .addMigrations(AppDatabase.encryptPasswords(passwords), AppDatabase.ADD_ENCODING)
             .allowMainThreadQueries()
             .build()
         return try {
@@ -175,7 +182,9 @@ class PasswordMigrationTest {
     private fun openRaw() = FrameworkSQLiteOpenHelperFactory().create(
         SupportSQLiteOpenHelper.Configuration.builder(context)
             .name(DB)
-            .callback(object : SupportSQLiteOpenHelper.Callback(2) {
+            // The current schema version: opening at anything lower is a
+            // downgrade, which SQLite refuses outright.
+            .callback(object : SupportSQLiteOpenHelper.Callback(CURRENT_VERSION) {
                 override fun onCreate(db: SupportSQLiteDatabase) = Unit
                 override fun onUpgrade(db: SupportSQLiteDatabase, old: Int, new: Int) = Unit
             })
@@ -184,6 +193,7 @@ class PasswordMigrationTest {
 
     private companion object {
         const val DB = "migration-test.db"
+        const val CURRENT_VERSION = 3
         const val V1_IDENTITY_HASH = "77835b154afacbde0754e799cc2b8a3d"
 
         const val V1_SITES =
