@@ -206,11 +206,11 @@ class ExternalFtpServer(
             File.createTempFile("ftp-server", ".log").apply { deleteOnExit() }
         }
 
+        /** The harness directory on disk; see [FtpsTestServer] for why not the classpath. */
         private val certificateDir: File by lazy {
-            val url = ExternalFtpServer::class.java.classLoader
-                .getResource("ftps-server/ftps_server.py")
-                ?: error("ftps-server resources are missing from the test classpath")
-            File(url.toURI()).parentFile
+            val named = System.getProperty("ftps.server.dir")
+                ?: error("ftps.server.dir is not set; the test task should name the harness directory")
+            File(named)
         }
 
         private val certificate: File get() = File(certificateDir, "cert.pem")

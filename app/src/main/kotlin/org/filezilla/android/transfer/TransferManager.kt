@@ -71,7 +71,7 @@ class TransferManager(
     private val partials: PartialFiles,
     private val storage: SafStorage,
     private val log: AppLog,
-    private val networkGate: NetworkGate,
+    private val networkGate: TransferGate,
     private val passwords: PasswordCipher,
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {

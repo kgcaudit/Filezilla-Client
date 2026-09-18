@@ -66,3 +66,24 @@ fun waitsForNetwork(state: TransferState): Boolean = when (state) {
     TransferState.COMPLETED, TransferState.FAILED,
     -> false
 }
+
+/**
+ * What the queue needs to know about the connection.
+ *
+ * Narrow on purpose. [NetworkGate] answers it from the platform; a test
+ * answers it directly, which is what lets the app's resume behaviour be driven
+ * against a real server without also simulating Android's connectivity stack.
+ */
+interface TransferGate {
+
+    /** Whether the queue may transfer right now. */
+    val isAllowed: Boolean
+
+    /** Blocks until it may, or until the gate stops. */
+    @Throws(InterruptedException::class)
+    fun awaitAllowed()
+
+    /** The `sleep` a retrying transfer is given; see [NetworkGate.waitBeforeRetry]. */
+    @Throws(InterruptedException::class)
+    fun waitBeforeRetry(backoffMillis: Long)
+}

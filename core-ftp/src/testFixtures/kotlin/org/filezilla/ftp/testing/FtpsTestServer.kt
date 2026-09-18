@@ -39,6 +39,15 @@ class FtpsTestServer(
      * is why the option exists.
      */
     private val noRestStream: Boolean = false,
+    /**
+     * Bytes per second on the data channel, 0 for unlimited.
+     *
+     * A test that interrupts a transfer partway needs the transfer to last
+     * long enough to be interrupted. Over loopback a few megabytes are gone in
+     * a fraction of a second, so without this the interruption lands after the
+     * file is already complete and the test proves nothing.
+     */
+    private val throttleBytesPerSecond: Int = 0,
 ) {
     lateinit var root: File
         private set
@@ -73,6 +82,7 @@ class FtpsTestServer(
             put("NO_REST_STREAM", if (noRestStream) "1" else "0")
             put("DROP_AFTER_BYTES", dropAfterBytes.toString())
             put("DROP_TIMES", dropTimes.toString())
+            put("THROTTLE_BYTES", throttleBytesPerSecond.toString())
         }
         builder.redirectErrorStream(false)
         val started = builder.start()
@@ -119,10 +129,20 @@ class FtpsTestServer(
     }
 
     companion object {
+        /**
+         * The harness directory on disk, named by the build.
+         *
+         * Not found through the classpath: as test fixtures these resources
+         * are served from a jar, and a jar entry is not a directory that a
+         * subprocess can be pointed at. The Python virtual environment beside
+         * the script is not on the classpath at all -- it is 44 MB of
+         * gitignored files -- so the directory has to be a real path either
+         * way. Both modules' test tasks set the property.
+         */
         private val serverDir: File by lazy {
-            val url = FtpsTestServer::class.java.classLoader.getResource("ftps-server/ftps_server.py")
-                ?: error("ftps-server resources are missing from the test classpath")
-            File(url.toURI()).parentFile
+            val named = System.getProperty("ftps.server.dir")
+                ?: error("ftps.server.dir is not set; the test task should name the harness directory")
+            File(named)
         }
 
         private val python: File by lazy {

@@ -19,6 +19,7 @@ Env:
 
 import os
 import sys
+import time
 import logging
 
 from OpenSSL import SSL
@@ -45,6 +46,11 @@ IGNORE_REST = os.environ.get("IGNORE_REST", "0") == "1"
 # the compatibility matrix exercises, since all three advertise REST STREAM.
 NO_REST_STREAM = os.environ.get("NO_REST_STREAM", "0") == "1"
 DROP_AFTER_BYTES = int(os.environ.get("DROP_AFTER_BYTES", "0"))
+# Bytes per second on the data channel, 0 for unlimited. A test that has to
+# interrupt a transfer partway needs the transfer to last long enough to be
+# interrupted: over loopback a few megabytes are gone in a fraction of a
+# second, and the interruption arrives after the file is already complete.
+THROTTLE_BYTES = int(os.environ.get("THROTTLE_BYTES", "0"))
 DROP_TIMES = int(os.environ.get("DROP_TIMES", "0"))
 
 _drops_remaining = DROP_TIMES
@@ -71,13 +77,36 @@ class ReuseCheckingDTPHandler(TLS_DTPHandler):
 
     def __init__(self, sock, cmd_channel):
         super().__init__(sock, cmd_channel)
+        self._throttle_started = None
+        self._throttle_sent = 0
         self._sent_bytes = 0
         self._dropping = False
+
+    def _pace(self, count):
+        """Holds the data channel to THROTTLE_BYTES per second.
+
+        Done by sleeping here rather than through pyftpdlib's
+        ThrottledDTPHandler, which the TLS data handler does not inherit from.
+        The sleep stalls the whole server, which is acceptable only because the
+        tests that ask for a throttle run one transfer at a time -- the point is
+        to make a transfer last long enough to interrupt, not to model a slow
+        network faithfully.
+        """
+        if THROTTLE_BYTES <= 0 or count <= 0:
+            return
+        if self._throttle_started is None:
+            self._throttle_started = time.monotonic()
+        self._throttle_sent += count
+        owed = self._throttle_sent / THROTTLE_BYTES - (time.monotonic() - self._throttle_started)
+        if owed > 0:
+            time.sleep(min(owed, 0.25))
 
     def send(self, data):
         global _drops_remaining
         if DROP_AFTER_BYTES <= 0 or _drops_remaining <= 0 or self._dropping:
-            return super().send(data)
+            sent = super().send(data)
+            self._pace(sent)
+            return sent
 
         remaining = DROP_AFTER_BYTES - self._sent_bytes
         if remaining <= 0:
@@ -93,6 +122,7 @@ class ReuseCheckingDTPHandler(TLS_DTPHandler):
             data = data[:remaining]
         sent = super().send(data)
         self._sent_bytes += sent
+        self._pace(sent)
         return sent
 
     def handle_ssl_established(self):
@@ -179,6 +209,7 @@ def main():
         f"listening on 127.0.0.1:{PORT} "
         f"require_ssl_reuse={REQUIRE_SSL_REUSE} tls_max={TLS_MAX} "
         f"ignore_rest={IGNORE_REST} drop_after={DROP_AFTER_BYTES}x{DROP_TIMES} "
+        f"throttle={THROTTLE_BYTES} "
         f"root={ROOT}"
     )
     # Readiness marker the test harness waits for; stdout, not stderr.

@@ -24,10 +24,10 @@ local.properties
 # Integration test server scratch. setup.sh rebuilds the venv from scratch
 # (python3 -m venv + pip install), so committing 2105 files and 38 MB of
 # platform-specific binaries bought nothing and cost every clone.
-core-ftp/src/test/resources/ftps-server/venv/
-core-ftp/src/test/resources/ftps-server/ftproot/
-core-ftp/src/test/resources/ftps-server/*.log
-core-ftp/src/test/resources/ftps-server/*.pid
+core-ftp/src/testFixtures/resources/ftps-server/venv/
+core-ftp/src/testFixtures/resources/ftps-server/ftproot/
+core-ftp/src/testFixtures/resources/ftps-server/*.log
+core-ftp/src/testFixtures/resources/ftps-server/*.pid
 
 # Spike scratch
 spikes/**/venv/

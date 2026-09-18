@@ -90,6 +90,10 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.kotlinx.coroutines.test)
+
+    // The live FTPS server, shared from :core-ftp. The app's resume path is
+    // checked against a real server for the same reason the engine's is.
+    testImplementation(testFixtures(project(":core-ftp")))
 }
 
 // Room's generated code carries the schema, and exporting it turns a schema
@@ -100,4 +104,24 @@ ksp {
 
 tasks.withType<Test>().configureEach {
     systemProperty("robolectric.logging", "stdout")
+}
+
+// The app's resume tests drive the same live FTPS server the engine's do.
+// The harness is a shared test fixture; its Python environment is a real
+// directory on disk, so the path is named here rather than looked up on the
+// classpath.
+tasks.withType<Test>().configureEach {
+    systemProperty(
+        "ftps.server.dir",
+        rootProject.layout.projectDirectory
+            .dir("core-ftp/src/testFixtures/resources/ftps-server")
+            .asFile
+            .absolutePath,
+    )
+    // The container's default locale would encode filenames as ASCII, which
+    // turns the Korean names these tests use into question marks before they
+    // reach the FTP layer.
+    environment("LANG", "C.UTF-8")
+    environment("LC_ALL", "C.UTF-8")
+    systemProperty("file.encoding", "UTF-8")
 }

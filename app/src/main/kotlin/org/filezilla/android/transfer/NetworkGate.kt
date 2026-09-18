@@ -22,7 +22,7 @@ import android.net.NetworkRequest
  * how soon it is reasonable to hit a server again is the engine's decision and
  * not this class's.
  */
-class NetworkGate(context: Context) {
+class NetworkGate(context: Context) : TransferGate {
 
     private val manager = context.getSystemService(ConnectivityManager::class.java)
     private val lock = Object()
@@ -78,7 +78,7 @@ class NetworkGate(context: Context) {
     }
 
     /** True when the current connection satisfies [policy]. */
-    val isAllowed: Boolean get() = allowed
+    override val isAllowed: Boolean get() = allowed
 
     /**
      * Asks the platform right now, rather than reporting what the callback
@@ -111,8 +111,11 @@ class NetworkGate(context: Context) {
      * attempt goes ahead, fails, and the retry policy gets to decide whether
      * the transfer is finished.
      */
+    override fun waitBeforeRetry(backoffMillis: Long) =
+        waitBeforeRetry(backoffMillis, DEFAULT_OFFLINE_CAP_MILLIS)
+
     @Throws(InterruptedException::class)
-    fun waitBeforeRetry(backoffMillis: Long, offlineCapMillis: Long = DEFAULT_OFFLINE_CAP_MILLIS) {
+    fun waitBeforeRetry(backoffMillis: Long, offlineCapMillis: Long) {
         if (backoffMillis > 0) Thread.sleep(backoffMillis)
         if (allowed) return
 
@@ -137,7 +140,7 @@ class NetworkGate(context: Context) {
      * and spending the user's data.
      */
     @Throws(InterruptedException::class)
-    fun awaitAllowed() {
+    override fun awaitAllowed() {
         synchronized(lock) {
             while (!allowed && !stopped) {
                 lock.wait(POLL_INTERVAL_MILLIS)
