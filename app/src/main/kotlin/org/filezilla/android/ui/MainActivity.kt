@@ -105,9 +105,13 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
     var pendingDownload by remember { mutableStateOf<org.filezilla.ftp.listing.DirectoryEntry?>(null) }
 
     val uploadQueuedMessage = stringResource(R.string.queue_upload_toast)
-    val manyQueuedTemplate = stringResource(R.string.queued_many, 0).replace("0", "%d")
-    val queuedTemplate = stringResource(R.string.queue_queued_toast, "%s")
-    fun queuedMessage(name: String) = queuedTemplate.replace("%s", name)
+
+    // Formatted through the context rather than by patching an already
+    // rendered string. Rendering with a placeholder and substituting it back
+    // works only until a translation happens to contain the same characters
+    // somewhere else, and then it corrupts the wrong part of the sentence.
+    fun queuedMessage(name: String) = context.getString(R.string.queue_queued_toast, name)
+    fun manyQueuedMessage(count: Int) = context.getString(R.string.queued_many, count)
 
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -191,7 +195,7 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                             val queued = model.enqueueSelected { count ->
                                 TransferService.start(context)
                                 scope.launch {
-                                    snackbars.showSnackbar(manyQueuedTemplate.replace("%d", "$count"))
+                                    snackbars.showSnackbar(manyQueuedMessage(count))
                                 }
                             }
                             // No folder chosen yet: ask, exactly as a single

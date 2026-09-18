@@ -35,6 +35,7 @@
     <string name="sites_new_title">New server</string>
     <string name="sites_edit_title">Edit server</string>
     <string name="field_name">Name</string>
+    <string name="name_hint">Optional — the host is used if left blank</string>
     <string name="field_host">Host</string>
     <string name="field_port">Port</string>
     <string name="field_encryption">Encryption</string>

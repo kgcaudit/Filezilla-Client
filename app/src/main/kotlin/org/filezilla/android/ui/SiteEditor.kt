@@ -98,9 +98,10 @@ fun SiteEditor(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text(stringResource(R.string.field_name)) },
-                    // Left blank, the host becomes the name; saying so saves
-                    // the user inventing one.
-                    placeholder = { Text(host.ifBlank { stringResource(R.string.field_host) }) },
+                    // Its own hint. Falling back to the host field's *label*
+                    // put the word "호스트" in the name box, which read as the
+                    // name field asking for a host.
+                    placeholder = { Text(host.ifBlank { stringResource(R.string.name_hint) }) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
