@@ -2,7 +2,6 @@ package org.filezilla.ftp.transfer
 
 import org.filezilla.ftp.io.TransferReader
 import org.filezilla.ftp.io.TransferWriter
-import org.filezilla.ftp.protocol.FtpControlConnection
 import org.filezilla.ftp.protocol.FtpLogger
 import org.filezilla.ftp.protocol.FtpSettings
 import org.filezilla.ftp.protocol.LogLevel
@@ -27,11 +26,14 @@ data class ResilientOutcome(
  * correct response is to reconnect and carry on from where the partial file
  * ends, not to start again.
  *
- * Each attempt gets a fresh control connection, because a connection that
- * dropped cannot be reused. The [ServerCapabilities] cache is shared across
- * attempts on purpose: the 2 GB/4 GB resume probe costs an extra data
- * connection, and repeating it on every reconnect would be exactly the wrong
- * thing to do on a flaky link.
+ * Where each attempt's connection comes from is [ControlConnections]' to say.
+ * A failed attempt never reuses one -- the usual reason an attempt fails is
+ * that its connection died -- but a successful one can hand its connection to
+ * the next transfer, which is what makes a queue of small files worth running.
+ *
+ * The [ServerCapabilities] cache is shared across attempts on purpose: the
+ * 2 GB/4 GB resume probe costs an extra data connection, and repeating it on
+ * every reconnect would be exactly the wrong thing to do on a flaky link.
  *
  * The writer and reader arrive as factories rather than instances because each
  * attempt needs its own. A writer is closed when its attempt ends, and closing
@@ -45,6 +47,13 @@ class ResilientTransfer(
     private val logger: FtpLogger = FtpLogger.NONE,
     /** Overridable so tests do not actually wait out the backoff. */
     private val sleep: (Long) -> Unit = { millis -> Thread.sleep(millis) },
+    /**
+     * Where each attempt's connection comes from. The default opens a fresh
+     * one and closes it, which is what a dropped connection requires; a caller
+     * running a queue can pass one that keeps the connection between files.
+     */
+    private val connections: ControlConnections =
+        ControlConnections.perAttempt(settings, capabilities, logger),
 ) {
 
     /**
@@ -117,11 +126,17 @@ class ResilientTransfer(
                 progress?.onProgress(transferred, resumeOffset, totalSize)
             }
 
+            val control = connections.acquire()
+            var reusable = false
             try {
-                val outcome = FtpControlConnection(settings, capabilities, logger).use { control ->
-                    control.connect()
-                    control.login()
+                val outcome = try {
                     attemptBody(FtpTransferEngine(control, capabilities, logger), counting)
+                        .also { reusable = true }
+                } finally {
+                    // Released before the retry decision, so a connection that
+                    // survived is available to the next attempt rather than
+                    // being held by an attempt that has already finished.
+                    connections.release(control, reusable)
                 }
                 bytesAcrossAttempts += outcome.bytesTransferred
                 if (attempt > 1) {

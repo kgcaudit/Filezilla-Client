@@ -5,6 +5,7 @@ import org.filezilla.ftp.protocol.FtpLogger
 import org.filezilla.ftp.protocol.FtpSettings
 import org.filezilla.ftp.protocol.LogLevel
 import org.filezilla.ftp.protocol.ServerCapabilities
+import org.filezilla.ftp.transfer.ControlConnections
 import org.filezilla.ftp.transfer.ResilientTransfer
 import org.filezilla.ftp.transfer.RetryPolicy
 import org.filezilla.ftp.transfer.TransferProgressListener
@@ -33,6 +34,9 @@ class JournalledTransfer(
     /** How often to write progress to the journal, in bytes. */
     private val journalEveryBytes: Long = 1L shl 20,
     private val sleep: (Long) -> Unit = { millis -> Thread.sleep(millis) },
+    /** Passed straight to [ResilientTransfer]; see [ControlConnections]. */
+    private val connections: ControlConnections =
+        ControlConnections.perAttempt(settings, capabilities, logger),
 ) {
 
     /**
@@ -105,6 +109,7 @@ class JournalledTransfer(
                 retryPolicy = retryPolicy,
                 logger = logger,
                 sleep = sleep,
+                connections = connections,
             ).download(
                 remoteFile = record.remotePath,
                 progress = recording,

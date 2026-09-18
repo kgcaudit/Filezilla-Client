@@ -44,7 +44,7 @@ import org.filezilla.ftp.journal.TransferState
 @Composable
 fun QueueScreen(
     transfers: List<TransferRecord>,
-    active: ActiveProgress?,
+    active: Map<String, ActiveProgress>,
     onPause: (String) -> Unit,
     onResume: (String) -> Unit,
     onCancel: (String) -> Unit,
@@ -65,17 +65,18 @@ fun QueueScreen(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         items(transfers, key = { it.id }) { record ->
-            // The live figure for whichever transfer is running, so the bar
-            // moves; the journalled figure for the rest, which is what would
-            // actually be resumed from.
-            val live = active?.id == record.id
+            // The live figure for a transfer that is actually running, so the
+            // bar moves; the journalled figure for the rest, which is what
+            // would actually be resumed from. Two run at once, so this is a
+            // lookup rather than a comparison against one current transfer.
+            val live = active[record.id]
             TransferCard(
                 record = record,
-                bytes = if (live) active.bytes else record.bytesTransferred,
-                total = if (live) active.totalBytes else record.totalBytes,
-                // Only the running transfer has a speed; a paused or waiting
-                // one showing a leftover figure would be a lie.
-                bytesPerSecond = if (live) active.bytesPerSecond else null,
+                bytes = live?.bytes ?: record.bytesTransferred,
+                total = live?.totalBytes ?: record.totalBytes,
+                // Only a running transfer has a speed; a paused or waiting one
+                // showing a leftover figure would be a lie.
+                bytesPerSecond = live?.bytesPerSecond,
                 onPause = { onPause(record.id) },
                 onResume = { onResume(record.id) },
                 onCancel = { onCancel(record.id) },

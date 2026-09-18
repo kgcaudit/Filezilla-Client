@@ -36,7 +36,7 @@ class PauseSignalTest {
         signal.request("one")
         // What happens when the transfer finished before the pause arrived:
         // the run ends, the signal is cleared, and resuming must actually run.
-        signal.clear()
+        signal.clear("one")
         signal.stopIfRequested("one")
         assertFalse(signal.isRequested("one"))
     }
@@ -104,5 +104,27 @@ class PauseSignalTest {
             signal.stopIfRequested("one")
         }
         assertTrue(thrown.reason == StopReason.USER)
+    }
+
+    /**
+     * Two transfers run at once now. A single slot would have meant pausing
+     * one stopped whichever checked first, and clearing one run cancelled a
+     * pause aimed at the other.
+     */
+    @Test
+    fun `two running transfers are paused independently`() {
+        val signal = PauseSignal()
+
+        signal.request("one")
+        signal.request("two")
+        assertTrue(signal.isRequested("one"))
+        assertTrue(signal.isRequested("two"))
+
+        signal.clear("one")
+        assertFalse(signal.isRequested("one"))
+        assertTrue("clearing one run must not cancel the other's pause", signal.isRequested("two"))
+
+        signal.stopIfRequested("one")
+        assertThrows(TransferPausedException::class.java) { signal.stopIfRequested("two") }
     }
 }

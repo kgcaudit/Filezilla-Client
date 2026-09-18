@@ -64,7 +64,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val log: StateFlow<List<LogLine>> get() = graph.log.log
 
-    val active: StateFlow<ActiveProgress?> get() = graph.transfers.active
+    /**
+     * The transfers moving right now, keyed by id.
+     *
+     * Two run at once, so the queue screen matches each card against this
+     * rather than against one "current" transfer.
+     */
+    val active: StateFlow<Map<String, ActiveProgress>> = graph.transfers.activeTransfers
 
     var browse by mutableStateOf(BrowseState())
         private set

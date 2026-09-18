@@ -50,27 +50,30 @@ enum class StopReason {
  */
 class PauseSignal {
 
-    @Volatile
-    private var requested: Pair<String, StopReason>? = null
+    /**
+     * Keyed by transfer, because two of them run at once. A single slot would
+     * mean pausing one transfer stopped whichever happened to check first.
+     */
+    private val requested = java.util.concurrent.ConcurrentHashMap<String, StopReason>()
 
     /** Asks the transfer with [id] to stop at its next progress callback. */
     fun request(id: String, reason: StopReason = StopReason.USER) {
-        requested = id to reason
+        requested[id] = reason
     }
 
-    fun isRequested(id: String): Boolean = requested?.first == id
+    fun isRequested(id: String): Boolean = requested.containsKey(id)
 
     /**
      * Cleared when a transfer's run ends, so a request that arrived too late
      * to stop anything cannot stop the *next* run of the same transfer.
      */
-    fun clear() {
-        requested = null
+    fun clear(id: String) {
+        requested.remove(id)
     }
 
     /** Called from the progress callback; throws when this transfer is paused. */
     fun stopIfRequested(id: String) {
-        val (wanted, reason) = requested ?: return
-        if (wanted == id) throw TransferPausedException(id, reason)
+        val reason = requested[id] ?: return
+        throw TransferPausedException(id, reason)
     }
 }

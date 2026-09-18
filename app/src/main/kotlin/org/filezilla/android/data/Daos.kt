@@ -34,6 +34,40 @@ interface TransferDao {
     /** Newest first, which is the order the queue screen wants. */
     @Query("SELECT * FROM transfers ORDER BY updated_at DESC")
     fun observeAll(): Flow<List<TransferEntity>>
+
+    /**
+     * Takes a transfer for one worker, or reports that someone else has it.
+     *
+     * The condition in the `WHERE` is the whole point. With two workers,
+     * reading a record and then writing it back is a race whose losing side is
+     * two workers downloading the same file over two connections, into two
+     * partial files, publishing whichever finishes last. SQLite applies this
+     * as one statement, so exactly one caller sees a row count of 1.
+     *
+     * `RUNNING` is not claimable. A record in that state is either held by a
+     * live worker or left over from a process that died, and the queue turns
+     * the leftovers back into `INTERRUPTED` before any worker starts.
+     *
+     * @return 1 when this caller took it, 0 when it was already gone.
+     */
+    @Query(
+        """
+        UPDATE transfers SET state = 'RUNNING', updated_at = :now
+        WHERE id = :id AND state IN ('PENDING', 'INTERRUPTED')
+        """,
+    )
+    fun claim(id: String, now: Long): Int
+
+    /**
+     * Turns transfers left `RUNNING` by a killed process back into work.
+     *
+     * Nothing is running when the queue starts, so a `RUNNING` row means the
+     * process died holding it. They have to be moved out of `RUNNING` before
+     * workers start, or [claim] could not tell a leftover from a record a
+     * live worker is holding.
+     */
+    @Query("UPDATE transfers SET state = 'INTERRUPTED', updated_at = :now WHERE state = 'RUNNING'")
+    fun releaseStaleClaims(now: Long): Int
 }
 
 @Dao

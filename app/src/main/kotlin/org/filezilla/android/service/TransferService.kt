@@ -106,7 +106,7 @@ class TransferService : LifecycleService() {
     }
 
     private fun startForegroundCompat() {
-        val notification = notifications.build(graph.transfers.active.value, 0, heldForNetwork())
+        val notification = notifications.build(graph.transfers.foremostActive(), 0, heldForNetwork())
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 TransferNotifications.NOTIFICATION_ID,
@@ -132,9 +132,15 @@ class TransferService : LifecycleService() {
         return true
     }
 
-    /** Transfers the queue still has to get to, for the notification's subtext. */
+    /**
+     * What the notification's subtext counts.
+     *
+     * Two transfers run at once but the notification shows one bar, so the
+     * other one is counted here with the queue -- otherwise the user would see
+     * a single file and no sign of the rest.
+     */
     private fun waitingCount(): Int =
-        graph.transfers.waitingCount.value
+        graph.transfers.waitingCount.value + (graph.transfers.runningCount() - 1).coerceAtLeast(0)
 
     private fun notify(notification: android.app.Notification?) {
         if (notification == null) return
@@ -150,7 +156,7 @@ class TransferService : LifecycleService() {
      * nothing is moving is the thing worth saying.
      */
     private fun repostIdleNotification() {
-        notify(notifications.build(graph.transfers.active.value, waitingCount(), heldForNetwork()))
+        notify(notifications.build(graph.transfers.foremostActive(), waitingCount(), heldForNetwork()))
     }
 
     private fun heldForNetwork(): Boolean = !graph.networkGate.isAllowed

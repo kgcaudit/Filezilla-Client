@@ -20,8 +20,8 @@ import java.io.Closeable
  */
 class FtpSession(
     settings: FtpSettings,
-    capabilities: ServerCapabilities,
-    logger: FtpLogger = FtpLogger.NONE,
+    private val capabilities: ServerCapabilities,
+    private val logger: FtpLogger = FtpLogger.NONE,
 ) : Closeable {
 
     private val control = FtpControlConnection(settings, capabilities, logger)
@@ -60,18 +60,41 @@ class FtpSession(
      * and a difference in precision read as a difference in time would restart
      * a perfectly good transfer.
      */
-    fun fingerprint(remotePath: String): RemoteFingerprint {
-        val directory = remotePath.substringBeforeLast('/', "")
-        val name = remotePath.substringAfterLast('/')
-        if (directory.isNotEmpty()) changeDirectory(directory)
-        val entry = list().firstOrNull { it.name == name }
-        return RemoteFingerprint(
-            size = entry?.size?.takeIf { it >= 0 },
-            modifiedMillis = entry?.time?.epochMillis,
-        )
-    }
+    fun fingerprint(remotePath: String): RemoteFingerprint =
+        fingerprintOf(control, capabilities, logger, remotePath)
 
     override fun close() {
         control.close()
     }
+}
+
+/**
+ * What the server says about [remotePath] right now, over a connection the
+ * caller already has.
+ *
+ * Free-standing so that a queue worker can ask on the connection it is about
+ * to transfer over. Opening a second connection for this doubled the login
+ * cost of every file in the queue, which on small files was most of the time
+ * spent.
+ *
+ * Taken from a listing of the containing directory rather than `SIZE` and
+ * `MDTM`, so that both sides of [org.filezilla.ftp.journal.ResumeSafety]'s
+ * comparison always come from the same source: `MLSD` and `MDTM` can disagree
+ * about a timestamp's precision, and a difference in precision read as a
+ * difference in time would restart a perfectly good transfer.
+ */
+fun fingerprintOf(
+    control: FtpControlConnection,
+    capabilities: ServerCapabilities,
+    logger: FtpLogger,
+    remotePath: String,
+): RemoteFingerprint {
+    val directory = remotePath.substringBeforeLast('/', "")
+    val name = remotePath.substringAfterLast('/')
+    if (directory.isNotEmpty()) FtpFileOperations(control).changeDirectory(directory)
+    val entry = FtpTransferEngine(control, capabilities, logger).list().firstOrNull { it.name == name }
+    return RemoteFingerprint(
+        size = entry?.size?.takeIf { it >= 0 },
+        modifiedMillis = entry?.time?.epochMillis,
+    )
 }
