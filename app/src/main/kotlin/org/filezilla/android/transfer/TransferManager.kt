@@ -330,6 +330,7 @@ class TransferManager(
             when (e.reason) {
                 StopReason.USER -> markPaused(record)
                 StopReason.NETWORK -> markWaitingForNetwork(record)
+                StopReason.CANCEL -> discard(record)
             }
         } catch (e: Exception) {
             // JournalledTransfer has already written INTERRUPTED for a
@@ -337,10 +338,30 @@ class TransferManager(
             // queue does not spin on the same record.
             markInterrupted(record, e.message ?: e.javaClass.simpleName)
         } finally {
+            // A cancel that arrived while the transfer was finishing never
+            // reached a progress callback, so nothing threw. Honour it here
+            // rather than leaving a record the user has already dismissed.
+            if (pauseSignal.reasonFor(record.id) == StopReason.CANCEL) discard(record)
             rates.remove(record.id)
             activeState.value = activeState.value - record.id
             pauseSignal.clear(record.id)
         }
+    }
+
+    /**
+     * Throws a transfer away, record and bytes.
+     *
+     * Run on the transfer's own thread as it unwinds, not from the UI. The
+     * bug this shape exists to fix is that removing the record from outside
+     * did nothing: [JournalledTransfer] keeps its own copy and writes it back
+     * every megabyte, so a record deleted underneath it came straight back --
+     * and the transfer carried on regardless, because nothing had told it to
+     * stop.
+     */
+    private fun discard(record: TransferRecord) {
+        journal.remove(record.id)
+        partials.delete(record.id)
+        log.log(LogLevel.STATUS, "${record.remotePath} cancelled")
     }
 
     /**
@@ -681,9 +702,23 @@ class TransferManager(
         Unit
     }
 
+    /**
+     * Cancels a transfer, whether or not it is the one running.
+     *
+     * A running transfer cannot simply be removed from the journal, for the
+     * same reason a running transfer cannot simply be marked PAUSED: the copy
+     * [JournalledTransfer] holds is written back every megabyte and puts the
+     * record straight back. So the running one is asked to stop through
+     * [PauseSignal] and throws itself away as it unwinds; see [discard].
+     */
     suspend fun cancel(id: String) = withContext(io) {
+        if (activeState.value.containsKey(id)) {
+            pauseSignal.request(id, StopReason.CANCEL)
+            return@withContext
+        }
         journal.remove(id)
         partials.delete(id)
+        Unit
     }
 
     suspend fun clearCompleted() = withContext(io) {

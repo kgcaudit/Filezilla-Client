@@ -1,6 +1,7 @@
 package org.filezilla.android.transfer
 
 import org.filezilla.ftp.transfer.RetryPolicy
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -87,6 +88,9 @@ class PauseSignalTest {
         }
         assertTrue(network.reason == StopReason.NETWORK)
 
+        // Cleared as a finished run clears it, so this is a second run rather
+        // than a second request against a stop already standing.
+        signal.clear("one")
         signal.request("one", StopReason.USER)
         val user = assertThrows(TransferPausedException::class.java) {
             signal.stopIfRequested("one")
@@ -126,5 +130,60 @@ class PauseSignalTest {
 
         signal.stopIfRequested("one")
         assertThrows(TransferPausedException::class.java) { signal.stopIfRequested("two") }
+    }
+
+    // ------------------------------------------------------------- cancel
+
+    /**
+     * Cancel is terminal, so nothing downgrades it. Without this, the network
+     * dropping a moment after the user pressed cancel turned the cancel into a
+     * wait -- and the transfer they had dismissed came back with the Wi-Fi.
+     */
+    @Test
+    fun `a cancel is not overwritten by a later network stop`() {
+        val signal = PauseSignal()
+
+        signal.request("one", StopReason.CANCEL)
+        signal.request("one", StopReason.NETWORK)
+
+        assertEquals(StopReason.CANCEL, signal.reasonFor("one"))
+    }
+
+    @Test
+    fun `a cancel replaces a pause the user asked for first`() {
+        val signal = PauseSignal()
+
+        signal.request("one", StopReason.USER)
+        signal.request("one", StopReason.CANCEL)
+
+        assertEquals(StopReason.CANCEL, signal.reasonFor("one"))
+    }
+
+    /** The first ordinary reason stands; a second does not churn it. */
+    @Test
+    fun `a network stop does not replace a pause already asked for`() {
+        val signal = PauseSignal()
+
+        signal.request("one", StopReason.USER)
+        signal.request("one", StopReason.NETWORK)
+
+        assertEquals(StopReason.USER, signal.reasonFor("one"))
+    }
+
+    @Test
+    fun `a cancel carries its reason to the transfer thread`() {
+        val signal = PauseSignal()
+        signal.request("one", StopReason.CANCEL)
+
+        val thrown = assertThrows(TransferPausedException::class.java) {
+            signal.stopIfRequested("one")
+        }
+
+        assertEquals(StopReason.CANCEL, thrown.reason)
+    }
+
+    @Test
+    fun `nothing was asked of a transfer nobody stopped`() {
+        assertEquals(null, PauseSignal().reasonFor("one"))
     }
 }

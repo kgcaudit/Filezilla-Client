@@ -27,6 +27,12 @@ enum class StopReason {
 
     /** The only connection left is one the user ruled out. */
     NETWORK,
+
+    /**
+     * The user cancelled it. The record and its bytes go, rather than being
+     * kept for a resume that will never be asked for.
+     */
+    CANCEL,
 }
 
 /**
@@ -56,12 +62,26 @@ class PauseSignal {
      */
     private val requested = java.util.concurrent.ConcurrentHashMap<String, StopReason>()
 
-    /** Asks the transfer with [id] to stop at its next progress callback. */
+    /**
+     * Asks the transfer with [id] to stop at its next progress callback.
+     *
+     * A cancel already asked for is never replaced. The network dropping a
+     * moment after the user pressed cancel would otherwise turn their cancel
+     * into a wait, and the transfer they dismissed would come back when Wi-Fi
+     * did.
+     */
     fun request(id: String, reason: StopReason = StopReason.USER) {
-        requested[id] = reason
+        if (reason == StopReason.CANCEL) {
+            requested[id] = reason
+            return
+        }
+        requested.putIfAbsent(id, reason)
     }
 
     fun isRequested(id: String): Boolean = requested.containsKey(id)
+
+    /** Why [id] was asked to stop, or null if it was not. */
+    fun reasonFor(id: String): StopReason? = requested[id]
 
     /**
      * Cleared when a transfer's run ends, so a request that arrived too late
