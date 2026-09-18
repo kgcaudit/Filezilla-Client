@@ -10,8 +10,24 @@ package org.filezilla.android.transfer
  * must not reconnect and carry on. Getting this wrong would make the pause
  * button look like it did nothing.
  */
-class TransferPausedException(val transferId: String) :
-    RuntimeException("transfer $transferId was paused")
+class TransferPausedException(val transferId: String, val reason: StopReason) :
+    RuntimeException("transfer $transferId was stopped: $reason")
+
+/**
+ * Why a transfer was stopped where it stood.
+ *
+ * The queue has to tell these apart after the fact. A transfer held back for
+ * the network starts again by itself when the network comes back; one the user
+ * paused must not, or the pause button would undo itself the next time the
+ * phone changed network.
+ */
+enum class StopReason {
+    /** The user pressed pause. */
+    USER,
+
+    /** The only connection left is one the user ruled out. */
+    NETWORK,
+}
 
 /**
  * Carries a pause request from whichever thread the UI is on to the thread
@@ -35,14 +51,14 @@ class TransferPausedException(val transferId: String) :
 class PauseSignal {
 
     @Volatile
-    private var requested: String? = null
+    private var requested: Pair<String, StopReason>? = null
 
     /** Asks the transfer with [id] to stop at its next progress callback. */
-    fun request(id: String) {
-        requested = id
+    fun request(id: String, reason: StopReason = StopReason.USER) {
+        requested = id to reason
     }
 
-    fun isRequested(id: String): Boolean = requested == id
+    fun isRequested(id: String): Boolean = requested?.first == id
 
     /**
      * Cleared when a transfer's run ends, so a request that arrived too late
@@ -54,6 +70,7 @@ class PauseSignal {
 
     /** Called from the progress callback; throws when this transfer is paused. */
     fun stopIfRequested(id: String) {
-        if (requested == id) throw TransferPausedException(id)
+        val (wanted, reason) = requested ?: return
+        if (wanted == id) throw TransferPausedException(id, reason)
     }
 }

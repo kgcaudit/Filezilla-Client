@@ -6,6 +6,8 @@
     <string name="notification_channel_transfers">전송</string>
     <string name="notification_channel_transfers_description">진행 중인 업로드·다운로드 진행률</string>
     <string name="notification_preparing">전송 준비 중</string>
+    <string name="notification_waiting_network">와이파이 기다리는 중</string>
+    <string name="notification_waiting_network_detail">와이파이가 돌아오면 전송을 이어갑니다</string>
     <string name="notification_progress">%1$s / %2$s · %3$d%%</string>
     <string name="notification_progress_unknown">%1$s 전송됨</string>
     <plurals name="notification_queued">
@@ -135,6 +137,9 @@
     <string name="queue_remove">목록에서 제거</string>
     <string name="queue_clear_finished">완료된 항목 지우기</string>
     <string name="queue_start">전송 시작</string>
+    <string name="queue_settings">전송 설정</string>
+    <string name="setting_wifi_only">와이파이에서만 전송</string>
+    <string name="setting_wifi_only_detail">모바일 데이터에서는 멈추고, 와이파이에서 이어갑니다</string>
     <string name="queue_queued_toast">%1$s 대기열에 추가됨</string>
     <string name="queue_upload_toast">업로드 대기열에 추가됨</string>
     <string name="direction_download">다운로드</string>
@@ -143,6 +148,7 @@
     <string name="state_running">전송 중</string>
     <string name="state_paused">일시정지됨</string>
     <string name="state_interrupted">중단됨 — 이어받습니다</string>
+    <string name="state_waiting_for_network">와이파이 기다리는 중</string>
     <string name="state_completed">완료</string>
     <string name="state_failed">실패</string>
     <string name="queue_attempt">%1$d번째 시도</string>

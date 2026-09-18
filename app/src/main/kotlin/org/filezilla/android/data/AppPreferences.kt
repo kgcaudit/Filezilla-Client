@@ -2,6 +2,7 @@ package org.filezilla.android.data
 
 import android.content.Context
 import android.net.Uri
+import org.filezilla.android.transfer.NetworkPolicy
 import org.filezilla.android.ui.BrowseOptions
 import org.filezilla.android.ui.SortKey
 import org.filezilla.android.ui.ViewMode
@@ -20,6 +21,20 @@ class AppPreferences(context: Context) {
     var downloadFolder: Uri?
         get() = prefs.getString(KEY_DOWNLOAD_FOLDER, null)?.let(Uri::parse)
         set(value) = prefs.edit().putString(KEY_DOWNLOAD_FOLDER, value?.toString()).apply()
+
+    /**
+     * Whether transfers are held back for an unmetered connection.
+     *
+     * Off by default: turning it on for someone who has no Wi-Fi would stop
+     * their transfers with no obvious cause. The user asks for it.
+     */
+    var wifiOnly: Boolean
+        get() = prefs.getBoolean(KEY_WIFI_ONLY, false)
+        set(value) = prefs.edit().putBoolean(KEY_WIFI_ONLY, value).apply()
+
+    /** The same setting as the queue reads it. */
+    val networkPolicy: NetworkPolicy
+        get() = if (wifiOnly) NetworkPolicy.UNMETERED else NetworkPolicy.ANY
 
     /**
      * How this person likes a directory shown. Remembered, because re-picking
@@ -55,5 +70,6 @@ class AppPreferences(context: Context) {
         const val KEY_FOLDERS_FIRST = "browse_folders_first"
         const val KEY_SHOW_HIDDEN = "browse_show_hidden"
         const val KEY_VIEW = "browse_view"
+        const val KEY_WIFI_ONLY = "wifi_only"
     }
 }

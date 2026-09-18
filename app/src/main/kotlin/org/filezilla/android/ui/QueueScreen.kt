@@ -143,6 +143,11 @@ private fun TransferCard(
                             Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.queue_resume))
                         }
 
+                    // No resume button: this one starts again by itself, and a
+                    // button that cannot do anything until the network changes
+                    // would only look broken. Cancel still works.
+                    TransferState.WAITING_FOR_NETWORK -> Unit
+
                     TransferState.COMPLETED -> Unit
                 }
                 IconButton(
@@ -233,6 +238,7 @@ private fun accentFor(state: TransferState): Color = when (state) {
     TransferState.PENDING -> MaterialTheme.status.waiting
     TransferState.PAUSED -> MaterialTheme.status.paused
     TransferState.INTERRUPTED -> MaterialTheme.status.paused
+    TransferState.WAITING_FOR_NETWORK -> MaterialTheme.status.waiting
     TransferState.COMPLETED -> MaterialTheme.status.done
     TransferState.FAILED -> MaterialTheme.status.failed
 }
@@ -244,6 +250,7 @@ private fun stateLabel(state: TransferState): String = stringResource(
         TransferState.RUNNING -> R.string.state_running
         TransferState.PAUSED -> R.string.state_paused
         TransferState.INTERRUPTED -> R.string.state_interrupted
+        TransferState.WAITING_FOR_NETWORK -> R.string.state_waiting_for_network
         TransferState.COMPLETED -> R.string.state_completed
         TransferState.FAILED -> R.string.state_failed
     },

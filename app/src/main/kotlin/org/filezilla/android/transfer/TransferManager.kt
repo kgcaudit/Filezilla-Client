@@ -162,8 +162,16 @@ class TransferManager(
 
     // ----------------------------------------------------------- queue control
 
-    /** Anything the queue still has work to do for. */
-    suspend fun hasRunnableWork(): Boolean = withContext(io) { nextRunnable() != null }
+    /**
+     * Anything the queue still has work to do for.
+     *
+     * Work held back for the network counts: the service has to stay alive to
+     * notice Wi-Fi coming back, or nothing would ever start it again.
+     */
+    suspend fun hasRunnableWork(): Boolean = withContext(io) {
+        nextRunnable() != null ||
+            journal.all().any { it.state == TransferState.WAITING_FOR_NETWORK }
+    }
 
     fun requestStop() {
         stopRequested = true
@@ -186,6 +194,16 @@ class TransferManager(
             runInterruptible { republishUnpublished() }
 
             while (!stopRequested) {
+                // Before picking anything up, not after: starting a transfer
+                // on a network the user ruled out and stopping it a moment
+                // later still spends their data.
+                if (!networkGate.isAllowed) {
+                    parkForNetwork()
+                    networkGate.awaitAllowed()
+                    if (stopRequested) break
+                    releaseFromNetworkWait()
+                    continue
+                }
                 val record = nextRunnable() ?: break
                 waitingState.value = (journal.resumable().size - 1).coerceAtLeast(0)
                 // runInterruptible so that cancelling this coroutine -- which
@@ -230,9 +248,12 @@ class TransferManager(
             throw e
         } catch (e: TransferPausedException) {
             // Written after JournalledTransfer has had its say: it marks the
-            // record INTERRUPTED on the way out, and PAUSED has to be what
+            // record INTERRUPTED on the way out, and this has to be what
             // survives, or the queue would pick the transfer straight back up.
-            markPaused(record)
+            when (e.reason) {
+                StopReason.USER -> markPaused(record)
+                StopReason.NETWORK -> markWaitingForNetwork(record)
+            }
         } catch (e: Exception) {
             // JournalledTransfer has already written INTERRUPTED for a
             // download; for anything it did not reach, record it here so the
@@ -426,6 +447,60 @@ class TransferManager(
             "${record.remotePath} paused at ${current.bytesTransferred} bytes; " +
                 "resuming will not fetch them again",
         )
+    }
+
+    /**
+     * Records that a transfer is held back for the network.
+     *
+     * The attempt count is deliberately left alone. Waiting for Wi-Fi is not
+     * a failed attempt, and counting it as one would walk the transfer toward
+     * FAILED for doing exactly what the user asked.
+     */
+    private fun markWaitingForNetwork(record: TransferRecord) {
+        val current = journal.get(record.id) ?: record
+        if (current.isTerminal || current.state == TransferState.PAUSED) return
+        journal.put(
+            current.copy(
+                state = TransferState.WAITING_FOR_NETWORK,
+                lastError = null,
+                updatedAtMillis = System.currentTimeMillis(),
+            ),
+        )
+    }
+
+    /** Moves everything the queue could run into the network wait. */
+    private fun parkForNetwork() {
+        for (record in journal.all()) {
+            if (waitsForNetwork(record.state)) markWaitingForNetwork(record)
+        }
+        activeState.value = null
+        waitingState.value = 0
+    }
+
+    /** Puts them back once an allowed network is here. */
+    private fun releaseFromNetworkWait() {
+        for (record in journal.all()) {
+            if (!startsAgainWhenNetworkReturns(record.state)) continue
+            journal.put(
+                record.copy(
+                    state = TransferState.PENDING,
+                    updatedAtMillis = System.currentTimeMillis(),
+                ),
+            )
+        }
+    }
+
+    /**
+     * Stops whatever is running because the network stopped being one the
+     * user allows. Called from the network callback, not the transfer thread.
+     */
+    fun onNetworkDisallowed() {
+        activeId?.let { pauseSignal.request(it, StopReason.NETWORK) }
+    }
+
+    /** True when the queue is holding work back for the network. */
+    suspend fun hasNetworkHeldWork(): Boolean = withContext(io) {
+        journal.all().any { it.state == TransferState.WAITING_FOR_NETWORK }
     }
 
     private fun fail(record: TransferRecord, reason: String) {

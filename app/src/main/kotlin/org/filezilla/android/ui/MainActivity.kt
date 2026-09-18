@@ -5,39 +5,41 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.core.view.WindowCompat
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -47,11 +49,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
+import org.filezilla.android.R
 import org.filezilla.android.data.SiteEntity
 import org.filezilla.android.service.TransferService
-import org.filezilla.android.R
 import org.filezilla.android.ui.theme.OloTheme
 
 private enum class Tab(val label: Int) {
@@ -89,6 +94,7 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
     val snackbars = remember { SnackbarHostState() }
 
     var tab by remember { mutableStateOf(Tab.SITES) }
+    var queueMenuOpen by remember { mutableStateOf(false) }
     var editingSite by remember { mutableStateOf<SiteDraft?>(null) }
     var creatingDirectory by remember { mutableStateOf(false) }
     var viewOptionsOpen by remember { mutableStateOf(false) }
@@ -270,6 +276,36 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                             }
                             IconButton(onClick = { TransferService.start(context) }) {
                                 Icon(Icons.Filled.SwapVert, contentDescription = stringResource(R.string.queue_start))
+                            }
+                            IconButton(onClick = { queueMenuOpen = true }) {
+                                Icon(
+                                    Icons.Filled.MoreVert,
+                                    contentDescription = stringResource(R.string.queue_settings),
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = queueMenuOpen,
+                                onDismissRequest = { queueMenuOpen = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(stringResource(R.string.setting_wifi_only))
+                                            Text(
+                                                stringResource(R.string.setting_wifi_only_detail),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    },
+                                    trailingIcon = {
+                                        Switch(
+                                            checked = model.wifiOnly,
+                                            onCheckedChange = { model.applyWifiOnly(it) },
+                                        )
+                                    },
+                                    onClick = { model.applyWifiOnly(!model.wifiOnly) },
+                                )
                             }
                         }
 

@@ -28,10 +28,31 @@ class NetworkGate(context: Context) {
     private val lock = Object()
 
     @Volatile
-    private var online: Boolean = false
+    private var allowed: Boolean = false
 
     @Volatile
     private var stopped: Boolean = false
+
+    /**
+     * What counts as a usable connection. Read on every check rather than
+     * captured, so turning Wi-Fi-only on stops a running transfer instead of
+     * taking effect on the next app start.
+     */
+    @Volatile
+    var policy: NetworkPolicy = NetworkPolicy.ANY
+        set(value) {
+            field = value
+            update()
+        }
+
+    /**
+     * Told whenever the answer to "may the queue transfer right now" changes.
+     *
+     * The queue needs both edges: losing an allowed network has to stop what
+     * is running, and getting one back has to start it again.
+     */
+    @Volatile
+    var onAllowedChanged: ((Boolean) -> Unit)? = null
 
     private val callback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) = update()
@@ -56,7 +77,8 @@ class NetworkGate(context: Context) {
         }
     }
 
-    val isOnline: Boolean get() = online
+    /** True when the current connection satisfies [policy]. */
+    val isAllowed: Boolean get() = allowed
 
     /**
      * Asks the platform right now, rather than reporting what the callback
@@ -66,11 +88,19 @@ class NetworkGate(context: Context) {
      * screen that has never started one would otherwise be told the phone is
      * offline and would blame the wrong thing for a failed connection.
      */
-    fun currentlyOnline(): Boolean = runCatching {
-        val active = manager.activeNetwork ?: return@runCatching false
-        val caps = manager.getNetworkCapabilities(active) ?: return@runCatching false
-        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-    }.getOrDefault(false)
+    fun currentStatus(): NetworkStatus = runCatching {
+        val active = manager.activeNetwork ?: return@runCatching NetworkStatus.OFFLINE
+        val caps = manager.getNetworkCapabilities(active) ?: return@runCatching NetworkStatus.OFFLINE
+        NetworkStatus(
+            online = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET),
+            unmetered = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED),
+        )
+    }.getOrDefault(NetworkStatus.OFFLINE)
+
+    fun currentlyOnline(): Boolean = currentStatus().online
+
+    /** Whether the queue may transfer right now, asked of the platform. */
+    fun currentlyAllowed(): Boolean = policy.allows(currentStatus())
 
     /**
      * The `sleep` an [org.filezilla.ftp.transfer.ResilientTransfer] is given.
@@ -84,11 +114,11 @@ class NetworkGate(context: Context) {
     @Throws(InterruptedException::class)
     fun waitBeforeRetry(backoffMillis: Long, offlineCapMillis: Long = DEFAULT_OFFLINE_CAP_MILLIS) {
         if (backoffMillis > 0) Thread.sleep(backoffMillis)
-        if (online) return
+        if (allowed) return
 
         val deadline = System.currentTimeMillis() + offlineCapMillis
         synchronized(lock) {
-            while (!online && !stopped) {
+            while (!allowed && !stopped) {
                 val remaining = deadline - System.currentTimeMillis()
                 if (remaining <= 0) return
                 // A bounded wait rather than an unbounded one: a missed
@@ -98,12 +128,34 @@ class NetworkGate(context: Context) {
         }
     }
 
-    private fun update() {
-        val nowOnline = currentlyOnline()
+    /**
+     * Blocks until the connection satisfies the policy, or the gate stops.
+     *
+     * Unbounded on purpose, unlike [waitBeforeRetry]: a transfer held back for
+     * the network is not failing and has no retry budget to spend, so waiting
+     * out an hour on cellular is the correct thing to do rather than giving up
+     * and spending the user's data.
+     */
+    @Throws(InterruptedException::class)
+    fun awaitAllowed() {
         synchronized(lock) {
-            online = nowOnline
-            if (nowOnline) lock.notifyAll()
+            while (!allowed && !stopped) {
+                lock.wait(POLL_INTERVAL_MILLIS)
+            }
         }
+    }
+
+    private fun update() {
+        val nowAllowed = currentlyAllowed()
+        val changed: Boolean
+        synchronized(lock) {
+            changed = nowAllowed != allowed
+            allowed = nowAllowed
+            if (nowAllowed) lock.notifyAll()
+        }
+        // Outside the lock: the listener stops a running transfer, and doing
+        // that while holding the lock a waiting one needs would deadlock.
+        if (changed) onAllowedChanged?.invoke(nowAllowed)
     }
 
     private companion object {

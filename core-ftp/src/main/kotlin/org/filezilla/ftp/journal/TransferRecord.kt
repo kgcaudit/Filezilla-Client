@@ -11,8 +11,18 @@ enum class TransferState {
     /** A connection is working on it right now. */
     RUNNING,
 
-    /** Stopped by the user, or waiting for a network the user allows. */
+    /** Stopped by the user. Only the user starts it again. */
     PAUSED,
+
+    /**
+     * Held back because the only connection is one the user ruled out.
+     *
+     * Separate from [PAUSED] because the two end differently: this one starts
+     * again by itself once an allowed network is back, and a transfer the user
+     * paused must not. Separate from [INTERRUPTED] because nothing went wrong
+     * and no retry budget should be spent on waiting.
+     */
+    WAITING_FOR_NETWORK,
 
     /** Stopped by an error that may clear; the partial file is still good. */
     INTERRUPTED,

@@ -37,6 +37,20 @@ class TransferService : LifecycleService() {
         graph = AppGraph.of(this)
         notifications = TransferNotifications(this)
         notifications.ensureChannel()
+
+        graph.networkGate.policy = graph.preferences.networkPolicy
+        graph.networkGate.onAllowedChanged = { allowed ->
+            if (allowed) {
+                // The queue loop is parked in awaitAllowed and wakes itself;
+                // if it already drained and stopped, start it again.
+                graph.log.log(LogLevel.STATUS, "Network is usable again; resuming transfers")
+                startQueue()
+            } else {
+                graph.log.log(LogLevel.STATUS, "Holding transfers until an allowed network is back")
+                graph.transfers.onNetworkDisallowed()
+            }
+            repostIdleNotification()
+        }
         graph.networkGate.start()
 
         // The notification is rebuilt as the transfer moves, so the user can
@@ -53,7 +67,7 @@ class TransferService : LifecycleService() {
             graph.transfers.active.collectLatest { progress ->
                 if (queueJob?.isActive != true) return@collectLatest
                 if (progress != null && !shouldRepost()) return@collectLatest
-                notify(progress?.let { notifications.build(it, waitingCount()) })
+                notify(progress?.let { notifications.build(it, waitingCount(), heldForNetwork()) })
             }
         }
     }
@@ -92,7 +106,7 @@ class TransferService : LifecycleService() {
     }
 
     private fun startForegroundCompat() {
-        val notification = notifications.build(graph.transfers.active.value, 0)
+        val notification = notifications.build(graph.transfers.active.value, 0, heldForNetwork())
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 TransferNotifications.NOTIFICATION_ID,
@@ -129,7 +143,20 @@ class TransferService : LifecycleService() {
         runCatching { manager.notify(TransferNotifications.NOTIFICATION_ID, notification) }
     }
 
+    /**
+     * Refreshes the notification when nothing is transferring.
+     *
+     * Progress updates ride [notify]; this is for the moments when the reason
+     * nothing is moving is the thing worth saying.
+     */
+    private fun repostIdleNotification() {
+        notify(notifications.build(graph.transfers.active.value, waitingCount(), heldForNetwork()))
+    }
+
+    private fun heldForNetwork(): Boolean = !graph.networkGate.isAllowed
+
     override fun onDestroy() {
+        graph.networkGate.onAllowedChanged = null
         graph.transfers.requestStop()
         queueJob?.cancel()
         graph.networkGate.stop()

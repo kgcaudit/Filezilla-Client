@@ -6,6 +6,8 @@
     <string name="notification_channel_transfers">Transfers</string>
     <string name="notification_channel_transfers_description">Progress of running uploads and downloads</string>
     <string name="notification_preparing">Preparing transfer</string>
+    <string name="notification_waiting_network">Waiting for Wi‑Fi</string>
+    <string name="notification_waiting_network_detail">Transfers continue when Wi‑Fi is back</string>
     <string name="notification_progress">%1$s / %2$s · %3$d%%</string>
     <string name="notification_progress_unknown">%1$s transferred</string>
     <plurals name="notification_queued">
@@ -136,6 +138,9 @@
     <string name="queue_remove">Remove from the list</string>
     <string name="queue_clear_finished">Clear finished transfers</string>
     <string name="queue_start">Start the queue</string>
+    <string name="queue_settings">Transfer settings</string>
+    <string name="setting_wifi_only">Wi‑Fi only</string>
+    <string name="setting_wifi_only_detail">Pause on mobile data, continue on Wi‑Fi</string>
     <string name="queue_queued_toast">%1$s queued</string>
     <string name="queue_upload_toast">Upload queued</string>
     <string name="direction_download">Download</string>
@@ -144,6 +149,7 @@
     <string name="state_running">Transferring</string>
     <string name="state_paused">Paused</string>
     <string name="state_interrupted">Interrupted — will resume</string>
+    <string name="state_waiting_for_network">Waiting for Wi‑Fi</string>
     <string name="state_completed">Done</string>
     <string name="state_failed">Failed</string>
     <string name="queue_attempt">attempt %1$d</string>

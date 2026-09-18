@@ -50,7 +50,16 @@ class PauseSignalTest {
         // That it is not an IOException the compiler already proves -- an
         // `is IOException` check here does not even compile as a live test.
         // What needs pinning is the consequence: the policy lets it through.
-        assertFalse(RetryPolicy().shouldRetry(TransferPausedException("one"), attempt = 1))
+        //
+        // Both reasons, not just the user's. A transfer stopped because the
+        // phone moved to mobile data must not be retried either -- the retry
+        // would reconnect over exactly the network the user ruled out.
+        for (reason in StopReason.entries) {
+            assertFalse(
+                "a $reason stop must not be retried",
+                RetryPolicy().shouldRetry(TransferPausedException("one", reason), attempt = 1),
+            )
+        }
     }
 
     @Test
@@ -58,5 +67,42 @@ class PauseSignalTest {
         // Guards the test above from being satisfied by a policy that simply
         // stopped retrying everything.
         assertTrue(RetryPolicy().shouldRetry(IOException("connection reset"), attempt = 1))
+    }
+
+    // ------------------------------------------------- why it was stopped
+
+    /**
+     * The distinction the Wi-Fi-only setting rests on. Both stops unwind the
+     * transfer the same way; only the reason says whether it comes back by
+     * itself. Getting this wrong means the pause button undoes itself the next
+     * time the phone changes network.
+     */
+    @Test
+    fun `a stop says whether the user asked or the network did`() {
+        val signal = PauseSignal()
+
+        signal.request("one", StopReason.NETWORK)
+        val network = assertThrows(TransferPausedException::class.java) {
+            signal.stopIfRequested("one")
+        }
+        assertTrue(network.reason == StopReason.NETWORK)
+
+        signal.request("one", StopReason.USER)
+        val user = assertThrows(TransferPausedException::class.java) {
+            signal.stopIfRequested("one")
+        }
+        assertTrue(user.reason == StopReason.USER)
+    }
+
+    /** The pause button is the common case, so it is what a bare call means. */
+    @Test
+    fun `a request with no reason given is the user's`() {
+        val signal = PauseSignal()
+        signal.request("one")
+
+        val thrown = assertThrows(TransferPausedException::class.java) {
+            signal.stopIfRequested("one")
+        }
+        assertTrue(thrown.reason == StopReason.USER)
     }
 }

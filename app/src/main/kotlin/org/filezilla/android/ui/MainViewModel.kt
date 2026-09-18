@@ -77,6 +77,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val visibleEntries: List<DirectoryEntry>
         get() = BrowseListing.arrange(browse.entries, options, browse.filter)
 
+    /** Whether transfers wait for Wi-Fi rather than using mobile data. */
+    var wifiOnly by mutableStateOf(graph.preferences.wifiOnly)
+        private set
+
+    /**
+     * Takes effect at once, not on the next app start: someone turning this on
+     * because they just noticed a 1.9 GB download on mobile data means now.
+     */
+    fun applyWifiOnly(enabled: Boolean) {
+        graph.preferences.wifiOnly = enabled
+        wifiOnly = enabled
+        graph.networkGate.policy = graph.preferences.networkPolicy
+    }
+
     /** Set once the user has picked a folder for downloads to land in. */
     var downloadFolder by mutableStateOf(graph.preferences.downloadFolder)
         private set

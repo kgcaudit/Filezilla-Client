@@ -33,7 +33,7 @@ class TransferNotifications(private val context: Context) {
         manager.createNotificationChannel(channel)
     }
 
-    fun build(progress: ActiveProgress?, queued: Int): Notification {
+    fun build(progress: ActiveProgress?, queued: Int, heldForNetwork: Boolean = false): Notification {
         val open = PendingIntent.getActivity(
             context,
             0,
@@ -53,13 +53,23 @@ class TransferNotifications(private val context: Context) {
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle(
                 progress?.remotePath?.substringAfterLast('/')
-                    ?: context.getString(R.string.notification_preparing),
+                    ?: context.getString(
+                        // "Preparing" while the queue is parked waiting for
+                        // Wi-Fi would be a lie, and the user would be left
+                        // wondering why nothing happens.
+                        if (heldForNetwork) R.string.notification_waiting_network else R.string.notification_preparing,
+                    ),
             )
             .setContentIntent(open)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .addAction(0, context.getString(R.string.action_stop), stop)
+
+        if (heldForNetwork && progress == null) {
+            builder.setProgress(0, 0, false)
+            builder.setContentText(context.getString(R.string.notification_waiting_network_detail))
+        }
 
         if (progress != null) {
             val total = progress.totalBytes
