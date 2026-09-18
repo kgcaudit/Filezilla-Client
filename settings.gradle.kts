@@ -1,10 +1,14 @@
 pluginManagement {
     repositories {
-        gradlePluginPortal()
-        // repo1 directly: the repo.maven.apache.org alias rate-limits harder.
+        // repo1 directly, and before the plugin portal: the portal proxies
+        // artifacts through the repo.maven.apache.org alias, which rate-limits
+        // hard enough to fail a cold build with 429s. Everything but the
+        // Android Gradle Plugin resolves from repo1 or Google, so the portal
+        // is left last as a fallback for plugin markers that live nowhere else.
         maven { url = uri("https://repo1.maven.org/maven2") }
-        mavenCentral()
         google()
+        mavenCentral()
+        gradlePluginPortal()
     }
 }
 

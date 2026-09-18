@@ -13,11 +13,11 @@ GPL-3.0-or-later), specifically `src/engine/ftp/` and `src/engine/controlsocket.
 | Phase | Scope | State |
 |---|---|---|
 | S | FTPS data-channel TLS session resumption spike | **done** — see [`spikes/ftps-session-reuse/`](spikes/ftps-session-reuse/) |
-| 0 | Project skeleton, module split | in progress |
+| 0 | Project skeleton, module split | **done** |
 | 1 | FTP/FTPS protocol core, listing, directory operations | **done** |
 | 2 | Resume engine | **done** — verified against a live server, including a server that fakes `REST` |
-| 3 | Background transfers, persistence, network-change recovery | reconnect-and-resume, the transfer journal and resume safety are done and verified; the foreground service, Room store and SAF storage need the Android module |
-| 4 | UI | |
+| 3 | Background transfers, persistence, network-change recovery | **done** — Room-backed journal, foreground service, SAF storage |
+| 4 | UI | **done** — sites, remote browser, transfer queue, message log |
 | 5 | Server compatibility matrix | |
 
 ## Why the transfer logic is ported rather than written fresh
@@ -44,14 +44,28 @@ introduced, so the state machines are transliterated from the original.
 ## Architecture
 
 ```
-:core-ftp    pure Kotlin/JVM — protocol, resume engine, no Android APIs
+:core-ftp    pure Kotlin/JVM — protocol, resume engine, transfer journal,
+             resume safety. No Android APIs.
              (integration-tested against a real FTPS server)
-:app         Android — UI, foreground service, storage, persistence
+:app         Android — Room journal, SAF storage, foreground service, Compose UI
 ```
 
 Keeping the engine free of Android APIs is what makes it testable on a plain
 JVM against a live server, which is where the resume behaviour is actually
 verified.
+
+The split is drawn so that **everything that decides anything is in
+`:core-ftp`**. Whether a journalled offset is still safe to resume from is
+`ResumeSafety`; applying that decision while keeping the journal current is
+`JournalledTransfer`; both are tested against a live server. `:app` supplies
+the four things that genuinely need Android and re-decides none of it:
+
+| `:app` supplies | Why it cannot live in `:core-ftp` |
+|---|---|
+| `RoomTransferJournal` | The journal has to survive the process being killed, and SQLite is what does that on Android. |
+| `PartialFiles` + `SafStorage` | Resume needs positioned writes, which a Storage Access Framework document may not support — so partial files are written to app-private storage and copied into the user's folder once complete. |
+| `TransferService` | Android freezes a backgrounded process within minutes; a `dataSync` foreground service is what keeps a large transfer running. |
+| `NetworkGate` | Only the platform knows the phone has no signal at all. It extends a wait rather than shortening one: how soon it is reasonable to hit a server again stays the engine's decision. |
 
 ## Building
 
@@ -69,7 +83,36 @@ core-ftp/src/test/resources/ftps-server/setup.sh
 
 Without it those tests skip themselves and the unit tests still run.
 
-`:app` needs the Android SDK and Android Studio.
+`:app` needs the Android SDK. With `ANDROID_HOME` set (or `sdk.dir` in
+`local.properties`) it joins the build automatically:
+
+```sh
+./gradlew :app:assembleDebug
+./gradlew :app:testDebugUnitTest
+```
+
+Without an SDK the settings script leaves `:app` out, so `:core-ftp` still
+builds and tests on a plain JDK.
+
+### What has and has not been run
+
+`:core-ftp`'s 95 tests pass, the integration ones against a live FTPS server.
+`:app`'s 19 unit tests pass on the JVM under Robolectric, and cover the pieces
+whose failure would be silent — that a `TransferRecord` survives the round trip
+through Room with its offset and fingerprint intact, that a `RUNNING` row left
+by a killed process is still resumable, and that the queue gives up rather than
+re-running a failing transfer forever.
+
+The APK builds, but **it has not been run on a device or an emulator**: there
+is none in the environment it was written in. So the wiring the unit tests
+cover is verified and the on-screen behaviour is not.
+
+### Known gap
+
+Site passwords are stored unencrypted in the app's private database. That is
+the same exposure as FileZilla's own `sitemanager.xml` and is private to the
+app on a non-rooted device, but it is not protected against a device backup or
+a rooted phone. Moving it behind the Android keystore is its own piece of work.
 
 ## Licence
 

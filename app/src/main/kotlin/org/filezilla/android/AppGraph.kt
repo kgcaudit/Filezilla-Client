@@ -1,0 +1,54 @@
+package org.filezilla.android
+
+import android.content.Context
+import org.filezilla.android.data.AppDatabase
+import org.filezilla.android.data.AppPreferences
+import org.filezilla.android.data.RoomTransferJournal
+import org.filezilla.android.storage.PartialFiles
+import org.filezilla.android.storage.SafStorage
+import org.filezilla.android.transfer.AppLog
+import org.filezilla.android.transfer.NetworkGate
+import org.filezilla.android.transfer.TransferManager
+
+/**
+ * The app's single object graph.
+ *
+ * Hand-built rather than injected by a framework: there are six objects and
+ * one lifetime, and the wiring is easier to follow written down than generated.
+ *
+ * It must be a singleton, and for one reason above the usual ones -- the
+ * journal. Two instances would mean two Room databases over the same file,
+ * and the offsets that make a resume safe would be read from one while written
+ * to the other.
+ */
+class AppGraph private constructor(context: Context) {
+
+    private val app = context.applicationContext
+
+    val database: AppDatabase = AppDatabase.open(app)
+    val preferences = AppPreferences(app)
+    val log = AppLog()
+    val networkGate = NetworkGate(app)
+
+    private val partials = PartialFiles(app)
+    val storage = SafStorage(app)
+
+    val transfers = TransferManager(
+        database = database,
+        journal = RoomTransferJournal(database.transfers()),
+        partials = partials,
+        storage = storage,
+        log = log,
+        networkGate = networkGate,
+    )
+
+    companion object {
+        @Volatile
+        private var instance: AppGraph? = null
+
+        fun of(context: Context): AppGraph =
+            instance ?: synchronized(this) {
+                instance ?: AppGraph(context).also { instance = it }
+            }
+    }
+}

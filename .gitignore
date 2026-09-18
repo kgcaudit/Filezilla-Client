@@ -4,6 +4,10 @@ out/
 classes/
 *.class
 *.jar
+# ...but not the wrapper, which is how the build is meant to be launched:
+# without it `./gradlew` fails on a fresh clone with "Unable to access
+# jarfile", and the commands in the README do not work at all.
+!gradle/wrapper/gradle-wrapper.jar
 local.properties
 .gradle/
 

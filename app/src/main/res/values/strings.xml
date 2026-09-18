@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FileZilla</string>
+
+    <string name="notification_channel_transfers">Transfers</string>
+    <string name="notification_channel_transfers_description">Progress of running uploads and downloads</string>
+    <string name="notification_preparing">Preparing transfer</string>
+    <string name="notification_progress">%1$s of %2$s (%3$d%%)</string>
+    <string name="notification_progress_unknown">%1$s transferred</string>
+    <plurals name="notification_queued">
+        <item quantity="one">%d more queued</item>
+        <item quantity="other">%d more queued</item>
+    </plurals>
+
+    <string name="action_stop">Stop</string>
+    <string name="tab_sites">Sites</string>
+    <string name="tab_browse">Browse</string>
+    <string name="tab_queue">Queue</string>
+    <string name="tab_log">Log</string>
+</resources>

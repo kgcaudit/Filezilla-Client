@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Compose draws the whole UI, so the platform theme only has to get the
+        window right before the first frame; everything visible comes from
+        MaterialTheme.
+    -->
+    <style name="Theme.FileZilla" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
