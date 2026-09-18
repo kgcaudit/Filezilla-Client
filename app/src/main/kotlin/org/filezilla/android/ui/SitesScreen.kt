@@ -42,9 +42,9 @@ import org.filezilla.ftp.protocol.FtpSecurity
 @Composable
 fun SitesScreen(
     sites: List<SiteEntity>,
-    editing: SiteEntity?,
+    editing: SiteDraft?,
     onEdit: (SiteEntity?) -> Unit,
-    onSave: (SiteEntity) -> Unit,
+    onSave: (SiteDraft) -> Unit,
     onDelete: (SiteEntity) -> Unit,
     onConnect: (SiteEntity) -> Unit,
     modifier: Modifier = Modifier,
@@ -105,16 +105,16 @@ fun SitesScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SiteEditor(
-    initial: SiteEntity,
+    initial: SiteDraft,
     onDismiss: () -> Unit,
-    onSave: (SiteEntity) -> Unit,
+    onSave: (SiteDraft) -> Unit,
 ) {
     var name by remember { mutableStateOf(initial.name) }
     var host by remember { mutableStateOf(initial.host) }
     var port by remember { mutableStateOf(initial.port.toString()) }
     var user by remember { mutableStateOf(initial.user) }
     var password by remember { mutableStateOf(initial.password) }
-    var security by remember { mutableStateOf(initial.securityEnum) }
+    var security by remember { mutableStateOf(initial.security) }
     var trustAll by remember { mutableStateOf(initial.trustAllCertificates) }
     var initialPath by remember { mutableStateOf(initial.initialPath.orEmpty()) }
     var securityExpanded by remember { mutableStateOf(false) }
@@ -188,6 +188,18 @@ private fun SiteEditor(
                     label = { Text("Password") },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
+                    isError = initial.passwordUnreadable,
+                    supportingText = if (initial.passwordUnreadable) {
+                        {
+                            // The saved password is not blank, it is gone --
+                            // the keystore key went with the app's data. Say
+                            // so, rather than letting an empty box look like
+                            // a password that was never set.
+                            Text("The saved password could not be read back and needs entering again.")
+                        }
+                    } else {
+                        null
+                    },
                 )
                 OutlinedTextField(
                     value = initialPath,
@@ -214,14 +226,14 @@ private fun SiteEditor(
                 onClick = {
                     onSave(
                         initial.copy(
-                            name = name.ifBlank { host },
-                            host = host.trim(),
+                            name = name,
+                            host = host,
                             port = port.toIntOrNull() ?: defaultPortFor(security),
-                            user = user.ifBlank { "anonymous" },
+                            user = user,
                             password = password,
-                            security = security.name,
+                            security = security,
                             trustAllCertificates = trustAll,
-                            initialPath = initialPath.ifBlank { null },
+                            initialPath = initialPath,
                         ),
                     )
                 },

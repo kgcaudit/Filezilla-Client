@@ -110,7 +110,7 @@ builds and tests on a plain JDK.
 `:core-ftp`'s 99 tests pass, the integration ones against live FTP servers --
 the scriptable Python one, and vsftpd and Pure-FTPd for the compatibility
 matrix.
-`:app`'s 24 unit tests pass on the JVM under Robolectric, and cover the pieces
+`:app`'s 28 unit tests pass on the JVM under Robolectric, and cover the pieces
 whose failure would be silent — that a `TransferRecord` survives the round trip
 through Room with its offset and fingerprint intact, that a `RUNNING` row left
 by a killed process is still resumable, and that the queue gives up rather than
@@ -121,12 +121,22 @@ The APK builds, but **it has not been run on a device or an emulator**: there
 is none in the environment it was written in. So the wiring the unit tests
 cover is verified and the on-screen behaviour is not.
 
-### Known gap
+### Where the passwords live
 
-Site passwords are stored unencrypted in the app's private database. That is
-the same exposure as FileZilla's own `sitemanager.xml` and is private to the
-app on a non-rooted device, but it is not protected against a device backup or
-a rooted phone. Moving it behind the Android keystore is its own piece of work.
+Site passwords are encrypted with AES-256-GCM under a key the Android keystore
+owns and never hands out — on most devices it never leaves secure hardware. So
+`filezilla.db` on its own is useless, which is the property that matters: the
+database file is what ends up in a backup, on a recovery image, or on a device
+someone has taken apart.
+
+It does **not** defend against code running as this app's own uid. Anything
+with that can ask the keystore to decrypt exactly as the app does, so on a
+rooted phone these passwords are readable. Keystore raises the cost of stealing
+the database; it does not make the secret unreadable.
+
+The key is deliberately not bound to user authentication: a transfer resumes
+from a foreground service hours later with the screen locked, and demanding a
+fingerprint to continue a download would defeat the point of the app.
 
 ## Licence
 

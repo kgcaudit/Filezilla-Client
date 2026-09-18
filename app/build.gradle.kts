@@ -49,6 +49,7 @@ android {
         }
     }
 
+
     packaging {
         resources.excludes += setOf("META-INF/LICENSE*", "META-INF/NOTICE*")
     }

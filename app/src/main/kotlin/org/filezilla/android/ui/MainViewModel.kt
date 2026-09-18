@@ -17,7 +17,6 @@ import org.filezilla.android.transfer.ActiveProgress
 import org.filezilla.android.transfer.LogLine
 import org.filezilla.ftp.journal.TransferRecord
 import org.filezilla.ftp.listing.DirectoryEntry
-import java.util.UUID
 
 /** What the browse screen is showing, and whether it is busy or broken. */
 data class BrowseState(
@@ -54,9 +53,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // ----------------------------------------------------------------- sites
 
-    fun saveSite(site: SiteEntity) {
-        viewModelScope.launch { graph.database.sites().upsert(site) }
+    /** Encrypts the password on its way to the row; see [SiteDraft]. */
+    fun saveSite(draft: SiteDraft) {
+        viewModelScope.launch { graph.database.sites().upsert(draft.toEntity(graph.passwords)) }
     }
+
+    /** Opens a site for editing, decrypting its password for the form only. */
+    fun draftOf(site: SiteEntity): SiteDraft = SiteDraft.of(site, graph.passwords)
 
     fun deleteSite(site: SiteEntity) {
         viewModelScope.launch {
@@ -65,18 +68,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun newSite(): SiteEntity = SiteEntity(
-        id = UUID.randomUUID().toString(),
-        name = "",
-        host = "",
-        port = 21,
-        user = "anonymous",
-        password = "anonymous@",
-        security = org.filezilla.ftp.protocol.FtpSecurity.EXPLICIT_TLS.name,
-        transferMode = org.filezilla.ftp.protocol.TransferMode.DEFAULT.name,
-        trustAllCertificates = false,
-        initialPath = null,
-    )
+    fun newSite(): SiteDraft = SiteDraft.blank()
 
     // ---------------------------------------------------------------- browse
 

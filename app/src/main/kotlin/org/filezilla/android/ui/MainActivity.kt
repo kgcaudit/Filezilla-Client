@@ -63,7 +63,7 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
     val snackbars = remember { SnackbarHostState() }
 
     var tab by remember { mutableStateOf(Tab.SITES) }
-    var editingSite by remember { mutableStateOf<SiteEntity?>(null) }
+    var editingSite by remember { mutableStateOf<SiteDraft?>(null) }
     var creatingDirectory by remember { mutableStateOf(false) }
 
     val sites by model.sites.collectAsState()
@@ -184,7 +184,7 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
             Tab.SITES -> SitesScreen(
                 sites = sites,
                 editing = editingSite,
-                onEdit = { editingSite = it },
+                onEdit = { site -> editingSite = site?.let(model::draftOf) },
                 onSave = model::saveSite,
                 onDelete = model::deleteSite,
                 onConnect = { site ->

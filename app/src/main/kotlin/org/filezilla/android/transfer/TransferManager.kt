@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import org.filezilla.android.data.AppDatabase
+import org.filezilla.android.data.PasswordCipher
 import org.filezilla.android.data.SiteEntity
 import org.filezilla.android.storage.PartialFiles
 import org.filezilla.android.storage.SafStorage
@@ -60,6 +61,7 @@ class TransferManager(
     private val storage: SafStorage,
     private val log: AppLog,
     private val networkGate: NetworkGate,
+    private val passwords: PasswordCipher,
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
 
@@ -225,7 +227,7 @@ class TransferManager(
     // ------------------------------------------------------------- downloading
 
     private fun runDownload(record: TransferRecord, site: SiteEntity) {
-        val settings = site.toSettings()
+        val settings = site.toSettings(passwords)
 
         // A connection of its own, because the transfer needs the one it
         // opens and this has to happen before it starts.
@@ -306,7 +308,7 @@ class TransferManager(
      * tracks the record so the queue survives a restart.
      */
     private fun runUpload(record: TransferRecord, site: SiteEntity) {
-        val settings = site.toSettings()
+        val settings = site.toSettings(passwords)
         val source = Uri.parse(record.localPath)
         var running = record.copy(
             state = TransferState.RUNNING,
@@ -479,7 +481,7 @@ class TransferManager(
      */
     suspend fun <T> browse(site: SiteEntity, block: (FtpSession) -> T): T = withContext(io) {
         runInterruptible {
-            FtpSession(site.toSettings(), capabilities, log).use { session ->
+            FtpSession(site.toSettings(passwords), capabilities, log).use { session ->
                 session.connect()
                 block(session)
             }

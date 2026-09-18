@@ -3,6 +3,8 @@ package org.filezilla.android
 import android.content.Context
 import org.filezilla.android.data.AppDatabase
 import org.filezilla.android.data.AppPreferences
+import org.filezilla.android.data.KeystorePasswordCipher
+import org.filezilla.android.data.PasswordCipher
 import org.filezilla.android.data.RoomTransferJournal
 import org.filezilla.android.storage.PartialFiles
 import org.filezilla.android.storage.SafStorage
@@ -25,7 +27,10 @@ class AppGraph private constructor(context: Context) {
 
     private val app = context.applicationContext
 
-    val database: AppDatabase = AppDatabase.open(app)
+    /** Built before the database, which needs it to migrate old rows. */
+    val passwords: PasswordCipher = KeystorePasswordCipher()
+
+    val database: AppDatabase = AppDatabase.open(app, passwords)
     val preferences = AppPreferences(app)
     val log = AppLog()
     val networkGate = NetworkGate(app)
@@ -40,6 +45,7 @@ class AppGraph private constructor(context: Context) {
         storage = storage,
         log = log,
         networkGate = networkGate,
+        passwords = passwords,
     )
 
     companion object {
