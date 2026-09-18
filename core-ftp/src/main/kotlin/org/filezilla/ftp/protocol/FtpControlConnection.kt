@@ -52,7 +52,12 @@ class FtpControlConnection(
      */
     private var lastTypeBinary: Int = -1
 
-    private var charset: Charset = StandardCharsets.UTF_8
+    /**
+     * Charset negotiated for the control connection, which applies to
+     * directory listings on the data channel too.
+     */
+    var charset: Charset = StandardCharsets.UTF_8
+        private set
 
     /** The address the control connection is actually talking to. */
     lateinit var peerAddress: InetAddress

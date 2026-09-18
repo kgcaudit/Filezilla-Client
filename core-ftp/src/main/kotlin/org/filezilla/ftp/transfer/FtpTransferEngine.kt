@@ -1,6 +1,9 @@
 package org.filezilla.ftp.transfer
 
 import org.filezilla.ftp.io.TransferReader
+import org.filezilla.ftp.listing.DirectoryEntry
+import org.filezilla.ftp.listing.ListParser
+import org.filezilla.ftp.listing.MlsdParser
 import org.filezilla.ftp.io.TransferWriter
 import org.filezilla.ftp.protocol.Capability
 import org.filezilla.ftp.protocol.CapabilityName
@@ -117,6 +120,7 @@ class FtpTransferEngine(
             resumeOffset = resumeOffset,
             totalSize = remoteSize,
             progress = progress,
+            receiving = true,
         ) { dataIn, _ ->
             val out = writer.openAt(resumeOffset)
             if (remoteSize != null && remoteSize > resumeOffset) {
@@ -204,6 +208,7 @@ class FtpTransferEngine(
             resumeOffset = if (command.startsWith("APPE")) 0 else resumeOffset,
             totalSize = localSize,
             progress = progress,
+            receiving = false,
         ) { _, dataOut ->
             val input = reader.openAt(resumeOffset)
             copy(input, dataOut!!, progress, resumeOffset, localSize)
@@ -218,6 +223,52 @@ class FtpTransferEngine(
             bytesTransferred = transferred,
             totalSize = localSize,
         )
+    }
+
+    // -------------------------------------------------------------- listing
+
+    /**
+     * Lists the current remote directory.
+     *
+     * `MLSD` is used when `FEAT` advertised it, since it is exact and
+     * unambiguous; otherwise this falls back to `LIST`, whose output was meant
+     * for people to read and has to be guessed at. Lines no parser recognises
+     * are skipped rather than turned into half-right entries, and are reported
+     * in the log so an unsupported server format is visible instead of silent.
+     */
+    fun list(): List<DirectoryEntry> {
+        val useMlsd = capabilities.get(server, CapabilityName.MLSD_COMMAND) == Capability.YES
+        control.setTransferType(binary = true)
+
+        val lines = mutableListOf<String>()
+        runTransfer(
+            transferCommand = if (useMlsd) "MLSD" else "LIST",
+            resumeOffset = 0,
+            totalSize = null,
+            progress = null,
+            receiving = true,
+        ) { dataIn, _ ->
+            // The control connection's charset applies to the data channel too.
+            dataIn!!.bufferedReader(control.charset).forEachLine { lines += it }
+            lines.size.toLong()
+        }
+
+        val entries = mutableListOf<DirectoryEntry>()
+        var skipped = 0
+        for (raw in lines) {
+            val line = raw.trimEnd('\r', '\n')
+            if (line.isBlank()) continue
+            val entry = if (useMlsd) MlsdParser.parse(line) else ListParser.parseLine(line)
+            if (entry != null) entries += entry else skipped++
+        }
+        if (skipped > 0) {
+            logger.log(
+                LogLevel.DEBUG,
+                "Skipped $skipped unparsable listing line(s); the server's format may be unsupported",
+            )
+        }
+        logger.log(LogLevel.STATUS, "Directory listing of ${entries.size} item(s) successful")
+        return entries
     }
 
     // ------------------------------------------------------- resume capability
@@ -310,6 +361,7 @@ class FtpTransferEngine(
                 resumeOffset = remoteSize - 1,
                 totalSize = null,
                 progress = null,
+                receiving = true,
             ) { dataIn, _ ->
                 val buffer = ByteArray(2)
                 while (received <= 1) {
@@ -353,6 +405,7 @@ class FtpTransferEngine(
         resumeOffset: Long,
         totalSize: Long?,
         progress: TransferProgressListener?,
+        receiving: Boolean,
         body: (InputStream?, OutputStream?) -> Long,
     ): Long {
         progress?.onProgress(0, resumeOffset, totalSize)
@@ -360,8 +413,7 @@ class FtpTransferEngine(
         val transferred: Long
         try {
             val socket = data.open(transferCommand, resumeOffset)
-            val download = transferCommand.startsWith("RETR")
-            transferred = if (download) {
+            transferred = if (receiving) {
                 body(socket.getInputStream(), null)
             } else {
                 val out = socket.getOutputStream()

@@ -14,9 +14,9 @@ GPL-3.0-or-later), specifically `src/engine/ftp/` and `src/engine/controlsocket.
 |---|---|---|
 | S | FTPS data-channel TLS session resumption spike | **done** — see [`spikes/ftps-session-reuse/`](spikes/ftps-session-reuse/) |
 | 0 | Project skeleton, module split | in progress |
-| 1 | FTP/FTPS protocol core | |
-| 2 | Resume engine | |
-| 3 | Background transfers, persistence, network-change recovery | |
+| 1 | FTP/FTPS protocol core, listing, directory operations | **done** |
+| 2 | Resume engine | **done** — verified against a live server, including a server that fakes `REST` |
+| 3 | Background transfers, persistence, network-change recovery | retry policy done; the rest needs the Android module |
 | 4 | UI | |
 | 5 | Server compatibility matrix | |
 
@@ -60,6 +60,14 @@ verified.
 ```sh
 ./gradlew :core-ftp:test
 ```
+
+The integration tests drive a real FTPS server. Set it up once:
+
+```sh
+core-ftp/src/test/resources/ftps-server/setup.sh
+```
+
+Without it those tests skip themselves and the unit tests still run.
 
 `:app` needs the Android SDK and Android Studio.
 
