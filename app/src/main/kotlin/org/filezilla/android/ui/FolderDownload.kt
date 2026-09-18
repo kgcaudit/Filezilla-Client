@@ -8,7 +8,11 @@ data class PlannedDownload(
     val size: Long?,
     /** Folders to make under the destination the user chose. Empty for a loose file. */
     val subPath: List<String>,
-)
+    /** When the server says it changed, for telling two same-named files apart. */
+    val modifiedMillis: Long? = null,
+) {
+    val displayName: String get() = remotePath.substringAfterLast('/')
+}
 
 /** What a selection expands to, and what had to be left out of it. */
 data class DownloadPlan(
@@ -63,6 +67,7 @@ object FolderDownload {
                 remotePath = remotePathOf(path, entry.name),
                 size = entry.size.takeIf { it >= 0 },
                 subPath = subPath,
+                modifiedMillis = entry.time?.epochMillis,
             )
         }
 

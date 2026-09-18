@@ -1,6 +1,7 @@
 package org.filezilla.android.storage
 
 import android.net.Uri
+import org.filezilla.android.storage.ConflictChoice
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -51,5 +52,64 @@ class DownloadDestinationTest {
         val decoded = DownloadDestination.decode(DownloadDestination(tree, names).encode())
 
         assertEquals(names, decoded.subPath)
+    }
+
+    // ------------------------------------------------------ conflict choice
+
+    /**
+     * The choice has to survive the journal, because it is read at publish
+     * time -- minutes or a restart after the user made it. Losing it here
+     * would silently fall back to keeping both, which is the behaviour the
+     * dialog exists to replace.
+     */
+    @Test
+    fun `every choice round-trips`() {
+        for (choice in ConflictChoice.entries) {
+            val original = DownloadDestination(tree, listOf("Vision"), choice)
+
+            assertEquals("$choice", choice, DownloadDestination.decode(original.encode()).onConflict)
+        }
+    }
+
+    @Test
+    fun `a choice round-trips with no sub-path too`() {
+        val original = DownloadDestination(tree, emptyList(), ConflictChoice.OVERWRITE)
+
+        val decoded = DownloadDestination.decode(original.encode())
+
+        assertEquals(tree, decoded.tree)
+        assertEquals(emptyList<String>(), decoded.subPath)
+        assertEquals(ConflictChoice.OVERWRITE, decoded.onConflict)
+    }
+
+    @Test
+    fun `the sub-path still round-trips beside a choice`() {
+        val names = listOf("Vision", "a/b", "100% done", "공유 자료")
+        val original = DownloadDestination(tree, names, ConflictChoice.SKIP)
+
+        val decoded = DownloadDestination.decode(original.encode())
+
+        assertEquals(names, decoded.subPath)
+        assertEquals(ConflictChoice.SKIP, decoded.onConflict)
+    }
+
+    /** Records written before the dialog existed must keep working. */
+    @Test
+    fun `an older record decodes to the safe default`() {
+        val old = DownloadDestination(tree, listOf("Vision"))
+        // What the previous version wrote: the path, with no choice after it.
+        val legacy = tree.buildUpon().encodedFragment("Vision").build().toString()
+
+        val decoded = DownloadDestination.decode(legacy)
+
+        assertEquals(old.subPath, decoded.subPath)
+        assertEquals(ConflictChoice.KEEP_BOTH, decoded.onConflict)
+    }
+
+    /** Keeping both is the only choice that cannot destroy a file. */
+    @Test
+    fun `the default never overwrites or skips`() {
+        assertEquals(ConflictChoice.KEEP_BOTH, ConflictChoice.DEFAULT)
+        assertEquals(ConflictChoice.KEEP_BOTH, DownloadDestination.decode(tree.toString()).onConflict)
     }
 }

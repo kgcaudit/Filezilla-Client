@@ -16,19 +16,25 @@ import android.net.Uri
  * otherwise use, so a record written before folder downloads existed -- a bare
  * tree URI -- decodes as [subPath] empty and keeps working untouched.
  */
-data class DownloadDestination(val tree: Uri, val subPath: List<String> = emptyList()) {
+data class DownloadDestination(
+    val tree: Uri,
+    val subPath: List<String> = emptyList(),
+    /** What to do if a file of the same name is already there. */
+    val onConflict: ConflictChoice = ConflictChoice.DEFAULT,
+) {
 
-    fun encode(): String =
-        if (subPath.isEmpty()) {
-            tree.toString()
-        } else {
-            // Each segment is encoded on its own, so that a name containing a
-            // slash or a percent cannot forge a folder boundary.
-            tree.buildUpon()
-                .encodedFragment(subPath.joinToString("/") { Uri.encode(it) })
-                .build()
-                .toString()
+    fun encode(): String {
+        val path = subPath.joinToString("/") { Uri.encode(it) }
+        // The choice rides in the fragment beside the path, separated by a
+        // character no encoded segment can contain. Both are the app's own
+        // business, which is why they go here rather than into a column the
+        // engine would have to know about.
+        val fragment = when {
+            subPath.isEmpty() && onConflict == ConflictChoice.DEFAULT -> return tree.toString()
+            else -> "$path|${onConflict.name}"
         }
+        return tree.buildUpon().encodedFragment(fragment).build().toString()
+    }
 
     companion object {
         /** Reads back what [encode] wrote, and a plain tree URI as well. */
@@ -37,10 +43,18 @@ data class DownloadDestination(val tree: Uri, val subPath: List<String> = emptyL
             val fragment = uri.encodedFragment
             val tree = uri.buildUpon().fragment(null).build()
             if (fragment.isNullOrEmpty()) return DownloadDestination(tree)
-            val segments = fragment.split('/')
+
+            // A fragment written before conflicts existed carries only the
+            // path, so those records keep working and get the default.
+            val path = fragment.substringBefore('|')
+            val choice = fragment.substringAfter('|', "")
+                .let { name -> ConflictChoice.entries.firstOrNull { it.name == name } }
+                ?: ConflictChoice.DEFAULT
+
+            val segments = path.split('/')
                 .filter { it.isNotEmpty() }
                 .map { Uri.decode(it) }
-            return DownloadDestination(tree, segments)
+            return DownloadDestination(tree, segments, choice)
         }
     }
 }

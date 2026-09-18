@@ -57,6 +57,7 @@ import kotlinx.coroutines.launch
 import org.filezilla.android.R
 import org.filezilla.android.data.SiteEntity
 import org.filezilla.android.service.TransferService
+import org.filezilla.android.storage.ConflictChoice
 import org.filezilla.android.ui.theme.OloTheme
 
 private enum class Tab(val label: Int) {
@@ -440,6 +441,31 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                 model.createDirectory(name)
                 creatingDirectory = false
             },
+        )
+    }
+
+    // Nothing has been fetched at this point: the walk found the names, and
+    // the transfer waits on the answer.
+    model.pendingConflicts?.let { pending ->
+        ConflictDialog(
+            conflicts = pending.conflicts,
+            onChoose = { choice ->
+                requestNotifications()
+                model.resolveConflicts(choice) { plan ->
+                    if (plan.files.isNotEmpty()) TransferService.start(context)
+                    scope.launch {
+                        // "Nothing to download" would be wrong here: there was
+                        // something, and the user chose to keep what they had.
+                        val message = if (choice == ConflictChoice.SKIP && plan.files.isEmpty()) {
+                            context.getString(R.string.conflict_skipped_all)
+                        } else {
+                            queuedPlanMessage(plan)
+                        }
+                        snackbars.showSnackbar(message)
+                    }
+                }
+            },
+            onDismiss = model::dismissConflicts,
         )
     }
 }

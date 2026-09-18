@@ -16,6 +16,7 @@ import kotlinx.coroutines.withContext
 import org.filezilla.android.data.AppDatabase
 import org.filezilla.android.data.PasswordCipher
 import org.filezilla.android.data.SiteEntity
+import org.filezilla.android.storage.ConflictChoice
 import org.filezilla.android.storage.DownloadDestination
 import org.filezilla.android.storage.PartialFiles
 import org.filezilla.android.storage.SafStorage
@@ -140,6 +141,7 @@ class TransferManager(
         totalBytes: Long?,
         destinationTree: Uri,
         subPath: List<String> = emptyList(),
+        onConflict: ConflictChoice = ConflictChoice.DEFAULT,
     ): String = withContext(io) {
         val id = UUID.randomUUID().toString()
         journal.put(
@@ -154,7 +156,7 @@ class TransferManager(
                 // The folder, not a file in it. The document is created only
                 // once the transfer is complete, so a half-finished download
                 // never appears in the user's folder looking openable.
-                destination = DownloadDestination(destinationTree, subPath).encode(),
+                destination = DownloadDestination(destinationTree, subPath, onConflict).encode(),
                 state = TransferState.PENDING,
                 totalBytes = totalBytes,
                 updatedAtMillis = System.currentTimeMillis(),
@@ -420,7 +422,15 @@ class TransferManager(
         try {
             val saved = storage.publish(partial, destination, name)
             partials.delete(record.id)
-            log.log(LogLevel.STATUS, "Saved $name to $saved")
+            if (saved == null) {
+                // The user chose to keep the copy already in the folder. The
+                // bytes are dropped rather than left on the device: nothing
+                // will ever publish them, and they would sit in app storage
+                // until the app was uninstalled.
+                log.log(LogLevel.STATUS, "$name is already in the chosen folder; kept the existing file")
+            } else {
+                log.log(LogLevel.STATUS, "Saved $name to $saved")
+            }
         } catch (e: IOException) {
             log.log(
                 LogLevel.ERROR,

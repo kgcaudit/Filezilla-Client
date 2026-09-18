@@ -53,6 +53,9 @@ fun formatEntryTime(entry: DirectoryEntry): String =
 
 fun formatLogTime(millis: Long): String = logFormat.format(Date(millis))
 
+/** A date and time as the listing shows them, for any millisecond value. */
+fun formatTimestamp(millis: Long): String = listingFormat.format(Date(millis))
+
 /** Joins a directory and a name into a remote path, without a doubled slash. */
 fun remotePathOf(directory: String, name: String): String =
     if (directory == "/" || directory.isEmpty()) "/$name" else "${directory.trimEnd('/')}/$name"

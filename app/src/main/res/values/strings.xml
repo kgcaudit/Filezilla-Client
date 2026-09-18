@@ -118,6 +118,18 @@
     <string name="confirm_delete_body">This cannot be undone. Directories must be empty.</string>
     <string name="queued_many">%1$d queued</string>
     <string name="queued_none">Nothing to download in what you selected</string>
+    <string name="conflict_many_detail">These files are already in the chosen folder:</string>
+    <string name="conflict_and_more">and %1$d more</string>
+    <string name="conflict_remote">Server: %1$s · %2$s</string>
+    <string name="conflict_local">On this device: %1$s · %2$s</string>
+    <string name="conflict_same_size">Same size, so probably the same file.</string>
+    <string name="conflict_different_size">The sizes differ, so these are not the same file.</string>
+    <string name="conflict_line_same">%1$s — same size</string>
+    <string name="conflict_line_different">%1$s — a different size</string>
+    <string name="conflict_keep_both">Keep both</string>
+    <string name="conflict_overwrite">Overwrite</string>
+    <string name="conflict_skip">Skip</string>
+    <string name="conflict_skipped_all">Everything was already there; nothing was downloaded</string>
     <string name="queue_speed_remaining">%1$s · %2$s left</string>
     <string name="queued_skipped_links">%1$d queued, %2$d shortcuts skipped</string>
     <string name="queued_truncated">%1$d queued; the folder was too large to take all of it</string>
@@ -190,4 +202,8 @@
     <string name="log_empty_title">Nothing logged yet</string>
     <string name="log_empty_detail">Every command sent and every reply received shows up here once you connect.</string>
     <string name="log_clear">Clear the log</string>
+    <plurals name="conflict_title">
+        <item quantity="one">A file of this name is already there</item>
+        <item quantity="other">%d files of these names are already there</item>
+    </plurals>
 </resources>

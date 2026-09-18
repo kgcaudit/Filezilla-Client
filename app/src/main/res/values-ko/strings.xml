@@ -117,6 +117,18 @@
     <string name="confirm_delete_body">되돌릴 수 없습니다. 디렉터리는 비어 있어야 삭제됩니다.</string>
     <string name="queued_many">%1$d개 대기열에 추가됨</string>
     <string name="queued_none">선택한 항목에 내려받을 파일이 없습니다</string>
+    <string name="conflict_many_detail">아래 파일이 이미 저장 폴더에 있습니다:</string>
+    <string name="conflict_and_more">외 %1$d개</string>
+    <string name="conflict_remote">서버: %1$s · %2$s</string>
+    <string name="conflict_local">이 기기: %1$s · %2$s</string>
+    <string name="conflict_same_size">크기가 같습니다. 같은 파일로 보입니다.</string>
+    <string name="conflict_different_size">크기가 다릅니다. 같은 파일이 아닙니다.</string>
+    <string name="conflict_line_same">%1$s — 크기 같음</string>
+    <string name="conflict_line_different">%1$s — 크기 다름</string>
+    <string name="conflict_keep_both">모두 유지</string>
+    <string name="conflict_overwrite">덮어쓰기</string>
+    <string name="conflict_skip">건너뛰기</string>
+    <string name="conflict_skipped_all">이미 있는 파일이라 모두 건너뛰었습니다</string>
     <string name="queue_speed_remaining">%1$s · %2$s 남음</string>
     <string name="queued_skipped_links">%1$d개 대기열에 추가됨, 바로가기 %2$d개 건너뜀</string>
     <string name="queued_truncated">%1$d개 대기열에 추가됨. 폴더가 너무 커서 전부 담지 못했습니다</string>
@@ -189,4 +201,7 @@
     <string name="log_empty_title">아직 기록이 없습니다</string>
     <string name="log_empty_detail">접속하면 주고받은 모든 명령과 응답이 여기에 그대로 표시됩니다.</string>
     <string name="log_clear">로그 지우기</string>
+    <plurals name="conflict_title">
+        <item quantity="other">같은 이름의 파일이 %d개 있습니다</item>
+    </plurals>
 </resources>

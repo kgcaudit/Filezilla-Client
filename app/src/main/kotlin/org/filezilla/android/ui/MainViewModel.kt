@@ -10,6 +10,11 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.filezilla.android.storage.ConflictChoice
+import org.filezilla.android.storage.DownloadConflict
+import org.filezilla.android.storage.DownloadDestination
 import kotlinx.coroutines.launch
 import org.filezilla.android.AppGraph
 import org.filezilla.android.data.SiteEntity
@@ -259,7 +264,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             runCatching {
                 // One connection for the whole walk: a session per folder
                 // would reconnect for every level of the tree.
-                graph.transfers.browse(site) { session ->
+                val plan = graph.transfers.browse(site) { session ->
                     FolderDownload.plan(
                         lister = { path ->
                             session.changeDirectory(path)
@@ -269,19 +274,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         picks = picks,
                     )
                 }
-            }.onSuccess { plan ->
-                for (file in plan.files) {
-                    graph.transfers.enqueueDownload(
-                        site = site,
-                        remotePath = file.remotePath,
-                        totalBytes = file.size,
-                        destinationTree = folder,
-                        subPath = file.subPath,
-                    )
-                }
+                plan to findConflicts(plan, folder)
+            }.onSuccess { (plan, conflicts) ->
                 browse = browse.copy(loading = false)
                 clearSelection()
-                onQueued(plan)
+                if (conflicts.isEmpty()) {
+                    enqueuePlan(plan, site, folder, ConflictChoice.DEFAULT)
+                    onQueued(plan)
+                } else {
+                    // Nothing is queued yet. Asking before spending the data
+                    // is the point: the user may well be about to say skip.
+                    pendingConflicts = PendingDownload(plan, site, folder, conflicts)
+                }
             }.onFailure { error ->
                 browse = browse.copy(
                     loading = false,
@@ -290,6 +294,85 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         return true
+    }
+
+    // -------------------------------------------------------- name conflicts
+
+    /** A download waiting on the user to say what to do about existing files. */
+    data class PendingDownload(
+        val plan: DownloadPlan,
+        val site: SiteEntity,
+        val folder: Uri,
+        val conflicts: List<DownloadConflict>,
+    )
+
+    /** Set when files of the same name are already in the chosen folder. */
+    var pendingConflicts by mutableStateOf<PendingDownload?>(null)
+        private set
+
+    /** Goes ahead with [choice] applied to every clashing file. */
+    fun resolveConflicts(choice: ConflictChoice, onQueued: (DownloadPlan) -> Unit) {
+        val pending = pendingConflicts ?: return
+        pendingConflicts = null
+        viewModelScope.launch {
+            val queued = enqueuePlan(pending.plan, pending.site, pending.folder, choice)
+            onQueued(queued)
+        }
+    }
+
+    /** Queues nothing and forgets the plan. */
+    fun dismissConflicts() {
+        pendingConflicts = null
+    }
+
+    private suspend fun findConflicts(plan: DownloadPlan, folder: Uri): List<DownloadConflict> =
+        withContext(Dispatchers.IO) {
+            plan.files.mapNotNull { file ->
+                val destination = DownloadDestination(folder, file.subPath)
+                val existing = graph.storage.existingDocument(destination, file.displayName)
+                    ?: return@mapNotNull null
+                DownloadConflict(
+                    displayName = file.displayName,
+                    remoteSize = file.size,
+                    remoteModifiedMillis = file.modifiedMillis,
+                    localSize = existing.size,
+                    localModifiedMillis = existing.modifiedMillis,
+                )
+            }
+        }
+
+    /**
+     * Queues the plan, applying [choice] to the files that clash.
+     *
+     * Skipping drops them here rather than at the end of the transfer. The
+     * user said they did not want them; fetching them anyway and throwing the
+     * bytes away afterwards would spend their data to reach the same place.
+     *
+     * @return the plan as it was actually queued.
+     */
+    private suspend fun enqueuePlan(
+        plan: DownloadPlan,
+        site: SiteEntity,
+        folder: Uri,
+        choice: ConflictChoice,
+    ): DownloadPlan {
+        val clashing = if (choice == ConflictChoice.SKIP) {
+            findConflicts(plan, folder).map { it.displayName }.toSet()
+        } else {
+            emptySet()
+        }
+        val queued = plan.files.filterNot { it.displayName in clashing }
+        for (file in queued) {
+            graph.transfers.enqueueDownload(
+                site = site,
+                remotePath = file.remotePath,
+                totalBytes = file.size,
+                destinationTree = folder,
+                subPath = file.subPath,
+                onConflict = choice,
+            )
+        }
+        return plan.copy(files = queued)
     }
 
     fun deleteSelected() {

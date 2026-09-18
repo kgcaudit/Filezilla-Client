@@ -23,6 +23,10 @@ import java.io.InputStream
  */
 class SafStorage(private val context: Context) {
 
+    /** Size and modification time of a file already in the user's folder. */
+    data class ExistingDocument(val size: Long, val modifiedMillis: Long)
+
+
     /**
      * Takes a lasting grant on a folder the user picked, so a transfer that
      * finishes tomorrow can still write to it.
@@ -68,13 +72,35 @@ class SafStorage(private val context: Context) {
      *
      * @return the URI of the created document.
      */
-    fun publish(partial: File, destination: DownloadDestination, displayName: String): Uri {
+    fun publish(partial: File, destination: DownloadDestination, displayName: String): Uri? {
         val root = DocumentFile.fromTreeUri(context, destination.tree)
             ?: throw IOException("the destination folder is no longer available")
         if (!root.canWrite()) {
             throw IOException("no permission to write to the destination folder")
         }
         val folder = descend(root, destination.subPath)
+
+        val existing = folder.findFile(displayName)?.takeIf { it.isFile }
+        if (existing != null) {
+            when (destination.onConflict) {
+                // Nothing to write. The caller keeps the bytes rather than
+                // deleting them, because the user chose to keep the file that
+                // is there, not to throw away what was fetched.
+                ConflictChoice.SKIP -> return null
+
+                // Removed first, because createFile would otherwise hand back
+                // "name (1)" and leave the old file in place -- which is the
+                // opposite of what overwrite means.
+                ConflictChoice.OVERWRITE ->
+                    if (!existing.delete()) {
+                        throw IOException("could not replace the existing $displayName")
+                    }
+
+                // The provider appends a number of its own, which is exactly
+                // what keeping both asks for.
+                ConflictChoice.KEEP_BOTH -> Unit
+            }
+        }
 
         val created = folder.createFile(mimeTypeFor(displayName), displayName)
             ?: throw IOException("could not create $displayName in the destination folder")
@@ -116,6 +142,23 @@ class SafStorage(private val context: Context) {
         }
         return folder
     }
+
+    /**
+     * What is already at [displayName] in the destination, if anything.
+     *
+     * Creates nothing: the folders are walked only as far as they exist, so
+     * asking about a file cannot leave empty folders behind for a download the
+     * user then cancels.
+     */
+    fun existingDocument(destination: DownloadDestination, displayName: String): ExistingDocument? =
+        runCatching {
+            var folder = DocumentFile.fromTreeUri(context, destination.tree) ?: return null
+            for (segment in destination.subPath) {
+                folder = folder.findFile(segment)?.takeIf { it.isDirectory } ?: return null
+            }
+            val file = folder.findFile(displayName)?.takeIf { it.isFile } ?: return null
+            ExistingDocument(size = file.length(), modifiedMillis = file.lastModified())
+        }.getOrNull()
 
     /** A [TransferReader] over a document the user picked, for uploads. */
     fun readerFor(documentUri: Uri): TransferReader = SafTransferReader(context, documentUri)

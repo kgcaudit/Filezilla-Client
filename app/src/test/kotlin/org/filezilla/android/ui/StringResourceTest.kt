@@ -73,22 +73,57 @@ class StringResourceTest {
     @Test
     fun `no call site passes the wrong number of arguments`() {
         val en = strings("values")
-        val call = Regex("""stringResource\(\s*R\.string\.(\w+)((?:\s*,[^)]*)?)\)""")
         val wrong = mutableListOf<String>()
         for ((name, src) in sources()) {
-            for (match in call.findAll(src)) {
-                val key = match.groupValues[1]
+            for ((key, args) in stringResourceCalls(src)) {
                 val text = en[key]
                 if (text == null) {
                     wrong += "$name: unknown R.string.$key"
                 } else {
                     val expected = specifier.findAll(text).map { it.value }.toSet().size
-                    val actual = match.groupValues[2].count { it == ',' }
-                    if (expected != actual) wrong += "$name: $key wants $expected, got $actual"
+                    if (expected != args) wrong += "$name: $key wants $expected, got $args"
                 }
             }
         }
         assertEquals(emptyList<String>(), wrong)
+    }
+
+    /**
+     * Every `stringResource(R.string.x, ...)` in a file, with how many
+     * arguments it passes.
+     *
+     * Counted by walking the call and tracking nesting rather than by a
+     * regular expression. The regex this replaced stopped at the first `)`,
+     * so any argument that contained a call of its own -- `formatSize(n)`, a
+     * nested `stringResource` for a fallback -- was cut short and its commas
+     * went uncounted. That reported too few arguments, which is the direction
+     * that hides a real mismatch as well as inventing a false one.
+     */
+    private fun stringResourceCalls(source: String): List<Pair<String, Int>> {
+        val opening = Regex("""stringResource\(\s*R\.string\.(\w+)""")
+        return opening.findAll(source).map { match ->
+            val key = match.groupValues[1]
+            var depth = 1
+            var arguments = 0
+            var sinceComma = 0          // non-space characters since the last comma
+            var index = match.range.last + 1
+            while (index < source.length && depth > 0) {
+                val c = source[index]
+                when (c) {
+                    '(', '{', '[' -> depth++
+                    ')', '}', ']' -> depth--
+                    ',' -> if (depth == 1) {
+                        arguments++
+                        sinceComma = 0
+                    }
+                }
+                if (depth > 0 && !c.isWhitespace() && c != ',') sinceComma++
+                index++
+            }
+            // Kotlin allows a trailing comma, which closes no argument.
+            if (arguments > 0 && sinceComma == 0) arguments--
+            key to arguments
+        }.toList()
     }
 
     @Test
