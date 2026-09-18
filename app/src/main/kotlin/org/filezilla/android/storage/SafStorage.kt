@@ -83,9 +83,9 @@ class SafStorage(private val context: Context) {
         val existing = folder.findFile(displayName)?.takeIf { it.isFile }
         if (existing != null) {
             when (destination.onConflict) {
-                // Nothing to write. The caller keeps the bytes rather than
-                // deleting them, because the user chose to keep the file that
-                // is there, not to throw away what was fetched.
+                // Nothing to write, and null says so rather than throwing:
+                // the transfer succeeded, it simply has nowhere to go. What
+                // becomes of the fetched bytes is the caller's to decide.
                 ConflictChoice.SKIP -> return null
 
                 // Removed first, because createFile would otherwise hand back
