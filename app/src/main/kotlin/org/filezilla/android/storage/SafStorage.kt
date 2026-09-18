@@ -3,6 +3,7 @@ package org.filezilla.android.storage
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.webkit.MimeTypeMap
 import androidx.documentfile.provider.DocumentFile
 import org.filezilla.ftp.io.TransferReader
 import java.io.File
@@ -80,6 +81,7 @@ class SafStorage(private val context: Context) {
         }
         val folder = descend(root, destination.subPath)
 
+        var name = displayName
         val existing = folder.findFile(displayName)?.takeIf { it.isFile }
         if (existing != null) {
             when (destination.onConflict) {
@@ -96,14 +98,15 @@ class SafStorage(private val context: Context) {
                         throw IOException("could not replace the existing $displayName")
                     }
 
-                // The provider appends a number of its own, which is exactly
-                // what keeping both asks for.
-                ConflictChoice.KEEP_BOTH -> Unit
+                // Numbered here rather than by the provider. Left to it,
+                // "movie.mkv" became "movie.mkv (1)" -- a name whose extension
+                // is now " (1)", so nothing will open it.
+                ConflictChoice.KEEP_BOTH -> name = freeNameIn(folder, displayName)
             }
         }
 
-        val created = folder.createFile(mimeTypeFor(displayName), displayName)
-            ?: throw IOException("could not create $displayName in the destination folder")
+        val created = folder.createFile(mimeTypeFor(name), name)
+            ?: throw IOException("could not create $name in the destination folder")
 
         try {
             context.contentResolver.openOutputStream(created.uri, "w")?.use { out ->
@@ -163,19 +166,35 @@ class SafStorage(private val context: Context) {
     /** A [TransferReader] over a document the user picked, for uploads. */
     fun readerFor(documentUri: Uri): TransferReader = SafTransferReader(context, documentUri)
 
+    /**
+     * The first name in [folder] that nothing is using.
+     *
+     * Numbering the file is ours to do. `createFile` takes a name that is
+     * already taken and returns one of its own choosing, and what it chose for
+     * "movie.mkv" was "movie.mkv (1)" -- the number after the extension, so
+     * the file no longer had one and nothing would open it.
+     */
+    private fun freeNameIn(folder: DocumentFile, displayName: String): String {
+        for (n in 1..MAX_NUMBERED) {
+            val candidate = numberedName(displayName, n)
+            if (folder.findFile(candidate) == null) return candidate
+        }
+        // Past the limit, fall back to the provider's own numbering rather
+        // than refusing the download outright. An ugly name beats losing it.
+        return displayName
+    }
+
+    /**
+     * The type the file is saved as, which decides what opens it.
+     *
+     * Asked of the platform's own extension table rather than a list kept
+     * here: it knows mkv, srt, smi and several hundred others, and a type
+     * this class has never heard of is the common case.
+     */
     private fun mimeTypeFor(name: String): String {
         val extension = name.substringAfterLast('.', "").lowercase()
-        // Only the handful worth naming: the point of the fallback is that a
-        // wrong specific type is worse than an honest generic one, because the
-        // provider may append an extension to match it.
-        return when (extension) {
-            "txt", "log", "md" -> "text/plain"
-            "pdf" -> "application/pdf"
-            "png" -> "image/png"
-            "jpg", "jpeg" -> "image/jpeg"
-            "zip" -> "application/zip"
-            else -> "application/octet-stream"
-        }
+        if (extension.isEmpty()) return FALLBACK_MIME_TYPE
+        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension) ?: FALLBACK_MIME_TYPE
     }
 }
 
@@ -243,4 +262,32 @@ private class SafTransferReader(
             alsoClose()
         }
     }
+}
+
+/** An honest generic type, for a file whose extension means nothing here. */
+private const val FALLBACK_MIME_TYPE = "application/octet-stream"
+
+/** How many numbered names to try before giving up and letting the provider pick. */
+private const val MAX_NUMBERED = 999
+
+/**
+ * "movie.mkv" and 1 gives "movie (1).mkv".
+ *
+ * The number goes before the extension, because the extension is what decides
+ * whether anything can open the file. Put after it -- which is what the
+ * platform does when left to itself -- "movie.mkv" becomes "movie.mkv (1)",
+ * whose extension is " (1)".
+ *
+ * Top-level and tested, because the cases that break it are the ones that
+ * never come up while writing it: a name with no extension, a dotfile, a
+ * double extension.
+ */
+fun numberedName(displayName: String, n: Int): String {
+    val dot = displayName.lastIndexOf('.')
+    // A leading dot is a hidden file, not an extension: ".gitignore" numbers
+    // as ".gitignore (1)", not " (1).gitignore".
+    if (dot <= 0) return "$displayName ($n)"
+    val base = displayName.substring(0, dot)
+    val extension = displayName.substring(dot)
+    return "$base ($n)$extension"
 }
