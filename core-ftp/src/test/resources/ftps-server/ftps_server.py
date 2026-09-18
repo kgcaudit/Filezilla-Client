@@ -32,6 +32,10 @@ from pyftpdlib.handlers.ftps.data import TLS_DTPHandler
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 REQUIRE_SSL_REUSE = os.environ.get("REQUIRE_SSL_REUSE", "1") == "1"
+# Acknowledge REST with 350 but then ignore the offset, which is how servers
+# with the 2 GB / 4 GB offset bug behave. The engine is supposed to catch this
+# with its one-byte probe rather than trusting the 350.
+IGNORE_REST = os.environ.get("IGNORE_REST", "0") == "1"
 TLS_MAX = os.environ.get("TLS_MAX", "1.2")
 PORT = int(os.environ.get("FTPS_PORT", "2121"))
 PASV_LO, PASV_HI = (
@@ -68,6 +72,12 @@ class ReuseCheckingDTPHandler(TLS_DTPHandler):
 
 class Handler(TLS_FTPHandler):
     dtp_handler = ReuseCheckingDTPHandler
+
+    def ftp_REST(self, line):
+        super().ftp_REST(line)
+        if IGNORE_REST and self._restart_position:
+            note(f"pretending to honour REST {self._restart_position}, actually ignoring it")
+            self._restart_position = 0
 
     def handle_ssl_established(self):
         super().handle_ssl_established()
@@ -111,7 +121,8 @@ def main():
     server = FTPServer(("127.0.0.1", PORT), Handler)
     note(
         f"listening on 127.0.0.1:{PORT} "
-        f"require_ssl_reuse={REQUIRE_SSL_REUSE} tls_max={TLS_MAX} root={ROOT}"
+        f"require_ssl_reuse={REQUIRE_SSL_REUSE} tls_max={TLS_MAX} "
+        f"ignore_rest={IGNORE_REST} root={ROOT}"
     )
     # Readiness marker the test harness waits for; stdout, not stderr.
     print(f"READY {PORT}", flush=True)

@@ -22,6 +22,11 @@ class FtpsTestServer(
     private val requireSslReuse: Boolean = true,
     private val tlsMax: String = "1.2",
     private val noTicket: Boolean = true,
+    /**
+     * Acknowledge `REST` with 350 and then ignore the offset, reproducing the
+     * 2 GB / 4 GB offset bug that [FtpTransferEngine]'s probe exists to catch.
+     */
+    private val ignoreRest: Boolean = false,
 ) {
     lateinit var root: File
         private set
@@ -52,6 +57,7 @@ class FtpsTestServer(
             put("REQUIRE_SSL_REUSE", if (requireSslReuse) "1" else "0")
             put("TLS_MAX", tlsMax)
             put("NO_TICKET", if (noTicket) "1" else "0")
+            put("IGNORE_REST", if (ignoreRest) "1" else "0")
         }
         builder.redirectErrorStream(false)
         val started = builder.start()
@@ -76,6 +82,17 @@ class FtpsTestServer(
         }
         process = null
         if (::root.isInitialized) root.deleteRecursively()
+    }
+
+    /**
+     * Creates a sparse file of [size] bytes, for the boundary tests that need a
+     * file past 2 GB without writing 2 GB. The contents read back as zeroes.
+     */
+    fun putSparseFile(name: String, size: Long): File {
+        val file = File(root, name)
+        file.parentFile.mkdirs()
+        java.io.RandomAccessFile(file, "rw").use { it.setLength(size) }
+        return file
     }
 
     /** Creates a file of [size] bytes with deterministic, position-derived content. */
