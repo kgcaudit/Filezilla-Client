@@ -97,11 +97,12 @@ builds and tests on a plain JDK.
 ### What has and has not been run
 
 `:core-ftp`'s 95 tests pass, the integration ones against a live FTPS server.
-`:app`'s 19 unit tests pass on the JVM under Robolectric, and cover the pieces
+`:app`'s 24 unit tests pass on the JVM under Robolectric, and cover the pieces
 whose failure would be silent — that a `TransferRecord` survives the round trip
 through Room with its offset and fingerprint intact, that a `RUNNING` row left
 by a killed process is still resumable, and that the queue gives up rather than
-re-running a failing transfer forever.
+re-running a failing transfer forever, and that pausing one is never mistaken
+for a dropped connection the engine should reconnect after.
 
 The APK builds, but **it has not been run on a device or an emulator**: there
 is none in the environment it was written in. So the wiring the unit tests

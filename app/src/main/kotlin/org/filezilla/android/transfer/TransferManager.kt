@@ -76,6 +76,13 @@ class TransferManager(
     @Volatile
     private var stopRequested = false
 
+    /** Delivers a pause to the transfer thread; see [PauseSignal]. */
+    private val pauseSignal = PauseSignal()
+
+    /** Which transfer a thread is actually running, or null between records. */
+    @Volatile
+    private var activeId: String? = null
+
     fun observeTransfers(): Flow<List<TransferRecord>> =
         database.transfers().observeAll().map { rows -> rows.map { it.toRecord() } }
 
@@ -189,6 +196,7 @@ class TransferManager(
             totalBytes = record.totalBytes,
         )
 
+        activeId = record.id
         try {
             when (record.direction) {
                 TransferDirection.DOWNLOAD -> runDownload(record, site)
@@ -198,11 +206,19 @@ class TransferManager(
             Thread.currentThread().interrupt()
             markInterrupted(record, "stopped")
             throw e
+        } catch (e: TransferPausedException) {
+            // Written after JournalledTransfer has had its say: it marks the
+            // record INTERRUPTED on the way out, and PAUSED has to be what
+            // survives, or the queue would pick the transfer straight back up.
+            markPaused(record)
         } catch (e: Exception) {
             // JournalledTransfer has already written INTERRUPTED for a
             // download; for anything it did not reach, record it here so the
             // queue does not spin on the same record.
             markInterrupted(record, e.message ?: e.javaClass.simpleName)
+        } finally {
+            activeId = null
+            pauseSignal.clear()
         }
     }
 
@@ -324,6 +340,9 @@ class TransferManager(
 
     private fun progressListener(record: TransferRecord) =
         TransferProgressListener { transferred, resumeOffset, totalSize ->
+            // The one place a running transfer can be stopped promptly. The
+            // engine calls this every 64 KB and does not catch what it throws.
+            pauseSignal.stopIfRequested(record.id)
             activeState.value = ActiveProgress(
                 id = record.id,
                 remotePath = record.remotePath,
@@ -360,6 +379,29 @@ class TransferManager(
         )
     }
 
+    /**
+     * Records a pause, keeping the bytes already fetched.
+     *
+     * `lastError` is cleared: the user asked for this, so showing it as a
+     * failure in the queue would be a lie.
+     */
+    private fun markPaused(record: TransferRecord) {
+        val current = journal.get(record.id) ?: record
+        if (current.state == TransferState.COMPLETED) return
+        journal.put(
+            current.copy(
+                state = TransferState.PAUSED,
+                lastError = null,
+                updatedAtMillis = System.currentTimeMillis(),
+            ),
+        )
+        log.log(
+            LogLevel.STATUS,
+            "${record.remotePath} paused at ${current.bytesTransferred} bytes; " +
+                "resuming will not fetch them again",
+        )
+    }
+
     private fun fail(record: TransferRecord, reason: String) {
         log.log(LogLevel.ERROR, "${record.remotePath}: $reason")
         journal.put(
@@ -373,9 +415,28 @@ class TransferManager(
 
     // ------------------------------------------------------- per-record actions
 
+    /**
+     * Pauses a transfer, whether or not it is the one currently running.
+     *
+     * A running transfer cannot simply be marked PAUSED in the journal:
+     * JournalledTransfer writes its own RUNNING copy back every megabyte and
+     * would erase it. So the running one is asked to stop through
+     * [PauseSignal], and the PAUSED record is written by [markPaused] once it
+     * has unwound -- after JournalledTransfer has written its INTERRUPTED, so
+     * that PAUSED is what survives.
+     */
     suspend fun pause(id: String) = withContext(io) {
+        if (activeId == id) {
+            pauseSignal.request(id)
+            return@withContext
+        }
         journal.get(id)?.let {
-            journal.put(it.copy(state = TransferState.PAUSED, updatedAtMillis = System.currentTimeMillis()))
+            journal.put(
+                it.copy(
+                    state = TransferState.PAUSED,
+                    updatedAtMillis = System.currentTimeMillis(),
+                ),
+            )
         }
         Unit
     }
