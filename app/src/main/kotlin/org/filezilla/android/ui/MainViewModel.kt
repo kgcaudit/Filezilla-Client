@@ -128,10 +128,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var activePane by mutableStateOf(PaneId.LEFT)
         private set
 
-    init {
-        restorePanes()
-    }
-
     fun pane(id: PaneId): BrowseState = paneStates.getValue(id)
 
     fun showPane(id: PaneId) {
@@ -740,4 +736,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearCompleted() = viewModelScope.launch { graph.transfers.clearCompleted() }.let { }
 
     fun clearLog() = graph.log.clear()
+
+    /**
+     * Last in the class on purpose, not for tidiness.
+     *
+     * An init block runs where it is written, and this one assigns to state
+     * declared further down -- which, placed at the top, meant writing to a
+     * delegate that did not exist yet and crashing the app before its first
+     * frame. Anything it touches is therefore already built by the time it
+     * runs.
+     */
+    init {
+        restorePanes()
+    }
 }
