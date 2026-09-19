@@ -37,7 +37,15 @@ import org.filezilla.ftp.listing.DirectoryEntry
  */
 data class BrowseState(
     val source: PaneSource = PaneSource.Empty,
-    val path: String = "/",
+    /**
+     * Empty until the pane has been somewhere.
+     *
+     * Not "/", which is what it was. A pane asks for its remembered folder
+     * when its path is empty, and a root that is not empty answered that
+     * question wrongly: a restored pane opened the filesystem root, which
+     * cannot be listed, instead of the folder it was left in.
+     */
+    val path: String = "",
     val entries: List<DirectoryEntry> = emptyList(),
     val loading: Boolean = false,
     val error: ConnectionFailure? = null,
@@ -210,11 +218,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun open(id: PaneId) {
         when (val source = pane(id).source) {
             is PaneSource.Local -> openLocal(id, pane(id).path.ifEmpty { rememberedLocal(id) })
+            // A null path lets the server choose, which is what PWD is for.
             is PaneSource.Remote -> loadRemote(
                 id,
                 source.site,
-                pane(id).path.takeIf { it.isNotEmpty() && it != FilePath.ROOT }
-                    ?: rememberedRemote(id, source.site),
+                pane(id).path.ifEmpty { rememberedRemote(id, source.site).orEmpty() }
+                    .takeIf { it.isNotEmpty() },
             )
 
             PaneSource.Empty -> Unit
@@ -281,7 +290,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
-        refreshStorageAccess()
+        // Assigned rather than going through refreshStorageAccess, which
+        // re-lists on a change and would list the active pane twice here --
+        // once for the change from its starting false, once below.
+        storageGranted = graph.storageAccess.isGranted()
+        storageRoute = graph.storageAccess.route
         open(activePane)
     }
 
