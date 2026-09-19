@@ -55,12 +55,16 @@ class DownloadEntryPointTest {
      */
     @Test
     fun `nothing reaches the queue without going through the dialog`() {
+        // enqueuePicks asks before queueing anything, downloadHeld asks
+        // before turning a paste into transfers, and enqueuePlan asks again
+        // to know which files a "skip" drops. Anything else calling these
+        // would be a fourth opinion about what the destination holds.
         assertEquals(
-            setOf("enqueuePicks", "enqueuePlan"),
+            setOf("enqueuePicks", "downloadHeld", "enqueuePlan"),
             membersContaining("findConflicts("),
         )
         assertEquals(
-            setOf("resolveConflicts", "enqueuePicks"),
+            setOf("resolveConflicts", "enqueuePicks", "downloadHeld"),
             membersContaining("enqueuePlan("),
         )
     }

@@ -21,6 +21,7 @@ import org.filezilla.android.data.SiteEntity
 import org.filezilla.android.files.AccessRoute
 import org.filezilla.android.files.FilePath
 import org.filezilla.android.files.LocalOperations
+import org.filezilla.android.files.LocalWalk
 import org.filezilla.android.files.StorageRoot
 import org.filezilla.android.transfer.ActiveProgress
 import org.filezilla.android.transfer.LogLine
@@ -333,6 +334,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun pasteRefusal(id: PaneId): PasteRefusal? =
         PasteRules.refusal(clipboard, pane(id).source, pane(id).path)
 
+    fun pasteKind(id: PaneId): PasteKind? = PasteRules.kind(clipboard, pane(id).source)
+
     /**
      * Puts down what is held.
      *
@@ -341,6 +344,116 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * paste and no idea which half. A move empties the clipboard afterwards;
      * a copy keeps it, so the same thing can be put in several places.
      */
+    /**
+     * Puts down what is held, as a transfer when the two sides differ.
+     *
+     * The same gesture either way, which is the point of the two panes: copy
+     * on one side, paste on the other, and whether that is a file operation
+     * or a transfer is the app's problem rather than the user's.
+     */
+    fun pasteAcross(id: PaneId, onQueued: (Int) -> Unit) {
+        val held = clipboard ?: return
+        val target = pane(id)
+        val from = held.source
+        val to = target.source
+
+        when {
+            from is PaneSource.Local && to is PaneSource.Remote ->
+                uploadHeld(held, to.site, target.path, onQueued)
+
+            from is PaneSource.Remote && to is PaneSource.Local ->
+                downloadHeld(held, from.site, target.path, onQueued)
+
+            else -> Unit
+        }
+    }
+
+    /** Walks the held folders and queues every file under them. */
+    private fun uploadHeld(
+        held: Clipboard,
+        site: SiteEntity,
+        remoteDirectory: String,
+        onQueued: (Int) -> Unit,
+    ) {
+        viewModelScope.launch {
+            val files = withContext(Dispatchers.IO) {
+                held.paths().flatMap { LocalWalk.filesUnder(it) }
+            }
+            for (file in files) {
+                graph.transfers.enqueueUpload(
+                    site = site,
+                    // The folders a file sat in are recreated on the server,
+                    // so uploading a folder gives a folder rather than its
+                    // contents strewn across the one it landed in.
+                    remotePath = FilePath.child(
+                        remoteDirectory,
+                        (file.subPath + file.name).joinToString(FilePath.SEPARATOR.toString()),
+                    ),
+                    source = android.net.Uri.fromFile(java.io.File(file.path)),
+                    totalBytes = file.size,
+                )
+            }
+            if (held.mode == ClipboardMode.MOVE) {
+                // Not deleted here. A move whose upload has only been queued
+                // would remove the original before it had gone anywhere, and
+                // a failed transfer would then have lost the file.
+                clipboard = null
+            }
+            onQueued(files.size)
+        }
+    }
+
+    /** Queues the held remote files into an ordinary folder on the phone. */
+    private fun downloadHeld(
+        held: Clipboard,
+        site: SiteEntity,
+        localDirectory: String,
+        onQueued: (Int) -> Unit,
+    ) {
+        val rows = pane(activePane).entries
+        viewModelScope.launch {
+            val picks = held.names.mapNotNull { name ->
+                rows.firstOrNull { it.name == name }
+                    ?: DirectoryEntry(name = name)
+            }
+            runCatching {
+                val plan = if (FolderDownload.needsRemoteWalk(picks)) {
+                    graph.transfers.browse(site) { session ->
+                        FolderDownload.plan(
+                            lister = { path ->
+                                session.changeDirectory(path)
+                                session.list()
+                            },
+                            directory = held.directory,
+                            picks = picks,
+                        )
+                    }
+                } else {
+                    FolderDownload.plan({ emptyList() }, held.directory, picks)
+                }
+                val folder = android.net.Uri.fromFile(java.io.File(localDirectory))
+                // Through the one path that looks in the destination first.
+                // Queued straight from here, this would have asked nothing
+                // about files already in the folder and quietly saved a
+                // second numbered copy -- which is the bug the single-file
+                // download had, arriving again by a new route.
+                val conflicts = findConflicts(plan, folder)
+                if (conflicts.isEmpty()) {
+                    enqueuePlan(plan, site, folder, ConflictChoice.DEFAULT).files.size
+                } else {
+                    pendingConflicts = PendingDownload(plan, site, folder, conflicts)
+                    0
+                }
+            }.onSuccess { count ->
+                if (held.mode == ClipboardMode.MOVE) clipboard = null
+                onQueued(count)
+            }.onFailure { error ->
+                update(activePane) { it.copy(error = describeFailure(error, graph.networkGate.currentlyOnline())) }
+                onQueued(0)
+            }
+        }
+    }
+
     fun paste(id: PaneId) {
         val held = clipboard ?: return
         if (pasteRefusal(id) != null) return

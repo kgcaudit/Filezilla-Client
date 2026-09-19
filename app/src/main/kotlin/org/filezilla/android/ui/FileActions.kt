@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.automirrored.filled.NoteAdd
 import androidx.compose.material.icons.filled.Storage
@@ -119,6 +120,8 @@ fun SelectionBar(
     onClear: () -> Unit,
     /** Rename takes exactly one row; with several it means nothing. */
     canRename: Boolean,
+    /** On a server pane, fetching the picked rows straight to the phone. */
+    onDownload: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -139,6 +142,16 @@ fun SelectionBar(
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                 modifier = Modifier.weight(1f).padding(start = 4.dp),
             )
+            // One tap for the thing a server pane is mostly used for. Copy,
+            // swipe and paste does the same and takes three.
+            onDownload?.let { download ->
+                IconButton(onClick = download) {
+                    Icon(
+                        Icons.Filled.Download,
+                        contentDescription = stringResource(R.string.action_download_selected),
+                    )
+                }
+            }
             IconButton(onClick = onCut) {
                 Icon(Icons.Filled.ContentCut, contentDescription = stringResource(R.string.action_cut))
             }
@@ -173,6 +186,8 @@ fun SelectionBar(
 fun PasteBar(
     count: Int,
     refusal: PasteRefusal?,
+    /** What the paste would do, so the bar can say "send" rather than "paste". */
+    kind: PasteKind?,
     onPaste: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
@@ -194,7 +209,7 @@ fun PasteBar(
                 Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.action_cancel))
             }
             Text(
-                refusalText(refusal) ?: stringResource(R.string.paste_into, count),
+                refusalText(refusal) ?: stringResource(labelFor(kind), count),
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f).padding(start = 4.dp),
             )
@@ -207,11 +222,23 @@ fun PasteBar(
                         contentDescription = null,
                         modifier = Modifier.padding(end = 6.dp),
                     )
-                    Text(stringResource(R.string.action_paste))
+                    Text(stringResource(actionFor(kind)))
                 }
             }
         }
     }
+}
+
+/** A paste between two places is a transfer, and saying so sets the expectation. */
+private fun labelFor(kind: PasteKind?): Int = when (kind) {
+    PasteKind.UPLOAD -> R.string.paste_upload_here
+    PasteKind.DOWNLOAD -> R.string.paste_download_here
+    else -> R.string.paste_into
+}
+
+private fun actionFor(kind: PasteKind?): Int = when (kind) {
+    PasteKind.UPLOAD, PasteKind.DOWNLOAD -> R.string.action_send
+    else -> R.string.action_paste
 }
 
 @Composable
@@ -219,7 +246,7 @@ private fun refusalText(refusal: PasteRefusal?): String? = when (refusal) {
     null, PasteRefusal.NOTHING_HELD -> null
     PasteRefusal.ALREADY_THERE -> stringResource(R.string.paste_already_there)
     PasteRefusal.INTO_ITSELF -> stringResource(R.string.paste_into_itself)
-    PasteRefusal.NEEDS_TRANSFER -> stringResource(R.string.paste_needs_transfer)
+    PasteRefusal.BETWEEN_SERVERS -> stringResource(R.string.paste_between_servers)
 }
 
 /** Asks for a name, for a new folder or a new file. */

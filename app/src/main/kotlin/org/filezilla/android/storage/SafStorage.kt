@@ -6,6 +6,7 @@ import android.net.Uri
 import android.webkit.MimeTypeMap
 import androidx.documentfile.provider.DocumentFile
 import org.filezilla.ftp.io.TransferReader
+import org.filezilla.ftp.io.asTransferReader
 import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
@@ -74,6 +75,12 @@ class SafStorage(private val context: Context) {
      * @return the URI of the created document.
      */
     fun publish(partial: File, destination: DownloadDestination, displayName: String): Uri? {
+        // A folder the user browsed to in a pane, rather than one granted
+        // through the picker. Kept as a file:// URI so that the journal's
+        // destination column holds one kind of thing and records written
+        // before panes existed still decode exactly as they did.
+        if (destination.isLocalPath) return publishLocally(partial, destination, displayName)
+
         val root = DocumentFile.fromTreeUri(context, destination.tree)
             ?: throw IOException("the destination folder is no longer available")
         if (!root.canWrite()) {
@@ -130,6 +137,51 @@ class SafStorage(private val context: Context) {
      * or resumed after a restart, has to land back in the folder it already
      * has rather than beside a second copy of it.
      */
+    /**
+     * The same move, into an ordinary folder.
+     *
+     * The conflict choices mean exactly what they do above, and the numbering
+     * comes from the same [numberedName], so a file kept alongside another is
+     * named the same way whichever kind of folder it lands in.
+     */
+    private fun publishLocally(
+        partial: File,
+        destination: DownloadDestination,
+        displayName: String,
+    ): Uri? {
+        val folder = File(destination.localPath, destination.subPath.joinToString(File.separator))
+        if (!folder.isDirectory && !folder.mkdirs()) {
+            throw IOException("could not create the destination folder")
+        }
+
+        var target = File(folder, displayName)
+        if (target.exists()) {
+            when (destination.onConflict) {
+                ConflictChoice.SKIP -> return null
+
+                ConflictChoice.OVERWRITE ->
+                    if (!target.delete()) {
+                        throw IOException("could not replace the existing $displayName")
+                    }
+
+                ConflictChoice.KEEP_BOTH -> target = freeFileIn(folder, displayName)
+            }
+        }
+
+        partial.inputStream().use { input ->
+            target.outputStream().use { output -> input.copyTo(output) }
+        }
+        return Uri.fromFile(target)
+    }
+
+    private fun freeFileIn(folder: File, displayName: String): File {
+        for (n in 1..MAX_NUMBERED) {
+            val candidate = File(folder, numberedName(displayName, n))
+            if (!candidate.exists()) return candidate
+        }
+        throw IOException("too many files named $displayName")
+    }
+
     private fun descend(root: DocumentFile, subPath: List<String>): DocumentFile {
         var folder = root
         for (segment in subPath) {
@@ -155,6 +207,17 @@ class SafStorage(private val context: Context) {
      */
     fun existingDocument(destination: DownloadDestination, displayName: String): ExistingDocument? =
         runCatching {
+            if (destination.isLocalPath) {
+                val file = File(
+                    File(destination.localPath, destination.subPath.joinToString(File.separator)),
+                    displayName,
+                )
+                return if (file.isFile) {
+                    ExistingDocument(file.length(), file.lastModified())
+                } else {
+                    null
+                }
+            }
             var folder = DocumentFile.fromTreeUri(context, destination.tree) ?: return null
             for (segment in destination.subPath) {
                 folder = folder.findFile(segment)?.takeIf { it.isDirectory } ?: return null
@@ -164,7 +227,19 @@ class SafStorage(private val context: Context) {
         }.getOrNull()
 
     /** A [TransferReader] over a document the user picked, for uploads. */
-    fun readerFor(documentUri: Uri): TransferReader = SafTransferReader(context, documentUri)
+    /**
+     * A reader over the upload source, whichever kind of place it came from.
+     *
+     * A file:// source is a path a pane walked to; anything else is a
+     * document the user picked. Told apart here so that neither caller has to
+     * know which kind it handed over.
+     */
+    fun readerFor(documentUri: Uri): TransferReader =
+        if (documentUri.scheme == "file") {
+            File(requireNotNull(documentUri.path) { "a file URI with no path" }).asTransferReader()
+        } else {
+            SafTransferReader(context, documentUri)
+        }
 
     /**
      * The first name in [folder] that nothing is using.

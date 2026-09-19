@@ -56,6 +56,9 @@ fun FilePanes(
     onGrant: () -> Unit,
     onPickSite: () -> Unit,
     onDownload: (org.filezilla.ftp.listing.DirectoryEntry) -> Unit,
+    onRequestNotifications: () -> Unit,
+    onTransfersQueued: (Int) -> Unit,
+    onDownloadSelected: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val pager = rememberPagerState(initialPage = pageOf(model.activePane)) { PaneId.entries.size }
@@ -105,13 +108,30 @@ fun FilePanes(
                     onDelete = { confirmingDelete = true },
                     onRename = { renaming = true },
                     onClear = model::clearSelection,
+                    onDownload = if (state.site != null) onDownloadSelected else null,
                 )
             } else {
                 model.clipboard?.let { held ->
                     PasteBar(
                         count = held.names.size,
                         refusal = model.pasteRefusal(active),
-                        onPaste = { model.paste(active) },
+                        kind = model.pasteKind(active),
+                        onPaste = {
+                            when (model.pasteKind(active)) {
+                                // Within one place it happens here and now;
+                                // between two it joins the queue, which is
+                                // what shows the progress and survives the
+                                // app being closed.
+                                PasteKind.FILE_OPERATION -> model.paste(active)
+                                null -> Unit
+                                else -> {
+                                    onRequestNotifications()
+                                    model.pasteAcross(active) { count ->
+                                        if (count > 0) onTransfersQueued(count)
+                                    }
+                                }
+                            }
+                        },
                         onCancel = model::clearClipboard,
                     )
                 }

@@ -23,6 +23,12 @@ data class DownloadDestination(
     val onConflict: ConflictChoice = ConflictChoice.DEFAULT,
 ) {
 
+    /** True when this is an ordinary folder rather than a granted tree. */
+    val isLocalPath: Boolean get() = tree.scheme == "file"
+
+    /** The folder's path, for a local destination. */
+    val localPath: String get() = requireNotNull(tree.path) { "a file URI with no path" }
+
     fun encode(): String {
         val path = subPath.joinToString("/") { Uri.encode(it) }
         // The choice rides in the fragment beside the path, separated by a

@@ -107,29 +107,62 @@ class PasteRulesTest {
         assertNull(PasteRules.refusal(held(), PaneSource.Local, "/storage/Movies/2026-old"))
     }
 
-    /**
-     * Between two different places a paste is a transfer, not a file
-     * operation. Named rather than silently disallowed, so the button can say
-     * why instead of doing nothing.
-     */
+    // --------------------------------------------- between the two places
+
     @Test
-    fun `pasting from the phone into a server is a transfer`() {
-        assertEquals(
-            PasteRefusal.NEEDS_TRANSFER,
+    fun `pasting from the phone into a server is allowed, and is an upload`() {
+        assertNull(
             PasteRules.refusal(held(source = PaneSource.Local), PaneSource.Remote(site), "/pub"),
+        )
+        assertEquals(
+            PasteKind.UPLOAD,
+            PasteRules.kind(held(source = PaneSource.Local), PaneSource.Remote(site)),
         )
     }
 
     @Test
-    fun `pasting between two servers is a transfer too`() {
+    fun `pasting from a server onto the phone is allowed, and is a download`() {
+        assertNull(
+            PasteRules.refusal(held(source = PaneSource.Remote(site)), PaneSource.Local, "/storage"),
+        )
+        assertEquals(
+            PasteKind.DOWNLOAD,
+            PasteRules.kind(held(source = PaneSource.Remote(site)), PaneSource.Local),
+        )
+    }
+
+    /**
+     * FTP has no copy command, so this would mean pulling every byte down and
+     * pushing it straight back up -- twice the data for something that looks
+     * like a local operation. Refused with a reason rather than attempted.
+     */
+    @Test
+    fun `pasting between two servers is refused with a reason`() {
         val other = site.copy(id = "s2", host = "other")
 
         assertEquals(
-            PasteRefusal.NEEDS_TRANSFER,
+            PasteRefusal.BETWEEN_SERVERS,
             PasteRules.refusal(
                 held(source = PaneSource.Remote(site)),
                 PaneSource.Remote(other),
                 "/pub",
+            ),
+        )
+        assertNull(PasteRules.kind(held(source = PaneSource.Remote(site)), PaneSource.Remote(other)))
+    }
+
+    /**
+     * A folder cannot swallow itself, but only within one place. The same
+     * path on the phone and on a server are different folders entirely, and
+     * comparing them would refuse a perfectly ordinary transfer.
+     */
+    @Test
+    fun `the same path on two different sides is not a folder inside itself`() {
+        assertNull(
+            PasteRules.refusal(
+                held(source = PaneSource.Local, directory = "/pub", names = listOf("Vision")),
+                PaneSource.Remote(site),
+                "/pub/Vision",
             ),
         )
     }

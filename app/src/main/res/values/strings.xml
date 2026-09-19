@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">OLO FTP</string>
+    <string name="app_name">OLO Explorer</string>
 
     <!-- Notification -->
     <string name="notification_channel_transfers">Transfers</string>
@@ -80,7 +80,6 @@
     <string name="menu_select">Select</string>
     <string name="menu_select_all">Select all</string>
     <string name="menu_select_none">Clear selection</string>
-    <string name="menu_selected">%1$d selected</string>
     <string name="menu_properties">Properties</string>
     <string name="menu_view_options">View options</string>
     <string name="menu_filter">Filter</string>
@@ -237,10 +236,13 @@
     <string name="action_rename_selected">Rename</string>
     <string name="selection_count">%1$d selected</string>
     <string name="paste_into">Paste %1$d here</string>
-    <string name="paste_needs_transfer">Sending between the phone and a server is not ready yet</string>
     <string name="paste_into_itself">A folder cannot go inside itself</string>
     <string name="paste_already_there">They are already in this folder</string>
     <string name="new_folder_title">New folder</string>
     <string name="new_file_title">New file</string>
     <string name="confirm_delete_detail">Folders go with everything in them. This cannot be undone.</string>
+    <string name="paste_between_servers">Copying between two servers is not possible over FTP</string>
+    <string name="paste_upload_here">Send %1$d to this server</string>
+    <string name="paste_download_here">Save %1$d to this phone</string>
+    <string name="action_send">Send</string>
 </resources>

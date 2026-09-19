@@ -234,11 +234,10 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
             TopAppBar(
                 title = {
                     Text(
-                        if (tab == Tab.BROWSE && model.browse.selecting) {
-                            stringResource(R.string.menu_selected, model.browse.selection.size)
-                        } else {
-                            titleFor(tab, model)
-                        },
+                        // No selection title: the bar along the bottom says
+                        // what is picked, and two bars saying it at once was
+                        // one of them saying it twice.
+                        titleFor(tab, model),
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -249,65 +248,13 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                 // saturation the status colours -- which are the ones that
                 // actually mean something here -- read as muted. The brand is
                 // now what marks an action, not what fills a background.
-                colors = if (tab == Tab.BROWSE && model.browse.selecting) {
-                    // Selecting is a mode, and a mode should look like one. A
-                    // tint rather than a saturated fill, so it stands out
-                    // from the plain bar without going back to the wall of
-                    // colour this change is undoing.
-                    TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                } else {
-                    TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        titleContentColor = MaterialTheme.colorScheme.onSurface,
-                        actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                },
-                navigationIcon = {
-                    if (tab == Tab.BROWSE && model.browse.selecting) {
-                        IconButton(onClick = model::clearSelection) {
-                            Icon(
-                                Icons.Filled.Close,
-                                contentDescription = stringResource(R.string.menu_select_none),
-                            )
-                        }
-                    }
-                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
                 actions = {
-                    if (tab == Tab.BROWSE && model.browse.selecting) {
-                        IconButton(onClick = {
-                            requestNotifications()
-                            val queued = model.enqueueSelected { plan ->
-                                if (plan.files.isNotEmpty()) TransferService.start(context)
-                                scope.launch {
-                                    snackbars.showSnackbar(queuedPlanMessage(plan))
-                                }
-                            }
-                            // No folder chosen yet: ask, exactly as a single
-                            // download does, rather than failing quietly.
-                            if (!queued) folderPicker.launch(null)
-                        }) {
-                            Icon(
-                                Icons.Filled.Download,
-                                contentDescription = stringResource(R.string.action_download_selected),
-                            )
-                        }
-                        IconButton(
-                            onClick = { confirmingDelete = true },
-                            enabled = model.browse.selection.isNotEmpty(),
-                        ) {
-                            Icon(
-                                Icons.Filled.Delete,
-                                contentDescription = stringResource(R.string.action_delete_selected),
-                            )
-                        }
-                        return@TopAppBar
-                    }
                     when (tab) {
                         Tab.BROWSE -> if (model.browse.site != null) {
                             BrowseQuickActions(
@@ -449,6 +396,21 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                 onGrant = ::requestStorageAccess,
                 onPickSite = { tab = Tab.SITES },
                 onDownload = ::startDownload,
+                onRequestNotifications = ::requestNotifications,
+                onDownloadSelected = {
+                    requestNotifications()
+                    val queued = model.enqueueSelected { plan ->
+                        if (plan.files.isNotEmpty()) TransferService.start(context)
+                        scope.launch { snackbars.showSnackbar(queuedPlanMessage(plan)) }
+                    }
+                    if (!queued) folderPicker.launch(null)
+                },
+                onTransfersQueued = { count ->
+                    TransferService.start(context)
+                    scope.launch {
+                        snackbars.showSnackbar(context.getString(R.string.queued_many, count))
+                    }
+                },
                 modifier = Modifier.padding(padding),
             )
 

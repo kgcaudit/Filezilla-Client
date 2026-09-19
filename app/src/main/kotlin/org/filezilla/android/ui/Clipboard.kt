@@ -37,12 +37,25 @@ enum class PasteRefusal {
     INTO_ITSELF,
 
     /**
-     * The two sides are different places.
+     * Between two servers.
      *
-     * A transfer rather than a file operation, and not yet built. Named
-     * rather than hidden, so the button can say why instead of doing nothing.
+     * FTP has no copy, so this would mean fetching every byte and sending it
+     * straight back -- twice the data for something that looks like a local
+     * operation. Named rather than hidden, so the bar can say why.
      */
-    NEEDS_TRANSFER,
+    BETWEEN_SERVERS,
+}
+
+/** What a paste will actually do, once it is allowed. */
+enum class PasteKind {
+    /** Within one place: a file operation. */
+    FILE_OPERATION,
+
+    /** Phone to server: an upload. */
+    UPLOAD,
+
+    /** Server to phone: a download. */
+    DOWNLOAD,
 }
 
 /**
@@ -61,7 +74,17 @@ object PasteRules {
         targetPath: String,
     ): PasteRefusal? {
         if (clipboard == null || clipboard.isEmpty) return PasteRefusal.NOTHING_HELD
-        if (clipboard.source != targetSource) return PasteRefusal.NEEDS_TRANSFER
+
+        // Between two places the paste is a transfer, and the only pairing
+        // that cannot be one is server to server: FTP has no copy command, so
+        // it would mean pulling every byte down and pushing it back up.
+        if (clipboard.source != targetSource) {
+            return if (clipboard.source is PaneSource.Remote && targetSource is PaneSource.Remote) {
+                PasteRefusal.BETWEEN_SERVERS
+            } else {
+                null
+            }
+        }
 
         val target = FilePath.normalize(targetPath)
         // Copying into the same folder is a duplicate, which is a fair thing
@@ -82,4 +105,15 @@ object PasteRules {
 
     fun canPaste(clipboard: Clipboard?, targetSource: PaneSource, targetPath: String): Boolean =
         refusal(clipboard, targetSource, targetPath) == null
+
+    /** What an allowed paste would do. Null when it would not be allowed. */
+    fun kind(clipboard: Clipboard?, targetSource: PaneSource): PasteKind? {
+        val from = clipboard?.source ?: return null
+        return when {
+            from == targetSource -> PasteKind.FILE_OPERATION
+            from is PaneSource.Local && targetSource is PaneSource.Remote -> PasteKind.UPLOAD
+            from is PaneSource.Remote && targetSource is PaneSource.Local -> PasteKind.DOWNLOAD
+            else -> null
+        }
+    }
 }

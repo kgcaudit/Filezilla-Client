@@ -79,7 +79,6 @@
     <string name="menu_select">선택</string>
     <string name="menu_select_all">모두 선택</string>
     <string name="menu_select_none">선택 해제</string>
-    <string name="menu_selected">%1$d개 선택됨</string>
     <string name="menu_properties">속성</string>
     <string name="menu_view_options">보기 옵션</string>
     <string name="menu_filter">필터</string>
@@ -235,10 +234,13 @@
     <string name="action_rename_selected">이름 변경</string>
     <string name="selection_count">%1$d개 선택</string>
     <string name="paste_into">여기에 %1$d개 붙여넣기</string>
-    <string name="paste_needs_transfer">휴대폰과 서버 사이 전송은 아직 준비되지 않았습니다</string>
     <string name="paste_into_itself">폴더를 자기 자신 안에 넣을 수 없습니다</string>
     <string name="paste_already_there">이미 이 폴더에 있습니다</string>
     <string name="new_folder_title">새 폴더</string>
     <string name="new_file_title">새 파일</string>
     <string name="confirm_delete_detail">폴더는 안에 든 것까지 함께 삭제됩니다. 되돌릴 수 없습니다.</string>
+    <string name="paste_between_servers">FTP에서는 서버끼리 복사할 수 없습니다</string>
+    <string name="paste_upload_here">이 서버로 %1$d개 보내기</string>
+    <string name="paste_download_here">이 휴대폰에 %1$d개 저장</string>
+    <string name="action_send">보내기</string>
 </resources>
