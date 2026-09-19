@@ -165,6 +165,7 @@
     <string name="state_waiting_for_network">와이파이 기다리는 중</string>
     <string name="state_completed">완료</string>
     <string name="state_failed">실패</string>
+    <string name="state_reconnecting">다시 연결하는 중…</string>
     <string name="queue_attempt">%1$d번째 시도</string>
 
     <string name="fail_offline">네트워크에 연결되어 있지 않습니다</string>

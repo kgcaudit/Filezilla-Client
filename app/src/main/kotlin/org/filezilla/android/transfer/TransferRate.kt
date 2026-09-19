@@ -81,3 +81,29 @@ fun secondsRemaining(bytes: Long, totalBytes: Long?, bytesPerSecond: Long?): Lon
     if (left <= 0) return null
     return left / bytesPerSecond
 }
+
+/**
+ * How long a running transfer may go without a byte before the screen should
+ * stop claiming it is moving.
+ *
+ * The engine reports progress on every socket read, so on any live connection
+ * this is a fraction of a second. Silence for seconds means the connection is
+ * gone or the transfer is between attempts -- and in both cases the last speed
+ * measured is no longer true. Long enough not to flicker on a slow link,
+ * short enough that nobody sits watching a number that has stopped meaning
+ * anything.
+ */
+const val STALL_AFTER_MILLIS = 5_000L
+
+/**
+ * Whether a transfer's figures have gone stale.
+ *
+ * Top-level and tested because it is the difference between a screen that
+ * says what is happening and one that freezes mid-transfer showing a speed
+ * from before the network went -- which is what it did.
+ *
+ * @param updatedAtMillis when this transfer last reported progress; 0 when it
+ *   never has, which is not a stall but a transfer that has not started.
+ */
+fun isStalled(updatedAtMillis: Long, nowMillis: Long): Boolean =
+    updatedAtMillis > 0 && nowMillis - updatedAtMillis >= STALL_AFTER_MILLIS

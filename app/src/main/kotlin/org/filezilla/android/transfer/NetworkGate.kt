@@ -54,6 +54,21 @@ class NetworkGate(context: Context) : TransferGate {
     @Volatile
     var onAllowedChanged: ((Boolean) -> Unit)? = null
 
+    /**
+     * Told when the phone swapped one usable network for another.
+     *
+     * Not the same event as [onAllowedChanged], and the reason a transfer
+     * could freeze with the phone plainly online: dropping Wi-Fi while mobile
+     * data is on leaves the queue allowed throughout, so nothing changed and
+     * nothing was told -- but the sockets were bound to the network that went,
+     * and a read on one of them returns nothing until its timeout expires.
+     */
+    @Volatile
+    var onNetworkChanged: (() -> Unit)? = null
+
+    /** The network last seen as active, to tell a swap from a mere update. */
+    private var lastNetwork: Network? = null
+
     private val callback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) = update()
         override fun onLost(network: Network) = update()
@@ -111,22 +126,36 @@ class NetworkGate(context: Context) : TransferGate {
      * attempt goes ahead, fails, and the retry policy gets to decide whether
      * the transfer is finished.
      */
-    override fun waitBeforeRetry(backoffMillis: Long) =
-        waitBeforeRetry(backoffMillis, DEFAULT_OFFLINE_CAP_MILLIS)
+    override fun waitBeforeRetry(backoffMillis: Long, stopped: () -> Boolean) =
+        waitBeforeRetry(backoffMillis, DEFAULT_OFFLINE_CAP_MILLIS, stopped)
 
     @Throws(InterruptedException::class)
-    fun waitBeforeRetry(backoffMillis: Long, offlineCapMillis: Long) {
-        if (backoffMillis > 0) Thread.sleep(backoffMillis)
-        if (allowed) return
+    fun waitBeforeRetry(
+        backoffMillis: Long,
+        offlineCapMillis: Long,
+        abandoned: () -> Boolean = { false },
+    ) {
+        val backoffDeadline = System.currentTimeMillis() + backoffMillis
+        // Slept in slices rather than in one go, so that the whole of this
+        // method answers [abandoned] within a second. Sleeping the backoff
+        // through and only then looking is what made pause feel dead: the
+        // backoff grows with each attempt, and by the third one it is longer
+        // than anybody will wait staring at a button.
+        while (!abandoned()) {
+            val remaining = backoffDeadline - System.currentTimeMillis()
+            if (remaining <= 0) break
+            Thread.sleep(minOf(remaining, ABANDON_POLL_MILLIS))
+        }
+        if (abandoned() || allowed) return
 
         val deadline = System.currentTimeMillis() + offlineCapMillis
         synchronized(lock) {
-            while (!allowed && !stopped) {
+            while (!allowed && !this.stopped && !abandoned()) {
                 val remaining = deadline - System.currentTimeMillis()
                 if (remaining <= 0) return
                 // A bounded wait rather than an unbounded one: a missed
                 // callback would otherwise leave this parked for good.
-                lock.wait(minOf(remaining, POLL_INTERVAL_MILLIS))
+                lock.wait(minOf(remaining, ABANDON_POLL_MILLIS))
             }
         }
     }
@@ -150,19 +179,34 @@ class NetworkGate(context: Context) : TransferGate {
 
     private fun update() {
         val nowAllowed = currentlyAllowed()
+        val active = runCatching { manager.activeNetwork }.getOrNull()
         val changed: Boolean
+        val moved: Boolean
         synchronized(lock) {
             changed = nowAllowed != allowed
             allowed = nowAllowed
+            // Only a swap counts, not an arrival or a departure: going offline
+            // and coming back are already [onAllowedChanged]'s to report, and
+            // saying both would stop the same transfer twice for one event.
+            moved = active != null && lastNetwork != null && active != lastNetwork
+            if (active != null) lastNetwork = active
             if (nowAllowed) lock.notifyAll()
         }
         // Outside the lock: the listener stops a running transfer, and doing
         // that while holding the lock a waiting one needs would deadlock.
         if (changed) onAllowedChanged?.invoke(nowAllowed)
+        if (moved && nowAllowed) onNetworkChanged?.invoke()
     }
 
     private companion object {
         const val DEFAULT_OFFLINE_CAP_MILLIS = 10 * 60 * 1000L
         const val POLL_INTERVAL_MILLIS = 5_000L
+
+        /**
+         * How long a wait may go without noticing it has been abandoned. Short
+         * because it is measured against a person's patience with a button,
+         * not against the network.
+         */
+        const val ABANDON_POLL_MILLIS = 500L
     }
 }

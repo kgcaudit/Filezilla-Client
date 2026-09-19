@@ -15,9 +15,12 @@ Env:
   FTPS_PASV_PORTS     passive port range      (default 2230-2240)
   REQUIRE_SSL_REUSE   1 = enforce reuse       (default 1)
   TLS_MAX             "1.2" or "1.3"          (default 1.2)
+  STALL_AFTER_BYTES   go silent after N bytes (default 0, never)
+  STALL_TIMES         how many may stall      (default 0, all of them)
 """
 
 import os
+import select
 import sys
 import time
 import logging
@@ -52,8 +55,20 @@ DROP_AFTER_BYTES = int(os.environ.get("DROP_AFTER_BYTES", "0"))
 # second, and the interruption arrives after the file is already complete.
 THROTTLE_BYTES = int(os.environ.get("THROTTLE_BYTES", "0"))
 DROP_TIMES = int(os.environ.get("DROP_TIMES", "0"))
+# Stop sending after this many bytes while leaving the connection open, 0 to
+# never. Not the same fault as DROP_AFTER_BYTES and the harder one: a cut
+# connection reports an error, whereas a phone whose network has gone gets no
+# error, no end of file and nothing else either -- the read simply never
+# returns. That is what makes a transfer look frozen, and what a stop has to
+# be able to interrupt.
+STALL_AFTER_BYTES = int(os.environ.get("STALL_AFTER_BYTES", "0"))
+# How many data connections may stall, 0 for all of them. A test that expects
+# the client to notice and reconnect needs the connection after the stall to
+# work, or it cannot tell a recovery from a second failure.
+STALL_TIMES = int(os.environ.get("STALL_TIMES", "0"))
 
 _drops_remaining = DROP_TIMES
+_stalls_remaining = STALL_TIMES
 TLS_MAX = os.environ.get("TLS_MAX", "1.2")
 PORT = int(os.environ.get("FTPS_PORT", "2121"))
 PASV_LO, PASV_HI = (
@@ -81,6 +96,7 @@ class ReuseCheckingDTPHandler(TLS_DTPHandler):
         self._throttle_sent = 0
         self._sent_bytes = 0
         self._dropping = False
+        self._stalling = False
 
     def _pace(self, count):
         """Holds the data channel to THROTTLE_BYTES per second.
@@ -101,10 +117,55 @@ class ReuseCheckingDTPHandler(TLS_DTPHandler):
         if owed > 0:
             time.sleep(min(owed, 0.25))
 
+    def _should_stall(self):
+        global _stalls_remaining
+        if STALL_AFTER_BYTES <= 0 or self._sent_bytes < STALL_AFTER_BYTES:
+            return False
+        # Once a connection has gone silent it stays silent: the fault being
+        # modelled is a network that went, and it does not come back on the
+        # same socket.
+        if self._stalling:
+            return True
+        if STALL_TIMES > 0:
+            if _stalls_remaining <= 0:
+                return False
+            _stalls_remaining -= 1
+        self._stalling = True
+        note(f"stalling data connection after {self._sent_bytes} bytes")
+        return True
+
+    def _client_hung_up(self):
+        """True once the client has closed a connection we stopped sending on.
+
+        Needed because a stalled handler never touches the socket, so nothing
+        else would notice. Left unnoticed it would sleep in the poll loop for
+        ever -- and this server is single-threaded, so that hangs the control
+        channel too and the client's reconnect never gets a reply.
+        """
+        try:
+            if not select.select([self.socket], [], [], 0)[0]:
+                return False
+            return not self.socket.recv(1)
+        except SSL.WantReadError:
+            return False
+        except (SSL.ZeroReturnError, SSL.SysCallError, SSL.Error, OSError):
+            return True
+
     def send(self, data):
         global _drops_remaining
+        if self._should_stall():
+            if self._client_hung_up():
+                note("stalled data connection was closed by the client")
+                self.close()
+                return 0
+            # Slept rather than spun, since nothing here is in a hurry and the
+            # poll loop would otherwise burn a core for the length of the test.
+            time.sleep(0.05)
+            return 0
+
         if DROP_AFTER_BYTES <= 0 or _drops_remaining <= 0 or self._dropping:
             sent = super().send(data)
+            self._sent_bytes += sent
             self._pace(sent)
             return sent
 
@@ -209,6 +270,7 @@ def main():
         f"listening on 127.0.0.1:{PORT} "
         f"require_ssl_reuse={REQUIRE_SSL_REUSE} tls_max={TLS_MAX} "
         f"ignore_rest={IGNORE_REST} drop_after={DROP_AFTER_BYTES}x{DROP_TIMES} "
+        f"stall_after={STALL_AFTER_BYTES}x{STALL_TIMES} "
         f"throttle={THROTTLE_BYTES} "
         f"root={ROOT}"
     )

@@ -32,10 +32,12 @@ import org.filezilla.ftp.protocol.LogLevel
 import org.filezilla.ftp.protocol.ServerCapabilities
 import org.filezilla.ftp.transfer.ResilientTransfer
 import org.filezilla.ftp.transfer.RetryPolicy
+import org.filezilla.ftp.transfer.TransferAbort
 import org.filezilla.ftp.transfer.TransferProgressListener
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 
 /** What the notification and the queue screen show about the running transfer. */
 data class ActiveProgress(
@@ -48,6 +50,15 @@ data class ActiveProgress(
     val bytesPerSecond: Long? = null,
     /** When this run started, so a caller showing one transfer picks the same one. */
     val startedAtMillis: Long = 0,
+    /**
+     * When bytes last arrived.
+     *
+     * The screen needs it to tell a transfer that is moving from one that has
+     * gone quiet: progress is pushed when bytes arrive, so a dead connection
+     * leaves the card exactly as it was, still claiming a speed. See
+     * [isStalled].
+     */
+    val updatedAtMillis: Long = 0,
 )
 
 /**
@@ -124,6 +135,33 @@ class TransferManager(
 
     /** Speed of each running transfer, so two do not share one measurement. */
     private val rates = ConcurrentHashMap<String, TransferRate>()
+
+    /**
+     * The handle on each running transfer's socket; see [TransferAbort].
+     *
+     * [PauseSignal] alone was not enough, and this is the bug it exists to
+     * fix: a pause is only noticed in the progress callback, which the engine
+     * calls as bytes arrive. A transfer whose network has gone receives no
+     * bytes, so it is precisely when the user presses pause that pause did
+     * nothing -- the card sat at the same byte count and the same stale speed
+     * until the socket timed out. Closing the socket from here ends the read
+     * at once.
+     */
+    private val aborts = ConcurrentHashMap<String, TransferAbort>()
+
+    /**
+     * Closes aborted sockets off the caller's thread.
+     *
+     * Because closing a TLS socket writes a close_notify, and the callers here
+     * are the connectivity callback and the Wi-Fi-only switch -- the switch
+     * runs on the main thread, where Android treats a write as an error. The
+     * abort catches whatever the close throws, so without this the failure
+     * would be silent and the transfer would go back to being frozen with a
+     * dead button, which is the whole thing this was meant to fix.
+     */
+    private val aborter = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "transfer-abort").apply { isDaemon = true }
+    }
 
     fun observeTransfers(): Flow<List<TransferRecord>> =
         database.transfers().observeAll().map { rows -> rows.map { it.toRecord() } }
@@ -315,6 +353,11 @@ class TransferManager(
         }
 
         rates[record.id] = TransferRate()
+        val abort = TransferAbort()
+        aborts[record.id] = abort
+        // A stop asked for between the claim and here would otherwise be
+        // delivered to nothing, and the transfer would run on regardless.
+        if (pauseSignal.isRequested(record.id)) abort.abortAndStop()
         publishProgress(
             ActiveProgress(
                 id = record.id,
@@ -323,40 +366,57 @@ class TransferManager(
                 bytes = record.bytesTransferred,
                 totalBytes = record.totalBytes,
                 startedAtMillis = System.currentTimeMillis(),
+                updatedAtMillis = System.currentTimeMillis(),
             ),
         )
 
         val settings = site.toSettings(passwords)
         connection.settings = settings
+        var stopped: StopReason? = null
         try {
             when (record.direction) {
-                TransferDirection.DOWNLOAD -> runDownload(record, settings, connection)
-                TransferDirection.UPLOAD -> runUpload(record, settings, connection)
+                TransferDirection.DOWNLOAD -> runDownload(record, settings, connection, abort)
+                TransferDirection.UPLOAD -> runUpload(record, settings, connection, abort)
             }
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
             markInterrupted(record, "stopped")
             throw e
-        } catch (e: TransferPausedException) {
-            // Written after JournalledTransfer has had its say: it marks the
-            // record INTERRUPTED on the way out, and this has to be what
-            // survives, or the queue would pick the transfer straight back up.
-            when (e.reason) {
-                StopReason.USER -> markPaused(record)
-                StopReason.NETWORK -> markWaitingForNetwork(record)
-                StopReason.CANCEL -> discard(record)
-            }
         } catch (e: Exception) {
-            // JournalledTransfer has already written INTERRUPTED for a
-            // download; for anything it did not reach, record it here so the
-            // queue does not spin on the same record.
-            markInterrupted(record, e.message ?: e.javaClass.simpleName)
+            // The reason is asked of the signal rather than read off the
+            // exception, because a stop delivered by closing the socket
+            // arrives as an ordinary IOException. Only a stop the transfer
+            // noticed itself carries a TransferPausedException, and that is
+            // now the rarer of the two.
+            val reason = (e as? TransferPausedException)?.reason ?: pauseSignal.reasonFor(record.id)
+            if (reason == null) {
+                // JournalledTransfer has already written INTERRUPTED for a
+                // download; for anything it did not reach, record it here so
+                // the queue does not spin on the same record.
+                markInterrupted(record, e.message ?: e.javaClass.simpleName)
+            } else {
+                // Written after JournalledTransfer has had its say: it marks
+                // the record INTERRUPTED on the way out, and this has to be
+                // what survives, or the queue would pick the transfer straight
+                // back up.
+                stopped = reason
+                when (reason) {
+                    StopReason.USER -> markPaused(record)
+                    StopReason.NETWORK -> markWaitingForNetwork(record)
+                    StopReason.CANCEL -> discard(record)
+                }
+            }
         } finally {
             // A cancel that arrived while the transfer was finishing never
-            // reached a progress callback, so nothing threw. Honour it here
-            // rather than leaving a record the user has already dismissed.
-            if (pauseSignal.reasonFor(record.id) == StopReason.CANCEL) discard(record)
+            // reached a progress callback and closed a socket that was already
+            // done with, so nothing threw. Honour it here rather than leaving
+            // a record the user has already dismissed -- but only if the catch
+            // above did not already do it.
+            if (stopped == null && pauseSignal.reasonFor(record.id) == StopReason.CANCEL) {
+                discard(record)
+            }
             rates.remove(record.id)
+            aborts.remove(record.id)
             activeState.value = activeState.value - record.id
             pauseSignal.clear(record.id)
         }
@@ -409,6 +469,7 @@ class TransferManager(
         record: TransferRecord,
         settings: FtpSettings,
         connection: WorkerConnection,
+        abort: TransferAbort,
     ) {
         // On the worker's own connection, which the transfer is about to use
         // anyway. This used to open a second connection, so every file in the
@@ -424,8 +485,9 @@ class TransferManager(
             capabilities = capabilities,
             retryPolicy = RetryPolicy(maxAttempts = settings.maxRetries),
             logger = log,
-            sleep = { millis -> networkGate.waitBeforeRetry(millis) },
+            sleep = { millis -> networkGate.waitBeforeRetry(millis) { abort.isStopped } },
             connections = connection,
+            abort = abort,
         ).download(
             record = record,
             currentRemote = fingerprint,
@@ -501,6 +563,7 @@ class TransferManager(
         record: TransferRecord,
         settings: FtpSettings,
         connection: WorkerConnection,
+        abort: TransferAbort,
     ) {
         val source = Uri.parse(record.localPath)
         var running = record.copy(
@@ -516,8 +579,9 @@ class TransferManager(
             capabilities = capabilities,
             retryPolicy = RetryPolicy(maxAttempts = settings.maxRetries),
             logger = log,
-            sleep = { millis -> networkGate.waitBeforeRetry(millis) },
+            sleep = { millis -> networkGate.waitBeforeRetry(millis) { abort.isStopped } },
             connections = connection,
+            abort = abort,
         ).upload(
             remoteFile = record.remotePath,
             progress = progressListener(record),
@@ -552,6 +616,7 @@ class TransferManager(
                     totalBytes = totalSize ?: record.totalBytes,
                     bytesPerSecond = rate?.bytesPerSecond,
                     startedAtMillis = activeState.value[record.id]?.startedAtMillis ?: 0,
+                    updatedAtMillis = System.currentTimeMillis(),
                 ),
             )
         }
@@ -652,7 +717,40 @@ class TransferManager(
      * user allows. Called from the network callback, not the transfer thread.
      */
     fun onNetworkDisallowed() {
-        for (id in activeState.value.keys) pauseSignal.request(id, StopReason.NETWORK)
+        for (id in activeState.value.keys) stopRunning(id, StopReason.NETWORK)
+    }
+
+    /**
+     * Called when the phone swapped one usable network for another.
+     *
+     * Nothing is paused: the queue may still transfer, so the transfer should
+     * carry on -- but not on the sockets it has, which were bound to the
+     * network that went and will read nothing until they time out. Closing
+     * them turns a silent twenty-second stall into an immediate reconnect and
+     * resume, which is what the user was promised.
+     */
+    fun onNetworkChanged() {
+        if (aborts.isEmpty()) return
+        log.log(LogLevel.STATUS, "The network changed; reconnecting what was in flight")
+        for (abort in aborts.values) aborter.execute { abort.abortAndRetry() }
+    }
+
+    /**
+     * Asks the transfer with [id] to stop, and makes sure it can hear.
+     *
+     * Both halves matter. The signal is what tells the queue afterwards why
+     * the transfer ended -- paused, cancelled, or waiting for the network --
+     * and the abort is what ends it now rather than whenever the next byte
+     * happens to arrive.
+     */
+    private fun stopRunning(id: String, reason: StopReason) {
+        pauseSignal.request(id, reason)
+        aborts[id]?.let { abort ->
+            // Recorded here so the retry loop sees it at once, and closed on
+            // another thread because closing writes; see [aborter].
+            abort.stop()
+            aborter.execute { abort.abortAndStop() }
+        }
     }
 
     /** True when the queue is holding work back for the network. */
@@ -685,7 +783,7 @@ class TransferManager(
      */
     suspend fun pause(id: String) = withContext(io) {
         if (activeState.value.containsKey(id)) {
-            pauseSignal.request(id)
+            stopRunning(id, StopReason.USER)
             return@withContext
         }
         journal.get(id)?.let {
@@ -727,7 +825,7 @@ class TransferManager(
      */
     suspend fun cancel(id: String) = withContext(io) {
         if (activeState.value.containsKey(id)) {
-            pauseSignal.request(id, StopReason.CANCEL)
+            stopRunning(id, StopReason.CANCEL)
             return@withContext
         }
         journal.remove(id)

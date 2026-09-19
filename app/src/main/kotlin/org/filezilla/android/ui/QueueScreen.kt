@@ -27,6 +27,11 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -34,8 +39,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import org.filezilla.android.R
 import org.filezilla.android.transfer.ActiveProgress
+import org.filezilla.android.transfer.isStalled
 import org.filezilla.android.transfer.secondsRemaining
 import org.filezilla.android.ui.theme.status
 import org.filezilla.ftp.journal.TransferDirection
@@ -61,6 +68,12 @@ fun QueueScreen(
         return
     }
 
+    // This screen is driven by bytes arriving, so a transfer whose connection
+    // has died stops updating it -- and the card stays exactly as it was, a
+    // frozen byte count above a speed that is no longer true. The clock is
+    // what lets the screen notice the silence.
+    val now = tickWhile(active.isNotEmpty())
+
     LazyColumn(
         modifier = modifier,
         contentPadding = PaddingValues(12.dp),
@@ -72,13 +85,21 @@ fun QueueScreen(
             // would actually be resumed from. Two run at once, so this is a
             // lookup rather than a comparison against one current transfer.
             val live = active[record.id]
+            // Only a transfer the queue still considers running: the live
+            // figures outlive the record's state by an instant as a transfer
+            // unwinds, and "reconnecting" on something the user has just
+            // paused would be the wrong answer at the worst moment.
+            val stalled = record.state == TransferState.RUNNING &&
+                live != null && isStalled(live.updatedAtMillis, now)
             TransferCard(
                 record = record,
                 bytes = live?.bytes ?: record.bytesTransferred,
                 total = live?.totalBytes ?: record.totalBytes,
                 // Only a running transfer has a speed; a paused or waiting one
-                // showing a leftover figure would be a lie.
-                bytesPerSecond = live?.bytesPerSecond,
+                // showing a leftover figure would be a lie, and so would the
+                // last speed of one that has stopped receiving.
+                bytesPerSecond = live?.bytesPerSecond.takeUnless { stalled },
+                stalled = stalled,
                 onPause = { onPause(record.id) },
                 onResume = { onResume(record.id) },
                 onCancel = { onCancel(record.id) },
@@ -87,17 +108,38 @@ fun QueueScreen(
     }
 }
 
+/**
+ * A clock that ticks once a second while [running], and stands still
+ * otherwise.
+ *
+ * Conditional because a screen that recomposes every second for nothing costs
+ * battery on the one screen a user is most likely to leave open.
+ */
+@Composable
+private fun tickWhile(running: Boolean): Long {
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(running) {
+        while (running) {
+            now = System.currentTimeMillis()
+            delay(1_000)
+        }
+    }
+    return now
+}
+
 @Composable
 private fun TransferCard(
     record: TransferRecord,
     bytes: Long,
     total: Long?,
     bytesPerSecond: Long?,
+    /** Running, but no bytes for a while: reconnecting, or about to be. */
+    stalled: Boolean,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    val accent = accentFor(record.state)
+    val accent = if (stalled) MaterialTheme.status.paused else accentFor(record.state)
     val percent = if (total != null && total > 0) {
         ((bytes.toDouble() / total) * 100).toInt().coerceIn(0, 100)
     } else {
@@ -194,7 +236,7 @@ private fun TransferCard(
             Spacer8()
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    stateLabel(record.state),
+                    if (stalled) stringResource(R.string.state_reconnecting) else stateLabel(record.state),
                     style = MaterialTheme.typography.labelLarge,
                     color = accent,
                     fontWeight = FontWeight.Medium,

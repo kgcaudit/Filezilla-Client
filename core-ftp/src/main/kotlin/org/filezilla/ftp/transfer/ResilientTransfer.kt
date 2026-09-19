@@ -54,6 +54,15 @@ class ResilientTransfer(
      */
     private val connections: ControlConnections =
         ControlConnections.perAttempt(settings, capabilities, logger),
+    /**
+     * How a caller stops this from outside; see [TransferAbort].
+     *
+     * The retry loop has to know about it, not just the engine: closing the
+     * socket looks exactly like the dropped connection this class exists to
+     * recover from, so without this a pause would be answered by reconnecting
+     * and carrying on -- the pause button undoing itself.
+     */
+    private val abort: TransferAbort? = null,
 ) {
 
     /**
@@ -115,6 +124,11 @@ class ResilientTransfer(
                 )
                 sleep(delay)
             }
+            // A stop that arrived during the wait. The wait can be a long one
+            // -- it is also where a transfer sits out a phone with no signal
+            // -- and the next attempt would otherwise log in and ask for a
+            // file size before noticing.
+            if (abort?.isStopped == true) throw TransferAbortedException()
 
             // Tracks what this attempt moved, so bytes lost to a dropped
             // connection still show up in the total. On a metered connection
@@ -130,7 +144,7 @@ class ResilientTransfer(
             var reusable = false
             try {
                 val outcome = try {
-                    attemptBody(FtpTransferEngine(control, capabilities, logger), counting)
+                    attemptBody(FtpTransferEngine(control, capabilities, logger, abort), counting)
                         .also { reusable = true }
                 } finally {
                     // Released before the retry decision, so a connection that
@@ -145,6 +159,14 @@ class ResilientTransfer(
                 return ResilientOutcome(outcome, attempt, bytesAcrossAttempts)
             } catch (e: Throwable) {
                 bytesAcrossAttempts += movedThisAttempt
+                if (abort?.isStopped == true) {
+                    // The caller closed the socket on purpose. That arrives
+                    // here as an ordinary broken connection, which is the one
+                    // thing this loop is meant to retry, so it is checked
+                    // before the retry policy rather than left to it.
+                    logger.log(LogLevel.STATUS, "Transfer stopped on request after $attempt attempt(s)")
+                    throw e
+                }
                 if (!retryPolicy.shouldRetry(e, attempt)) {
                     logger.log(LogLevel.ERROR, "Transfer failed after $attempt attempt(s): ${e.message}")
                     throw e

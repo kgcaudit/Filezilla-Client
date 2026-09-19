@@ -39,6 +39,12 @@ class FtpTransferEngine(
     private val control: FtpControlConnection,
     private val capabilities: ServerCapabilities,
     private val logger: FtpLogger = FtpLogger.NONE,
+    /**
+     * Lets a caller on another thread stop a transfer that is parked on a
+     * read. Optional: nothing in the engine needs it, and a caller with no
+     * user to answer to has nothing to abort for.
+     */
+    private val abort: TransferAbort? = null,
 ) {
     private val server get() = control.settings.serverKey
 
@@ -428,9 +434,18 @@ class FtpTransferEngine(
     ): Long {
         progress?.onProgress(0, resumeOffset, totalSize)
         val data = DataConnection(control, capabilities, logger)
+        // So that a caller can unblock this read rather than wait out the
+        // socket's timeout; see TransferAbort.
+        abort?.arm { runCatching { data.close() } }
         val transferred: Long
         try {
             val socket = data.open(transferCommand, resumeOffset)
+            // A stop that landed while the connection was being opened closed
+            // a socket that did not exist yet, so it is answered here instead.
+            // Without this the transfer would go on to run to completion with
+            // the stop already recorded, and the button would have done
+            // nothing after all.
+            if (abort?.isStopped == true) throw TransferAbortedException()
             transferred = if (receiving) {
                 body(socket.getInputStream(), null)
             } else {
@@ -443,6 +458,7 @@ class FtpTransferEngine(
                 n
             }
         } finally {
+            abort?.disarm()
             data.close()
         }
         data.finish()

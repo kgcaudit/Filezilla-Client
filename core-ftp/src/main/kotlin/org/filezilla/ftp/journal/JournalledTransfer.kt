@@ -8,6 +8,7 @@ import org.filezilla.ftp.protocol.ServerCapabilities
 import org.filezilla.ftp.transfer.ControlConnections
 import org.filezilla.ftp.transfer.ResilientTransfer
 import org.filezilla.ftp.transfer.RetryPolicy
+import org.filezilla.ftp.transfer.TransferAbort
 import org.filezilla.ftp.transfer.TransferProgressListener
 
 /**
@@ -37,6 +38,8 @@ class JournalledTransfer(
     /** Passed straight to [ResilientTransfer]; see [ControlConnections]. */
     private val connections: ControlConnections =
         ControlConnections.perAttempt(settings, capabilities, logger),
+    /** Passed straight to [ResilientTransfer]; see [TransferAbort]. */
+    private val abort: TransferAbort? = null,
 ) {
 
     /**
@@ -110,6 +113,7 @@ class JournalledTransfer(
                 logger = logger,
                 sleep = sleep,
                 connections = connections,
+                abort = abort,
             ).download(
                 remoteFile = record.remotePath,
                 progress = recording,

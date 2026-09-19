@@ -48,6 +48,22 @@ class FtpsTestServer(
      * file is already complete and the test proves nothing.
      */
     private val throttleBytesPerSecond: Int = 0,
+    /**
+     * Stop sending after this many bytes but leave the connection open, 0 to
+     * never.
+     *
+     * A harder fault than [dropAfterBytes] and a more common one on a phone: a
+     * cut connection reports an error the engine can act on, while a network
+     * that has simply gone leaves a read that never returns -- no error, no
+     * end of file, nothing. That is what a frozen transfer actually is.
+     */
+    private val stallAfterBytes: Int = 0,
+    /**
+     * How many data connections may stall, 0 for all of them. A test that
+     * expects the client to notice and reconnect needs the connection after
+     * the stall to work.
+     */
+    private val stallTimes: Int = 0,
 ) {
     lateinit var root: File
         private set
@@ -83,6 +99,8 @@ class FtpsTestServer(
             put("DROP_AFTER_BYTES", dropAfterBytes.toString())
             put("DROP_TIMES", dropTimes.toString())
             put("THROTTLE_BYTES", throttleBytesPerSecond.toString())
+            put("STALL_AFTER_BYTES", stallAfterBytes.toString())
+            put("STALL_TIMES", stallTimes.toString())
         }
         builder.redirectErrorStream(false)
         val started = builder.start()

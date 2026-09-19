@@ -79,8 +79,11 @@ class ResumeIntegrationTest {
             }
         }
 
-        override fun waitBeforeRetry(backoffMillis: Long) {
-            if (backoffMillis > 0) Thread.sleep(minOf(backoffMillis, 200))
+        override fun waitBeforeRetry(backoffMillis: Long, stopped: () -> Boolean) {
+            // Sliced like the real gate's, so a transfer stopped while it is
+            // waiting out a backoff does not have to wait the backoff out.
+            val deadline = System.currentTimeMillis() + minOf(backoffMillis, 200)
+            while (!stopped() && System.currentTimeMillis() < deadline) Thread.sleep(10)
         }
     }
 
@@ -439,6 +442,19 @@ class ResumeIntegrationTest {
 
         /** Far enough in to be a real resume, far enough from the end to land. */
         const val INTERRUPT_AT = 2_000_000L
+
+        /** Where the stalling server goes silent; past the journal's megabyte. */
+        const val STALL_AT = 2_000_000
+
+        /**
+         * How long a stop may take on a frozen transfer.
+         *
+         * Comfortably under [org.filezilla.ftp.protocol.FtpSettings]' default
+         * read timeout, so that passing cannot mean the socket gave up by
+         * itself -- which is what the old code relied on and what made the
+         * button feel dead.
+         */
+        const val PAUSE_DEADLINE_MILLIS = 12_000L
     }
 
     /**
@@ -530,6 +546,139 @@ class ResumeIntegrationTest {
         assertEquals(TransferState.COMPLETED, stateOf(id))
         assertResumedNotRestarted("restart.bin", held, mark)
         assertArrayEquals(FtpsTestServer.contentOf(size), bytesOf(id))
+    }
+
+    // ------------------------------------------- the transfer that froze
+
+    /**
+     * The transfer that froze, and the pause button that did nothing.
+     *
+     * As reported from the phone: the network went, the card sat at the same
+     * byte count showing the same speed, and pause was dead. The server here
+     * stops sending without closing anything, which is what the phone saw --
+     * no error, no end of file, just a read that never returns.
+     *
+     * Nothing about the connection is shortened for the test. The read timeout
+     * is the product's twenty seconds, because that is precisely what the old
+     * code waited for: the pause was delivered through the progress callback,
+     * which the engine calls as bytes arrive, so a transfer receiving nothing
+     * could not be paused until the socket gave up. The deadline below is
+     * shorter than that on purpose.
+     */
+    @Test
+    fun `pausing a frozen transfer stops it without waiting out the socket`() = runBlocking {
+        val stalled = restartServerStalling()
+        val manager = newManager()
+        val id = enqueue(manager, "frozen.bin", FILE_SIZE)
+
+        val queue = async { drain(manager) }
+        awaitBytes(manager, id, atLeast = stalled.toLong())
+        awaitFrozen(manager, id)
+
+        manager.pause(id)
+        // Well inside the read timeout, so a pass here cannot be the socket
+        // timing out and the transfer stopping for its own reasons.
+        withTimeout(PAUSE_DEADLINE_MILLIS) { queue.await() }
+
+        assertEquals(TransferState.PAUSED, stateOf(id))
+        assertTrue("the partial file should still be there", partials.forTransfer(id).isFile)
+    }
+
+    /** The same for cancel, which reached the transfer the same dead way. */
+    @Test
+    fun `cancelling a frozen transfer stops it without waiting out the socket`() = runBlocking {
+        val stalled = restartServerStalling()
+        val manager = newManager()
+        val id = enqueue(manager, "frozen.bin", FILE_SIZE)
+
+        val queue = async { drain(manager) }
+        awaitBytes(manager, id, atLeast = stalled.toLong())
+        awaitFrozen(manager, id)
+
+        manager.cancel(id)
+        withTimeout(PAUSE_DEADLINE_MILLIS) { queue.await() }
+
+        assertNull("the record should be gone", stateOf(id))
+        assertTrue("the bytes should be gone", !partials.forTransfer(id).isFile)
+    }
+
+    /**
+     * Swapping one usable network for another, which is what dropping Wi-Fi
+     * with mobile data on looks like.
+     *
+     * The queue is allowed to transfer throughout, so nothing pauses and
+     * nothing waits -- but the sockets belong to the network that went. Left
+     * alone the transfer sits there until the read times out; told that the
+     * network moved, it should drop the dead connection and resume.
+     */
+    @Test
+    fun `a network change reconnects a frozen transfer instead of waiting`() = runBlocking {
+        // Stalls only the first data connection, so the reconnect can finish.
+        val stalled = restartServerStalling(stallTimes = 1)
+        val manager = newManager()
+        val id = enqueue(manager, "moved.bin", FILE_SIZE)
+
+        val queue = async { drain(manager) }
+        awaitBytes(manager, id, atLeast = stalled.toLong())
+        awaitFrozen(manager, id)
+
+        val held = bytesRecorded(id)
+        val mark = log.log.value.size
+        manager.onNetworkChanged()
+        withTimeout(PAUSE_DEADLINE_MILLIS) { queue.await() }
+
+        assertEquals(TransferState.COMPLETED, stateOf(id))
+        assertResumedInsideTheAttempt(held, mark)
+        assertArrayEquals(FtpsTestServer.contentOf(FILE_SIZE), bytesOf(id))
+    }
+
+    /**
+     * Fails unless the engine picked up where the dead connection left off.
+     *
+     * Deliberately not [assertResumedNotRestarted], which reads the queue's
+     * resume decision: there is no second queue pass here. The engine
+     * reconnected inside the one attempt, so the evidence is the `REST` it
+     * sent -- and without it the test would pass on a transfer that quietly
+     * fetched the whole file again, which is what it costs the user.
+     */
+    private fun assertResumedInsideTheAttempt(atLeast: Long, since: Int) {
+        val lines = log.log.value.drop(since).map { it.message }
+        val rest = lines.filter { it.startsWith("REST ") }
+        assertTrue("the engine reconnected but never resumed; it logged $lines", rest.isNotEmpty())
+        val offset = rest.last().removePrefix("REST ").trim().toLong()
+        assertTrue(
+            "resumed from $offset bytes, which is less than the $atLeast already fetched",
+            offset >= atLeast && offset > 0,
+        )
+    }
+
+    /** Replaces the throttled server with one that goes silent partway. */
+    private suspend fun restartServerStalling(stallTimes: Int = 0): Int {
+        server.stop()
+        server = FtpsTestServer(stallAfterBytes = STALL_AT, stallTimes = stallTimes)
+        server.start()
+        database.sites().upsert(site())
+        return STALL_AT
+    }
+
+    /**
+     * Waits until the transfer has stopped receiving.
+     *
+     * Without this the stop could land between two chunks of a transfer that
+     * is still moving, which every version of this code handles -- and the
+     * test would prove nothing about the one that does not.
+     */
+    private suspend fun awaitFrozen(manager: TransferManager, id: String) {
+        withTimeout(30_000) {
+            var last = -1L
+            var still = 0
+            while (still < 10) {
+                val now = manager.activeTransfers.value[id]?.bytes ?: 0
+                still = if (now == last) still + 1 else 0
+                last = now
+                kotlinx.coroutines.delay(50)
+            }
+        }
     }
 
     /** Polls the journal until the transfer reaches [state]. */

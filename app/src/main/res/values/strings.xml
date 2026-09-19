@@ -166,6 +166,7 @@
     <string name="state_waiting_for_network">Waiting for Wi‑Fi</string>
     <string name="state_completed">Done</string>
     <string name="state_failed">Failed</string>
+    <string name="state_reconnecting">Reconnecting…</string>
     <string name="queue_attempt">attempt %1$d</string>
 
     <string name="fail_offline">No network connection</string>

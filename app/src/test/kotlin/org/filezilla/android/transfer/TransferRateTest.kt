@@ -1,6 +1,7 @@
 package org.filezilla.android.transfer
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -111,5 +112,34 @@ class TransferRateTest {
     @Test
     fun `a finished transfer has no estimate`() {
         assertNull(secondsRemaining(bytes = 1_000, totalBytes = 1_000, bytesPerSecond = 100))
+    }
+
+    // ------------------------------------------------- a transfer gone quiet
+
+    /**
+     * The card in the user's screenshot: 267.9 kB of 2.0 GB at 43.9 kB/s, and
+     * none of it moving. Progress is pushed when bytes arrive, so a transfer
+     * whose network has gone leaves the last figures on screen for ever --
+     * and the speed is the one that lies, since it is the one that claims
+     * something is still happening.
+     */
+    @Test
+    fun `a transfer that has not moved for seconds counts as stalled`() {
+        assertTrue(isStalled(updatedAtMillis = 1_000, nowMillis = 1_000 + STALL_AFTER_MILLIS))
+    }
+
+    @Test
+    fun `a transfer that reported a moment ago does not`() {
+        assertFalse(isStalled(updatedAtMillis = 1_000, nowMillis = 1_000 + STALL_AFTER_MILLIS - 1))
+    }
+
+    /**
+     * A transfer that has never reported is not stalled; it has not started.
+     * Treating the two the same would put "reconnecting" on every card the
+     * moment the queue picked it up.
+     */
+    @Test
+    fun `a transfer that has never reported is not stalled`() {
+        assertFalse(isStalled(updatedAtMillis = 0, nowMillis = 10_000_000))
     }
 }

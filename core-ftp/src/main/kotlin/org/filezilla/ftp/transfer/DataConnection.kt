@@ -47,7 +47,14 @@ internal class DataConnection(
     private val logger: FtpLogger,
 ) : Closeable {
 
+    // Volatile because [close] is now also called from another thread -- it is
+    // how a caller ends a read that would otherwise wait out the socket's
+    // timeout; see [TransferAbort]. Without it that thread could read a stale
+    // null and close nothing, and the abort would silently do nothing at all.
+    @Volatile
     private var socket: Socket? = null
+
+    @Volatile
     private var listener: ServerSocket? = null
 
     /**

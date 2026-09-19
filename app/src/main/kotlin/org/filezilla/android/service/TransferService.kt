@@ -51,6 +51,11 @@ class TransferService : LifecycleService() {
             }
             repostIdleNotification()
         }
+        // Distinct from the above: swapping Wi-Fi for mobile data leaves the
+        // queue allowed the whole way through, so onAllowedChanged never
+        // fires -- and the transfer sits on a socket bound to a network that
+        // is gone.
+        graph.networkGate.onNetworkChanged = { graph.transfers.onNetworkChanged() }
         graph.networkGate.start()
 
         // The notification is rebuilt as the transfer moves, so the user can

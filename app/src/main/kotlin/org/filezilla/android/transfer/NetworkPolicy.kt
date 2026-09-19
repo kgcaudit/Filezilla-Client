@@ -83,7 +83,15 @@ interface TransferGate {
     @Throws(InterruptedException::class)
     fun awaitAllowed()
 
-    /** The `sleep` a retrying transfer is given; see [NetworkGate.waitBeforeRetry]. */
+    /**
+     * The `sleep` a retrying transfer is given; see
+     * [NetworkGate.waitBeforeRetry].
+     *
+     * [stopped] is polled while waiting so that a pause pressed here is
+     * noticed here. This wait is where a transfer sits out a phone with no
+     * signal, for up to ten minutes -- which is exactly when the user reaches
+     * for the pause button, and, before this, exactly when it did nothing.
+     */
     @Throws(InterruptedException::class)
-    fun waitBeforeRetry(backoffMillis: Long)
+    fun waitBeforeRetry(backoffMillis: Long, stopped: () -> Boolean = { false })
 }
