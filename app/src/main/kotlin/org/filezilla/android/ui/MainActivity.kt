@@ -387,6 +387,14 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                 onResume = { id ->
                     model.resume(id)
                     TransferService.start(context)
+                    // Restarting a transfer the network still rules out puts
+                    // it straight back to waiting. Saying so beats letting the
+                    // button look broken.
+                    if (!model.transfersAllowedNow()) {
+                        scope.launch {
+                            snackbars.showSnackbar(context.getString(R.string.queue_still_waiting_wifi))
+                        }
+                    }
                 },
                 onCancel = model::cancel,
                 modifier = Modifier.padding(padding),

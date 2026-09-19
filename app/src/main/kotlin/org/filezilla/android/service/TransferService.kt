@@ -38,7 +38,7 @@ class TransferService : LifecycleService() {
         notifications = TransferNotifications(this)
         notifications.ensureChannel()
 
-        graph.networkGate.policy = graph.preferences.networkPolicy
+        // The policy comes with the gate; see AppGraph.
         graph.networkGate.onAllowedChanged = { allowed ->
             if (allowed) {
                 // The queue loop is parked in awaitAllowed and wakes itself;

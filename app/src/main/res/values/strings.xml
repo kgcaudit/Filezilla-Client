@@ -147,6 +147,8 @@
     <string name="queue_empty_detail">Tap a file on the Files tab to download it. Transfers keep running when you leave the app.</string>
     <string name="queue_pause">Pause</string>
     <string name="queue_resume">Resume</string>
+    <string name="queue_retry_now">Try again now</string>
+    <string name="queue_still_waiting_wifi">Still on mobile data; it will continue when Wi‑Fi is back</string>
     <string name="queue_remove">Remove from the list</string>
     <string name="queue_clear_finished">Clear finished transfers</string>
     <string name="queue_start">Start the queue</string>

@@ -538,4 +538,40 @@ class ResumeIntegrationTest {
             while (stateOf(id) != state) kotlinx.coroutines.delay(20)
         }
     }
+
+    /**
+     * The "try again now" button, on the state it exists for.
+     *
+     * A transfer left waiting for a network that is in fact fine is exactly
+     * where the user reaches for it, so pressing it has to be enough on its
+     * own -- no second interruption, no restart of the app.
+     */
+    @Test
+    fun `restarting a network-held transfer by hand runs it`() = runBlocking {
+        val size = FILE_SIZE
+        val manager = newManager()
+        val id = enqueue(manager, "byhand.bin", size)
+
+        val queue = async { drain(manager) }
+        awaitBytes(manager, id, atLeast = INTERRUPT_AT)
+        openGate.set(false)
+        manager.onNetworkDisallowed()
+        awaitState(id, TransferState.WAITING_FOR_NETWORK)
+        manager.requestStop()
+        openGate.set(true)
+        queue.await()
+
+        // Stuck: held for the network, on a network that is fine.
+        assertEquals(TransferState.WAITING_FOR_NETWORK, stateOf(id))
+        val held = bytesRecorded(id)
+
+        // What the button does.
+        val mark = log.log.value.size
+        manager.resume(id)
+        drain(newManager())
+
+        assertEquals(TransferState.COMPLETED, stateOf(id))
+        assertResumedNotRestarted("byhand.bin", held, mark)
+        assertArrayEquals(FtpsTestServer.contentOf(size), bytesOf(id))
+    }
 }

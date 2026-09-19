@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalIconButton
@@ -144,10 +145,16 @@ private fun TransferCard(
                             Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.queue_resume))
                         }
 
-                    // No resume button: this one starts again by itself, and a
-                    // button that cannot do anything until the network changes
-                    // would only look broken. Cancel still works.
-                    TransferState.WAITING_FOR_NETWORK -> Unit
+                    // It does start again by itself, but "by itself" is no
+                    // comfort to someone watching it not happen. The button is
+                    // the way out when the automatic path has not fired.
+                    TransferState.WAITING_FOR_NETWORK ->
+                        FilledTonalIconButton(onClick = onResume) {
+                            Icon(
+                                Icons.Filled.Refresh,
+                                contentDescription = stringResource(R.string.queue_retry_now),
+                            )
+                        }
 
                     TransferState.COMPLETED -> Unit
                 }

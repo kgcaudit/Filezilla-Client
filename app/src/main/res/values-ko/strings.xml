@@ -146,6 +146,8 @@
     <string name="queue_empty_detail">파일 탭에서 파일을 누르면 내려받습니다. 앱을 벗어나도 전송은 계속됩니다.</string>
     <string name="queue_pause">일시정지</string>
     <string name="queue_resume">이어받기</string>
+    <string name="queue_retry_now">지금 다시 시도</string>
+    <string name="queue_still_waiting_wifi">아직 모바일 데이터입니다. 와이파이가 돌아오면 이어서 받습니다</string>
     <string name="queue_remove">목록에서 제거</string>
     <string name="queue_clear_finished">완료된 항목 지우기</string>
     <string name="queue_start">전송 시작</string>

@@ -33,7 +33,15 @@ class AppGraph private constructor(context: Context) {
     val database: AppDatabase = AppDatabase.open(app, passwords)
     val preferences = AppPreferences(app)
     val log = AppLog()
-    val networkGate = NetworkGate(app)
+    /**
+     * Carries the saved Wi-Fi-only setting from the moment it is built.
+     *
+     * Set here rather than when the transfer service starts, so that anything
+     * asking whether a transfer may run right now gets the same answer the
+     * queue would give -- the service is not always running when the question
+     * is asked.
+     */
+    val networkGate = NetworkGate(app).apply { policy = preferences.networkPolicy }
 
     private val partials = PartialFiles(app)
     val storage = SafStorage(app)

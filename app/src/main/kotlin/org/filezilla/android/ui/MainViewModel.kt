@@ -102,6 +102,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         graph.networkGate.policy = graph.preferences.networkPolicy
     }
 
+    /**
+     * Whether a transfer started now would actually run.
+     *
+     * False when the user asked for Wi-Fi only and the phone is on mobile
+     * data. The queue screen uses it to explain why a transfer it was just
+     * told to restart has gone back to waiting, rather than leaving the button
+     * looking broken in exactly the case it is most likely to be pressed.
+     */
+    fun transfersAllowedNow(): Boolean = graph.networkGate.currentlyAllowed()
+
     /** Set once the user has picked a folder for downloads to land in. */
     var downloadFolder by mutableStateOf(graph.preferences.downloadFolder)
         private set
