@@ -209,4 +209,17 @@
     <plurals name="conflict_title">
         <item quantity="other">같은 이름의 파일이 %d개 있습니다</item>
     </plurals>
+    <string name="storage_internal">내부 저장소</string>
+    <string name="storage_downloads">다운로드</string>
+    <string name="storage_this_device">내 파일</string>
+    <string name="storage_permission_title">파일에 접근할 수 있게 해주세요</string>
+    <string name="storage_permission_detail">휴대폰을 탐색하고 서버와 파일을 주고받으려면 저장소 접근 권한이 필요합니다. 요청하지 않은 파일은 전송되지 않습니다.</string>
+    <string name="storage_permission_action">권한 허용</string>
+    <string name="storage_unavailable_title">이 안드로이드 버전에서는 불가능합니다</string>
+    <string name="storage_unavailable_detail">안드로이드 10은 전체 저장소 접근도, 이를 대체한 권한도 지원하지 않습니다. 휴대폰 탐색은 안드로이드 11 이상이 필요합니다.</string>
+    <string name="storage_up">상위 폴더로</string>
+    <string name="storage_empty_title">빈 폴더입니다</string>
+    <string name="storage_empty_detail">아직 아무것도 없습니다.</string>
+    <string name="side_local">내 파일</string>
+    <string name="side_remote">서버</string>
 </resources>

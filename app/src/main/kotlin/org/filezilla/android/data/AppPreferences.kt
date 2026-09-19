@@ -37,6 +37,18 @@ class AppPreferences(context: Context) {
         get() = if (wifiOnly) NetworkPolicy.UNMETERED else NetworkPolicy.ANY
 
     /**
+     * The folder the local pane was last looking at.
+     *
+     * Remembered for the same reason the sort is: a file manager that opens
+     * on the same folder every time makes the user walk back down to where
+     * they were, every time. Null until they have been somewhere, which is
+     * what lets the default apply on a first run and not afterwards.
+     */
+    var localPath: String?
+        get() = prefs.getString(KEY_LOCAL_PATH, null)
+        set(value) = prefs.edit().putString(KEY_LOCAL_PATH, value).apply()
+
+    /**
      * How this person likes a directory shown. Remembered, because re-picking
      * the sort every time the app opens is exactly the kind of small friction
      * that makes a tool feel unfinished.
@@ -65,6 +77,7 @@ class AppPreferences(context: Context) {
 
     private companion object {
         const val KEY_DOWNLOAD_FOLDER = "download_folder"
+        const val KEY_LOCAL_PATH = "local_path"
         const val KEY_SORT = "browse_sort"
         const val KEY_ASCENDING = "browse_ascending"
         const val KEY_FOLDERS_FIRST = "browse_folders_first"

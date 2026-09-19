@@ -6,6 +6,9 @@ import org.filezilla.android.data.AppPreferences
 import org.filezilla.android.data.KeystorePasswordCipher
 import org.filezilla.android.data.PasswordCipher
 import org.filezilla.android.data.RoomTransferJournal
+import org.filezilla.android.files.LocalFileSource
+import org.filezilla.android.files.StorageAccess
+import org.filezilla.android.files.StorageVolumes
 import org.filezilla.android.storage.PartialFiles
 import org.filezilla.android.storage.SafStorage
 import org.filezilla.android.transfer.AppLog
@@ -45,6 +48,11 @@ class AppGraph private constructor(context: Context) {
 
     private val partials = PartialFiles(app)
     val storage = SafStorage(app)
+
+    /** Whether the file panes can see the device's storage, and how to ask. */
+    val storageAccess = StorageAccess(app)
+    val volumes = StorageVolumes(app)
+    val localFiles = LocalFileSource(label = app.getString(org.filezilla.android.R.string.storage_this_device))
 
     val transfers = TransferManager(
         database = database,

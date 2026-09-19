@@ -18,6 +18,9 @@ import org.filezilla.android.storage.DownloadDestination
 import kotlinx.coroutines.launch
 import org.filezilla.android.AppGraph
 import org.filezilla.android.data.SiteEntity
+import org.filezilla.android.files.AccessRoute
+import org.filezilla.android.files.FilePath
+import org.filezilla.android.files.StorageRoot
 import org.filezilla.android.transfer.ActiveProgress
 import org.filezilla.android.transfer.LogLine
 import org.filezilla.ftp.journal.TransferRecord
@@ -56,6 +59,21 @@ data class BrowseState(
         selection = if (name in selection) selection - name else selection + name,
     )
 }
+
+/** Which side the file tab is showing. The seed of the two panes. */
+enum class FileSide { LOCAL, REMOTE }
+
+/** What the local pane is showing, and why it is not showing anything. */
+data class LocalBrowseState(
+    val path: String = "",
+    val entries: List<DirectoryEntry> = emptyList(),
+    val loading: Boolean = false,
+    /** Already readable; the pane has nowhere better to put a failure. */
+    val error: String? = null,
+    /** False while the app cannot see the device's storage at all. */
+    val granted: Boolean = false,
+    val route: AccessRoute = AccessRoute.ALL_FILES_SETTING,
+)
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -118,6 +136,87 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val downloadFolderName: String?
         get() = downloadFolder?.let { graph.storage.displayNameOfTree(it) }
+
+    // ------------------------------------------------------------ local files
+
+    /**
+     * Which side the file tab shows. One switch now, two panes later; the
+     * state it reads is already split by side so that adding the second is
+     * laying them out rather than pulling them apart.
+     */
+    var fileSide by mutableStateOf(FileSide.LOCAL)
+        private set
+
+    fun showSide(side: FileSide) {
+        fileSide = side
+        if (side == FileSide.LOCAL && local.entries.isEmpty()) refreshLocalAccess()
+    }
+
+    var local by mutableStateOf(LocalBrowseState())
+        private set
+
+    /** The volumes and shortcuts the local pane can jump to. */
+    fun storageRoots(): List<StorageRoot> = graph.volumes.roots()
+
+    /**
+     * Re-asks the platform whether the app may read storage, and lists if so.
+     *
+     * Called again every time the screen comes back, because granting this
+     * happens in Settings -- the user leaves the app to do it, and something
+     * has to notice that they did. Remembering the answer instead would show
+     * them an empty pane after they had just said yes.
+     */
+    fun refreshLocalAccess() {
+        val granted = graph.storageAccess.isGranted()
+        local = local.copy(granted = granted, route = graph.storageAccess.route)
+        if (!granted) {
+            local = local.copy(entries = emptyList(), error = null)
+            return
+        }
+        openLocal(local.path.ifEmpty { graph.preferences.localPath ?: graph.volumes.defaultPath() })
+    }
+
+    /** Lists [path] and remembers it as where this pane was left. */
+    fun openLocal(path: String) {
+        val target = FilePath.normalize(path)
+        local = local.copy(path = target, loading = true, error = null)
+        viewModelScope.launch {
+            val rows = withContext(Dispatchers.IO) {
+                runCatching { graph.localFiles.list(target) }
+            }
+            local = rows.fold(
+                onSuccess = { entries ->
+                    graph.preferences.localPath = target
+                    local.copy(entries = entries, loading = false, error = null)
+                },
+                onFailure = { failure ->
+                    // The rows already on screen are left alone: replacing a
+                    // listing with nothing because one folder could not be
+                    // opened loses the user their place as well as the folder.
+                    local.copy(loading = false, error = failure.message ?: failure.javaClass.simpleName)
+                },
+            )
+        }
+    }
+
+    /** The local rows as the screen shows them, through the same sort as the remote pane. */
+    val visibleLocalEntries: List<DirectoryEntry>
+        get() = BrowseListing.arrange(local.entries, options, filter = "")
+
+    /** Where to send the user to grant access, or null when asking is the way. */
+    fun storageSettingsIntent(): android.content.Intent? = graph.storageAccess.settingsIntent()
+
+    fun storagePermissionsToRequest(): Array<String> = graph.storageAccess.permissionsToRequest()
+
+    fun openLocalChild(name: String) = openLocal(FilePath.child(local.path, name))
+
+    /** Walks up, or does nothing at the top rather than looping. */
+    fun localUp() {
+        FilePath.parent(local.path)?.let(::openLocal)
+    }
+
+    /** Whether there is anywhere above the current folder to go. */
+    fun canGoLocalUp(): Boolean = FilePath.parent(local.path) != null
 
     // ----------------------------------------------------------------- sites
 

@@ -211,4 +211,17 @@
         <item quantity="one">A file of this name is already there</item>
         <item quantity="other">%d files of these names are already there</item>
     </plurals>
+    <string name="storage_internal">Internal storage</string>
+    <string name="storage_downloads">Downloads</string>
+    <string name="storage_this_device">My files</string>
+    <string name="storage_permission_title">Let the app see your files</string>
+    <string name="storage_permission_detail">To browse the phone and move files between it and a server, the app needs access to your storage. Nothing is uploaded unless you ask for it.</string>
+    <string name="storage_permission_action">Grant access</string>
+    <string name="storage_unavailable_title">Not available on this Android version</string>
+    <string name="storage_unavailable_detail">Android 10 allows neither full storage access nor the permission that replaced it. Browsing the phone needs Android 11 or later.</string>
+    <string name="storage_up">Up one folder</string>
+    <string name="storage_empty_title">This folder is empty</string>
+    <string name="storage_empty_detail">Nothing here yet.</string>
+    <string name="side_local">My files</string>
+    <string name="side_remote">Server</string>
 </resources>

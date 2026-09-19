@@ -5,6 +5,22 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!--
+        The file panes browse the device's own storage, which is what makes
+        this a file manager rather than a download client. Two ways in,
+        because the way in changed: Android 9 and below take the runtime
+        permission, Android 11 and up take the all-files setting. Android 10
+        takes neither and is limited to folders granted one at a time; see
+        AccessRoute, which is where that decision lives.
+    -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+
+    <!--
         A transfer has to keep running while the app is in the background, so
         it runs in a foreground service. dataSync is the type that covers
         "upload or download the user asked for"; Android 14+ refuses to start

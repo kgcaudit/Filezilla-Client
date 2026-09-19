@@ -141,6 +141,40 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
             queuedMessage(entry.name)
         }
 
+    // Two launchers because there are two ways in; see AccessRoute. Which one
+    // is used is the platform's decision, not a preference.
+    val storagePermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { model.refreshLocalAccess() }
+
+    val storageSettings = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { model.refreshLocalAccess() }
+
+    fun requestStorageAccess() {
+        val intent = model.storageSettingsIntent()
+        if (intent != null) {
+            storageSettings.launch(intent)
+        } else {
+            model.storagePermissionsToRequest()
+                .takeIf { it.isNotEmpty() }
+                ?.let(storagePermission::launch)
+        }
+    }
+
+    // Granting all-files access happens in Settings, so the user leaves the
+    // app to do it and something has to notice they came back having said
+    // yes. Without this the pane stays on its permission screen until the
+    // app is restarted, which reads as the grant not having worked.
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) model.refreshLocalAccess()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { /* The transfer runs either way; without it the progress is just invisible. */ }
@@ -407,7 +441,29 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                 modifier = Modifier.padding(padding),
             )
 
-            Tab.BROWSE -> BrowseScreen(
+            Tab.BROWSE -> Column(modifier = Modifier.padding(padding)) {
+                SideSwitch(
+                    side = model.fileSide,
+                    remoteLabel = model.browse.site?.name?.ifBlank { model.browse.site?.host.orEmpty() },
+                    onSelect = model::showSide,
+                )
+                when (model.fileSide) {
+                    FileSide.LOCAL -> LocalFilesScreen(
+                        path = model.local.path,
+                        rows = model.visibleLocalEntries,
+                        roots = model.storageRoots(),
+                        granted = model.local.granted,
+                        route = model.local.route,
+                        loading = model.local.loading,
+                        error = model.local.error,
+                        canGoUp = model.canGoLocalUp(),
+                        onOpen = { model.openLocalChild(it.name) },
+                        onUp = model::localUp,
+                        onOpenPath = model::openLocal,
+                        onGrant = ::requestStorageAccess,
+                    )
+
+                    FileSide.REMOTE -> BrowseScreen(
                 state = model.browse,
                 rows = model.visibleEntries,
                 options = model.options,
@@ -425,8 +481,9 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                     onProperties = { model.showProperties(it) },
                     onToggleSelected = { model.toggleSelected(it.name) },
                 ),
-                modifier = Modifier.padding(padding),
-            )
+                    )
+                }
+            }
 
             Tab.QUEUE -> QueueScreen(
                 transfers = transfers,
