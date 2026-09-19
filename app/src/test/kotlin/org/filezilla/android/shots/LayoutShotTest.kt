@@ -9,11 +9,18 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import org.filezilla.android.R
+import org.filezilla.android.ui.FlatIcon
 import androidx.test.core.app.ApplicationProvider
+import org.filezilla.android.data.SiteEntity
 import org.filezilla.android.ui.BrowseScreen
+import org.filezilla.android.ui.SitesScreen
 import org.filezilla.android.ui.FilePanes
 import org.filezilla.android.ui.EntryActions
 import org.filezilla.android.ui.MainViewModel
@@ -23,6 +30,8 @@ import org.filezilla.android.ui.PaneSource
 import org.filezilla.android.ui.StoragePlaces
 import org.filezilla.android.ui.theme.OloTheme
 import org.filezilla.ftp.listing.DirectoryEntry
+import org.filezilla.ftp.protocol.FtpSecurity
+import org.filezilla.ftp.protocol.TransferMode
 import org.filezilla.ftp.listing.EntryTime
 import org.filezilla.ftp.listing.TimeAccuracy
 import org.junit.Test
@@ -152,6 +161,101 @@ class LayoutShotTest {
                     onToggleSelected = {},
                 ),
             )
+        }
+    }
+
+    /** The sites list, where a server says how it is reached before it is tapped. */
+    @Test
+    fun `the sites list`() {
+        val sites = listOf(
+            site(1, "Office NAS", "nas.example.org", 21, "bob", FtpSecurity.EXPLICIT_TLS),
+            site(2, "Backup", "backup.example.org", 990, "archive", FtpSecurity.IMPLICIT_TLS),
+            site(3, "", "10.0.0.7", 21, "anonymous", FtpSecurity.PLAIN),
+        )
+        shoot("sites", height = 760) {
+            SitesScreen(
+                sites = sites,
+                editing = null,
+                onEdit = {},
+                onSave = {},
+                onDelete = {},
+                onConnect = {},
+                onMove = { _, _ -> },
+            )
+        }
+    }
+
+    private fun site(
+        id: Int,
+        name: String,
+        host: String,
+        port: Int,
+        user: String,
+        security: FtpSecurity,
+    ) = SiteEntity(
+        id = id.toString(),
+        name = name,
+        host = host,
+        port = port,
+        user = user,
+        passwordCipher = "",
+        security = security.name,
+        transferMode = TransferMode.DEFAULT.name,
+        trustAllCertificates = false,
+        initialPath = null,
+        position = id,
+    )
+
+    /**
+     * Every icon in the pack, on the chip it is shown on and at the size it
+     * is shown at. The one place the whole set can be compared with itself.
+     */
+    @Test
+    fun `the icon sheet`() {
+        shoot("icons", height = 900) {
+            IconSheet()
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-night-xhdpi")
+    fun `the icon sheet at night`() {
+        shoot("icons-night", height = 900) {
+            IconSheet()
+        }
+    }
+
+    @Composable
+    private fun IconSheet() {
+        val icons = listOf(
+            "file" to R.drawable.ic_flat_file,
+            "folder" to R.drawable.ic_flat_folder,
+            "server" to R.drawable.ic_flat_server,
+            "search" to R.drawable.ic_flat_search,
+            "warning" to R.drawable.ic_flat_warning,
+            "phone" to R.drawable.ic_flat_phone,
+            "sdcard" to R.drawable.ic_flat_sdcard,
+            "locked" to R.drawable.ic_flat_locked,
+            "secure" to R.drawable.ic_flat_secure,
+            "transfers" to R.drawable.ic_flat_transfers,
+            "log" to R.drawable.ic_flat_log,
+        )
+        for (row in icons.chunked(4)) {
+            androidx.compose.foundation.layout.Row(modifier = Modifier.fillMaxWidth()) {
+                for ((name, id) in row) {
+                    androidx.compose.foundation.layout.Column(
+                        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                        modifier = Modifier.weight(1f).padding(12.dp),
+                    ) {
+                        FlatIcon(id, contentDescription = null, chipSize = 48.dp)
+                        androidx.compose.material3.Text(
+                            name,
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                }
+            }
         }
     }
 

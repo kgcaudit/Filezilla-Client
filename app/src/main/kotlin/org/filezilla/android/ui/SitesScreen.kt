@@ -40,6 +40,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import org.filezilla.android.R
@@ -111,11 +113,33 @@ fun SitesScreen(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
-                            Text(
-                                securityLabel(site.securityEnum),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
+                            // Whether the login travels in the clear is the
+                            // one thing worth knowing about a server before
+                            // tapping it, and it was a line of small blue
+                            // text that read like a protocol note. A shield
+                            // or a warning says which of the two it is
+                            // without being read.
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                val plain = site.securityEnum == FtpSecurity.PLAIN
+                                Icon(
+                                    painter = painterResource(
+                                        if (plain) R.drawable.ic_flat_warning
+                                        else R.drawable.ic_flat_secure,
+                                    ),
+                                    contentDescription = null,
+                                    // Unbounded, or Material flattens the
+                                    // artwork to one colour and the amber and
+                                    // the green become the same mark.
+                                    tint = Color.Unspecified,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                                Text(
+                                    securityLabel(site.securityEnum),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(start = 4.dp),
+                                )
+                            }
                         }
                         IconButton(onClick = { onEdit(site) }) {
                             Icon(

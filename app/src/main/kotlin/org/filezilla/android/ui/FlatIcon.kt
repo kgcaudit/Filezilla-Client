@@ -23,12 +23,15 @@ import androidx.compose.ui.unit.dp
  * pale chip in both themes keeps every icon on the background it was drawn
  * for, and costs nothing -- the rows already drew a chip.
  *
- * Darker than it first was, because the file icon is a pale page with three
- * dark lines on it and the first chip was within a shade of the page: the
- * page vanished into the chip, and every file in every listing was drawn as
- * three floating bars that read as a list icon.
+ * White, because that is the background the artwork was drawn against. The
+ * first chip was a pale blue-grey within a shade of the file icon's own page:
+ * the page vanished into it, and every file in every listing was drawn as
+ * three floating bars that read as a list icon. Darkening the chip fixed that
+ * and spoiled the rest -- the copy icon's second sheet went the same way --
+ * because the problem was never the chip's darkness. It was that the artwork
+ * assumes white behind it, and anything else is a fight with it.
  */
-val FlatIconChip = Color(0xFFC3D4E6)
+val FlatIconChip = Color(0xFFFFFFFF)
 
 /**
  * One of the app's own icons, on the chip that keeps it legible.
@@ -58,42 +61,6 @@ fun FlatIcon(
             // Unspecified, or Material would flatten the artwork to one colour.
             tint = Color.Unspecified,
             modifier = Modifier.size(chipSize * 0.6f),
-        )
-    }
-}
-
-/**
- * The same chip, carrying a Material glyph instead of artwork.
- *
- * For the things the app has no drawing of -- a phone's own storage, a memory
- * card. Using the file artwork for those was worse than a plain glyph: it
- * says "file" beside something that is not one, and at chip size its three
- * strokes read as a list.
- *
- * Tinted, unlike [FlatIcon], because a single-colour glyph can be and the
- * chip is pale enough to want it.
- */
-@Composable
-fun ChipIcon(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    contentDescription: String?,
-    modifier: Modifier = Modifier,
-    chipSize: Dp = 40.dp,
-    cornerRadius: Dp = 11.dp,
-    tint: Color = androidx.compose.material3.MaterialTheme.colorScheme.primary,
-) {
-    Box(
-        modifier = modifier
-            .size(chipSize)
-            .clip(RoundedCornerShape(cornerRadius))
-            .background(FlatIconChip),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = tint,
-            modifier = Modifier.size(chipSize * 0.55f),
         )
     }
 }

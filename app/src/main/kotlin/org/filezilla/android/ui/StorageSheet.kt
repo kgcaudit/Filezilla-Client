@@ -8,11 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.SdCard
-import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -25,7 +20,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -90,7 +84,7 @@ fun StoragePlaces(
                 // storage and leaving it there is a dead end, and this list
                 // is exactly where someone has come looking for their files.
                 PlaceRow(
-                    icon = Icons.Filled.Lock,
+                    artwork = R.drawable.ic_flat_locked,
                     title = stringResource(R.string.storage_not_granted),
                     subtitle = stringResource(R.string.storage_grant_action),
                     onClick = {
@@ -106,10 +100,10 @@ fun StoragePlaces(
                 // sheet animates.
                 val capacity = remember(root.path) { model.capacityOf(root.path) }
                 PlaceRow(
-                    icon = when (root.kind) {
-                        StorageRoot.Kind.INTERNAL -> Icons.Filled.Smartphone
-                        StorageRoot.Kind.SD_CARD -> Icons.Filled.SdCard
-                        StorageRoot.Kind.SHORTCUT -> Icons.Filled.Folder
+                    artwork = when (root.kind) {
+                        StorageRoot.Kind.INTERNAL -> R.drawable.ic_flat_phone
+                        StorageRoot.Kind.SD_CARD -> R.drawable.ic_flat_sdcard
+                        StorageRoot.Kind.SHORTCUT -> R.drawable.ic_flat_folder
                     },
                     title = root.label,
                     // Not the path. It is long, it is the same for every row
@@ -182,20 +176,13 @@ private fun SectionLabel(text: String) {
     )
 }
 
-/**
- * One place a pane can be sent to, with room underneath for what it is.
- *
- * Takes either a Material glyph or one of the app's own drawings, because the
- * two kinds of place are drawn differently on purpose: a server has artwork,
- * and the phone's own storage does not.
- */
+/** One place a pane can be sent to, with room underneath for what it is. */
 @Composable
 private fun PlaceRow(
+    @DrawableRes artwork: Int,
     title: String,
     subtitle: String?,
     onClick: () -> Unit,
-    icon: ImageVector? = null,
-    @DrawableRes artwork: Int? = null,
     extra: @Composable () -> Unit = {},
 ) {
     Row(
@@ -205,13 +192,7 @@ private fun PlaceRow(
             .padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        when {
-            artwork != null ->
-                FlatIcon(artwork, contentDescription = null, chipSize = 38.dp, cornerRadius = 11.dp)
-
-            icon != null ->
-                ChipIcon(icon, contentDescription = null, chipSize = 38.dp, cornerRadius = 11.dp)
-        }
+        FlatIcon(artwork, contentDescription = null, chipSize = 38.dp, cornerRadius = 11.dp)
         Column(modifier = Modifier.weight(1f).padding(start = 14.dp)) {
             Text(
                 title,

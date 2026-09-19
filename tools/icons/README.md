@@ -8,7 +8,7 @@ control has to tint with its state and multi-coloured artwork cannot.
 
 | Script | Does |
 | --- | --- |
-| `build_icons.py` | Traces the artwork to vector drawables, recolouring as it goes |
+| `build_from_svg.py` | Converts the pack's SVG sources to vector drawables, recolouring as it goes |
 | `authored.py` | Draws the icons the artwork does not contain, and the launcher |
 | `preview.py` | Renders the drawables at the sizes they are shown at |
 | `screen_preview.py` | Puts them in the rows, the tab bar and the empty screens, light and dark |
@@ -18,8 +18,8 @@ control has to tint with its state and multi-coloured artwork cannot.
 ## Rebuilding
 
 ```
-pip install vtracer cairosvg pillow
-python3 tools/icons/build_icons.py <artwork-dir>
+pip install cairosvg pillow
+python3 tools/icons/build_from_svg.py
 python3 tools/icons/authored.py
 python3 tools/icons/screen_preview.py   # then look at it
 ```
@@ -29,9 +29,29 @@ into the script that produced them, or it is lost the next time anyone runs it.
 
 ## The decisions behind it
 
-**Vector, not PNG.** The artwork is solid colour with no gradients, so a trace
-reproduces it exactly while giving one 1–2 KB file that stays sharp at any
-size. Shipping PNGs would mean five density buckets of every icon.
+**White behind the artwork.** The pack is drawn for a white background, and
+`FlatIconChip` is white for that reason. It was a pale blue-grey at first,
+within a shade of the file icon's own page: the page vanished into the chip
+and every file in every listing was drawn as three floating bars that read as
+a list icon. Darkening the chip cured that one and spoiled the copy icon the
+same way, because the chip's darkness was never the problem.
+
+**What the pack is not used for.** The bar across the bottom of a selection
+looks like the obvious next place for it, and the pack cannot furnish it:
+there is no scissors, so cut would stay a Material glyph beside five pieces of
+artwork. A bar of six icons that match beats five that match and one that does
+not.
+
+**From the SVG sources, not from a trace.** The artwork first arrived as
+512px PNGs, so the drawables were traced from them; `tools/icons/svg/` now
+holds the pack's own SVGs, which are the same drawings with their real
+geometry on the 24dp grid they were drawn on. An Android vector's `pathData`
+takes SVG path syntax as it stands, so nothing is redrawn — every path crosses
+over verbatim. The files are a third the size of the traced ones and exact
+rather than very close.
+
+**Vector, not PNG.** One 1 KB file that stays sharp at any size. Shipping
+PNGs would mean five density buckets of every icon.
 
 **Recoloured to the app's palette.** The artwork's blue is brighter and
 lighter than this app's Ocean; side by side they read as two palettes. Every
