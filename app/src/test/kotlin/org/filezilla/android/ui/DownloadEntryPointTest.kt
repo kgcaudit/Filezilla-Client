@@ -124,4 +124,30 @@ class DownloadEntryPointTest {
     }
 
     private fun memberContaining(call: String): String? = membersContaining(call).singleOrNull()
+
+    // --------------------------------------------------------- uploads
+
+    /**
+     * The same guard, the other way. Uploads queued straight from the paste
+     * asked the server nothing, and an upload that resumes onto a file
+     * already there appends to it -- so sending over an existing file spliced
+     * two of them together with nothing said.
+     */
+    @Test
+    fun `only the path that asked the server queues an upload`() {
+        assertEquals(setOf("queueUploads"), membersContaining("transfers.enqueueUpload("))
+    }
+
+    @Test
+    fun `queueing uploads is fed by the paths that looked at the server`() {
+        assertEquals(
+            setOf("sendToServer", "resolveUploadConflicts"),
+            membersContaining("queueUploads("),
+        )
+        // And the only way into that: a paste, or the app-bar picker.
+        assertEquals(
+            setOf("uploadHeld", "enqueueUpload"),
+            membersContaining("sendToServer("),
+        )
+    }
 }

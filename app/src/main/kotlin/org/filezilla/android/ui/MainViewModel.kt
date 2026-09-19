@@ -15,12 +15,14 @@ import kotlinx.coroutines.withContext
 import org.filezilla.android.storage.ConflictChoice
 import org.filezilla.android.storage.DownloadConflict
 import org.filezilla.android.storage.DownloadDestination
+import org.filezilla.android.storage.numberedName
 import kotlinx.coroutines.launch
 import org.filezilla.android.AppGraph
 import org.filezilla.android.data.SiteEntity
 import org.filezilla.android.files.AccessRoute
 import org.filezilla.android.files.FilePath
 import org.filezilla.android.files.LocalOperations
+import org.filezilla.android.files.LocalFileToSend
 import org.filezilla.android.files.LocalWalk
 import org.filezilla.android.files.localParent
 import org.filezilla.android.files.StorageRoot
@@ -429,7 +431,66 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Walks the held folders and queues every file under them. */
+    /**
+     * One thing on its way to a server.
+     *
+     * A file a pane walked to and a document the system picker returned are
+     * the same job once they are here, and giving them one shape is what lets
+     * both go through the one check -- the app-bar upload used to have a
+     * queueing path of its own, and it asked the server nothing.
+     */
+    data class Outgoing(
+        val source: Uri,
+        val name: String,
+        val size: Long?,
+        /** Folders to recreate on the server; empty for a file picked directly. */
+        val subPath: List<String>,
+    )
+
+    /** An upload waiting on the user to say what to do about files already there. */
+    data class PendingUpload(
+        val files: List<Outgoing>,
+        val site: SiteEntity,
+        val remoteDirectory: String,
+        val conflicts: List<DownloadConflict>,
+        /** The names the server already has, so the choice is applied to those. */
+        val clashing: Set<String>,
+    )
+
+    /** Set when the server already has files of the same name. */
+    var pendingUploadConflicts by mutableStateOf<PendingUpload?>(null)
+        private set
+
+    fun dismissUploadConflicts() {
+        pendingUploadConflicts = null
+    }
+
+    /** Goes ahead with [choice] applied to every clashing file. */
+    fun resolveUploadConflicts(choice: ConflictChoice, onQueued: (Int) -> Unit) {
+        val pending = pendingUploadConflicts ?: return
+        pendingUploadConflicts = null
+        viewModelScope.launch {
+            onQueued(
+                queueUploads(
+                    pending.files,
+                    pending.site,
+                    pending.remoteDirectory,
+                    choice,
+                    pending.clashing,
+                ),
+            )
+        }
+    }
+
+    /**
+     * Walks the held folders and queues every file under them.
+     *
+     * The server is asked what it already has before anything is queued. It
+     * was not, and an upload with resume left on treats a file already there
+     * as a half-sent copy of this one -- so sending over an existing file
+     * silently spliced two different files together, with nothing asked and
+     * nothing said.
+     */
     private fun uploadHeld(
         held: Clipboard,
         site: SiteEntity,
@@ -438,31 +499,147 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         viewModelScope.launch {
             val files = withContext(Dispatchers.IO) {
-                held.paths().flatMap { LocalWalk.filesUnder(it) }
+                held.paths().flatMap { LocalWalk.filesUnder(it) }.map {
+                    Outgoing(Uri.fromFile(java.io.File(it.path)), it.name, it.size, it.subPath)
+                }
             }
-            for (file in files) {
-                graph.transfers.enqueueUpload(
-                    site = site,
-                    // The folders a file sat in are recreated on the server,
-                    // so uploading a folder gives a folder rather than its
-                    // contents strewn across the one it landed in.
-                    remotePath = FilePath.child(
-                        remoteDirectory,
-                        (file.subPath + file.name).joinToString(FilePath.SEPARATOR.toString()),
-                    ),
-                    source = android.net.Uri.fromFile(java.io.File(file.path)),
-                    totalBytes = file.size,
-                )
-            }
-            if (held.mode == ClipboardMode.MOVE) {
-                // Not deleted here. A move whose upload has only been queued
-                // would remove the original before it had gone anywhere, and
-                // a failed transfer would then have lost the file.
-                clipboard = null
-            }
-            onQueued(files.size)
+            sendToServer(files, site, remoteDirectory, onQueued)
         }
     }
+
+    /**
+     * Asks the server what it already has, then queues what the user decided.
+     *
+     * The one way anything reaches the upload queue. Queued straight past
+     * this, an upload with resume left on treats a file already there as a
+     * half-sent copy of the one being sent and appends the rest -- so sending
+     * over an existing file spliced two different files together, with
+     * nothing asked and nothing said.
+     */
+    private fun sendToServer(
+        files: List<Outgoing>,
+        site: SiteEntity,
+        remoteDirectory: String,
+        onQueued: (Int) -> Unit,
+    ) {
+        viewModelScope.launch {
+            runCatching { remoteNames(site, remoteDirectory, files) }
+                .onSuccess { existing ->
+                    val conflicts = files.filter { it.name in existing }.map { file ->
+                        DownloadConflict(
+                            displayName = file.name,
+                            // The local copy is the one being sent, so it is
+                            // the "remote" side of the comparison from the
+                            // dialog's point of view -- the one arriving.
+                            remoteSize = file.size,
+                            remoteModifiedMillis = null,
+                            localSize = existing.getValue(file.name),
+                            localModifiedMillis = 0,
+                        )
+                    }
+                    if (conflicts.isEmpty()) {
+                        onQueued(
+                            queueUploads(
+                                files,
+                                site,
+                                remoteDirectory,
+                                ConflictChoice.DEFAULT,
+                                emptySet(),
+                            ),
+                        )
+                    } else {
+                        pendingUploadConflicts = PendingUpload(
+                            files,
+                            site,
+                            remoteDirectory,
+                            conflicts,
+                            conflicts.map { it.displayName }.toSet(),
+                        )
+                        onQueued(0)
+                    }
+                }
+                .onFailure { error ->
+                    update(activePane) {
+                        it.copy(error = describeFailure(error, graph.networkGate.currentlyOnline()))
+                    }
+                    onQueued(0)
+                }
+        }
+    }
+
+    /** What the destination folder on the server already holds, by name and size. */
+    private suspend fun remoteNames(
+        site: SiteEntity,
+        remoteDirectory: String,
+        files: List<Outgoing>,
+    ): Map<String, Long> {
+        // Only the folders the upload will actually write into, so a deep
+        // folder costs one listing per level rather than one per file.
+        val directories = files.map { it.subPath }.distinct()
+        return graph.transfers.browse(site) { session ->
+            buildMap {
+                for (subPath in directories) {
+                    val path = subPath.fold(remoteDirectory, FilePath::child)
+                    // A folder that is not there yet clashes with nothing.
+                    runCatching {
+                        session.changeDirectory(path)
+                        for (entry in session.list()) {
+                            if (!entry.isDirectory) put(entry.name, entry.size)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun queueUploads(
+        files: List<Outgoing>,
+        site: SiteEntity,
+        remoteDirectory: String,
+        choice: ConflictChoice,
+        clashing: Set<String>,
+    ): Int {
+        var queued = 0
+        val taken = clashing.toMutableSet()
+        for (file in files) {
+            val clashes = file.name in clashing
+            var name = file.name
+            if (clashes) {
+                when (choice) {
+                    ConflictChoice.SKIP -> continue
+                    ConflictChoice.OVERWRITE -> Unit
+                    ConflictChoice.KEEP_BOTH -> {
+                        // Numbered the same way a download is, so a file kept
+                        // beside another reads the same wherever it lands.
+                        var n = 1
+                        while (numberedName(file.name, n) in taken) n++
+                        name = numberedName(file.name, n)
+                        taken += name
+                    }
+                }
+            }
+            graph.transfers.enqueueUpload(
+                site = site,
+                // The folders a file sat in are recreated on the server, so
+                // uploading a folder gives a folder rather than its contents
+                // strewn across the one it landed in.
+                remotePath = FilePath.child(
+                    remoteDirectory,
+                    (file.subPath + name).joinToString(FilePath.SEPARATOR.toString()),
+                ),
+                source = file.source,
+                totalBytes = file.size,
+                overwrite = clashes && choice == ConflictChoice.OVERWRITE,
+            )
+            queued++
+        }
+        // Not deleted here, for a move. A move whose upload has only been
+        // queued would remove the original before it had gone anywhere, and a
+        // failed transfer would then have lost the file.
+        clipboard = null
+        return queued
+    }
+
 
     /** Queues the held remote files into an ordinary folder on the phone. */
     private fun downloadHeld(
@@ -531,8 +708,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }.exceptionOrNull()
             }
+            // Emptied whichever it was. Keeping a copy on the clipboard so it
+            // could be put down twice left the bar across the bottom of the
+            // screen for good, with no sign that anything had happened -- and
+            // putting the same thing in two places is rarer than wondering why
+            // the bar will not go away.
+            clipboard = null
             if (held.mode == ClipboardMode.MOVE) {
-                clipboard = null
                 // The folder the items left also has to be redrawn, or the
                 // other pane goes on showing things that are no longer there.
                 for (other in PaneId.entries) {
@@ -1035,20 +1217,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         downloadFolder = tree
     }
 
-    fun enqueueUpload(source: Uri, onQueued: () -> Unit) {
+    /**
+     * Sends a document the system picker returned.
+     *
+     * Through the same check as a paste. It had a queueing path of its own
+     * that asked the server nothing, so picking a file already on the server
+     * appended to it rather than asking -- the same fault as the paste, by a
+     * second route.
+     */
+    fun enqueueUpload(source: Uri, onQueued: (Int) -> Unit) {
         val site = browse.site ?: return
         val described = graph.storage.describeDocument(source) ?: return
         graph.storage.persistReadPermission(source)
         val (name, size) = described
-        viewModelScope.launch {
-            graph.transfers.enqueueUpload(
-                site = site,
-                remotePath = remotePathOf(browse.path, name),
-                source = source,
-                totalBytes = size.takeIf { it > 0 },
-            )
-            onQueued()
-        }
+        sendToServer(
+            listOf(Outgoing(source, name, size.takeIf { it > 0 }, emptyList())),
+            site,
+            browse.path,
+            onQueued,
+        )
     }
 
     fun pause(id: String) = viewModelScope.launch { graph.transfers.pause(id) }.let { }

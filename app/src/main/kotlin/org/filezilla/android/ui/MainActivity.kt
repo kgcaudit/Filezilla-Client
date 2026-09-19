@@ -200,7 +200,11 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
         ActivityResultContracts.OpenDocument(),
     ) { source: Uri? ->
         if (source == null) return@rememberLauncherForActivityResult
-        model.enqueueUpload(source) { TransferService.start(context) }
+        model.enqueueUpload(source) { count ->
+            // Zero means it is waiting on the conflict dialog, or the user
+            // chose to keep what was there. Nothing to start either way.
+            if (count > 0) TransferService.start(context)
+        }
         scope.launch { snackbars.showSnackbar(uploadQueuedMessage) }
     }
 
@@ -491,6 +495,31 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                 model.createDirectory(name)
                 creatingDirectory = false
             },
+        )
+    }
+
+    // The server already has files of these names. Asked before anything is
+    // sent, for the same reason a download asks: answering "skip" then costs
+    // no data at all.
+    model.pendingUploadConflicts?.let { pending ->
+        ConflictDialog(
+            conflicts = pending.conflicts,
+            onChoose = { choice ->
+                requestNotifications()
+                model.resolveUploadConflicts(choice) { count ->
+                    if (count > 0) TransferService.start(context)
+                    scope.launch {
+                        snackbars.showSnackbar(
+                            if (count == 0) {
+                                context.getString(R.string.conflict_skipped_all)
+                            } else {
+                                context.getString(R.string.queued_many, count)
+                            },
+                        )
+                    }
+                }
+            },
+            onDismiss = model::dismissUploadConflicts,
         )
     }
 

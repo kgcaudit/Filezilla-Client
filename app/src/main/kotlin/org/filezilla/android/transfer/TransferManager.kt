@@ -208,6 +208,14 @@ class TransferManager(
         remotePath: String,
         source: Uri,
         totalBytes: Long?,
+        /**
+         * Replace a file already on the server rather than resuming it.
+         *
+         * Carried in the destination column, which an upload does not
+         * otherwise use, so this needs no new column and records written
+         * before uploads could replace anything read back as false.
+         */
+        overwrite: Boolean = false,
     ): String = withContext(io) {
         val id = UUID.randomUUID().toString()
         journal.put(
@@ -219,7 +227,7 @@ class TransferManager(
                 user = site.user,
                 remotePath = remotePath,
                 localPath = source.toString(),
-                destination = null,
+                destination = if (overwrite) OVERWRITE_MARKER else null,
                 state = TransferState.PENDING,
                 totalBytes = totalBytes,
                 updatedAtMillis = System.currentTimeMillis(),
@@ -584,6 +592,10 @@ class TransferManager(
             abort = abort,
         ).upload(
             remoteFile = record.remotePath,
+            // Resume is what would otherwise treat a file already on the
+            // server as a half-sent copy of this one and append to it,
+            // splicing two different files together.
+            resume = uploadResumes(record.destination),
             progress = progressListener(record),
         ) { storage.readerFor(source) }
 
@@ -889,3 +901,23 @@ const val CONCURRENT_TRANSFERS = 2
  * long as the service lives, spending the user's data every time round.
  */
 fun hasExhaustedQueuePasses(attempts: Int): Boolean = attempts >= MAX_QUEUE_PASSES
+
+/**
+ * What an upload record's destination column says when it is a replacement.
+ *
+ * That column is the download's folder and an upload has no use for it, so it
+ * carries this instead -- no new column, and records written before uploads
+ * could replace anything read back as "not a replacement".
+ */
+const val OVERWRITE_MARKER = "overwrite"
+
+/**
+ * Whether an upload may pick up where a file on the server left off.
+ *
+ * The decision that made overwriting dangerous, so it is a function with a
+ * name rather than a comparison buried in the call. Resume treats a file
+ * already there as a half-sent copy of this one and appends the rest -- which
+ * for a file the user chose to replace splices two different files together
+ * and leaves no sign that it did.
+ */
+fun uploadResumes(destination: String?): Boolean = destination != OVERWRITE_MARKER

@@ -188,6 +188,8 @@ fun PasteBar(
     refusal: PasteRefusal?,
     /** What the paste would do, so the bar can say "send" rather than "paste". */
     kind: PasteKind?,
+    /** Cut rather than copied, which changes what the waiting message says. */
+    cut: Boolean,
     onPaste: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
@@ -209,7 +211,7 @@ fun PasteBar(
                 Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.action_cancel))
             }
             Text(
-                refusalText(refusal) ?: stringResource(labelFor(kind), count),
+                refusalText(refusal, count, cut) ?: stringResource(labelFor(kind), count),
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f).padding(start = 4.dp),
             )
@@ -241,13 +243,26 @@ private fun actionFor(kind: PasteKind?): Int = when (kind) {
     else -> R.string.action_paste
 }
 
+/**
+ * Why the button is not there, when there is a reason worth giving.
+ *
+ * "Already there" is not one. It is what the bar says the instant after a cut,
+ * because the folder the items came from is the folder still on screen -- and
+ * "they are already in this folder" read as the cut having failed. It gets a
+ * plain instruction instead, since nothing has gone wrong.
+ */
 @Composable
-private fun refusalText(refusal: PasteRefusal?): String? = when (refusal) {
-    null, PasteRefusal.NOTHING_HELD -> null
-    PasteRefusal.ALREADY_THERE -> stringResource(R.string.paste_already_there)
-    PasteRefusal.INTO_ITSELF -> stringResource(R.string.paste_into_itself)
-    PasteRefusal.BETWEEN_SERVERS -> stringResource(R.string.paste_between_servers)
-}
+private fun refusalText(refusal: PasteRefusal?, count: Int, cut: Boolean): String? =
+    when (refusal) {
+        null, PasteRefusal.NOTHING_HELD -> null
+        PasteRefusal.ALREADY_THERE -> stringResource(
+            if (cut) R.string.paste_go_somewhere_cut else R.string.paste_go_somewhere,
+            count,
+        )
+
+        PasteRefusal.INTO_ITSELF -> stringResource(R.string.paste_into_itself)
+        PasteRefusal.BETWEEN_SERVERS -> stringResource(R.string.paste_between_servers)
+    }
 
 /** Asks for a name, for a new folder or a new file. */
 @Composable

@@ -237,7 +237,6 @@
     <string name="selection_count">%1$d selected</string>
     <string name="paste_into">Paste %1$d here</string>
     <string name="paste_into_itself">A folder cannot go inside itself</string>
-    <string name="paste_already_there">They are already in this folder</string>
     <string name="new_folder_title">New folder</string>
     <string name="new_file_title">New file</string>
     <string name="confirm_delete_detail">Folders go with everything in them. This cannot be undone.</string>
@@ -245,4 +244,6 @@
     <string name="paste_upload_here">Send %1$d to this server</string>
     <string name="paste_download_here">Save %1$d to this phone</string>
     <string name="action_send">Send</string>
+    <string name="paste_go_somewhere">%1$d copied. Open where they should go.</string>
+    <string name="paste_go_somewhere_cut">%1$d cut. Open where they should go.</string>
 </resources>

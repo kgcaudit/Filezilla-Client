@@ -176,6 +176,7 @@ fun FilePanes(
                         count = held.names.size,
                         refusal = model.pasteRefusal(active),
                         kind = model.pasteKind(active),
+                        cut = held.mode == ClipboardMode.MOVE,
                         onPaste = {
                             when (model.pasteKind(active)) {
                                 // Within one place it happens here and now;

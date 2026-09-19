@@ -94,14 +94,24 @@ class ResilientTransfer(
         )
     }
 
-    /** Uploads to [remoteFile], reconnecting and resuming as needed. */
+    /**
+     * Uploads to [remoteFile], reconnecting and resuming as needed.
+     *
+     * [resume] is what tells a replacement from a continuation. Left on, a
+     * file already on the server is treated as a part-sent copy of this one
+     * and the rest is appended to it -- which for a file the user meant to
+     * overwrite splices two different files together. A caller replacing one
+     * deliberately turns it off, and the engine then sends STOR from the
+     * beginning.
+     */
     fun upload(
         remoteFile: String,
         binary: Boolean = true,
+        resume: Boolean = true,
         progress: TransferProgressListener? = null,
         readerFactory: () -> TransferReader,
     ): ResilientOutcome = withRetries(progress) { engine, tracked ->
-        engine.upload(remoteFile, readerFactory(), resume = true, binary = binary, progress = tracked)
+        engine.upload(remoteFile, readerFactory(), resume = resume, binary = binary, progress = tracked)
     }
 
     /** Which attempt is running, so a pinned offset applies only to the first. */
