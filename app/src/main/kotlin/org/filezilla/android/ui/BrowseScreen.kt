@@ -82,6 +82,7 @@ fun BrowseScreen(
         EmptyState(
             title = stringResource(R.string.browse_not_connected_title),
             detail = stringResource(R.string.browse_not_connected_detail),
+            icon = R.drawable.ic_flat_server,
             modifier = modifier,
         )
         return
@@ -114,6 +115,7 @@ fun BrowseScreen(
                 rows.isEmpty() && state.filter.isNotBlank() -> EmptyState(
                     title = stringResource(R.string.filter_none, state.filter),
                     detail = stringResource(R.string.filter_hint),
+            icon = R.drawable.ic_flat_search,
                 )
 
                 options.viewMode == ViewMode.GRID -> LazyVerticalGrid(

@@ -55,6 +55,7 @@ fun QueueScreen(
         EmptyState(
             title = stringResource(R.string.queue_empty_title),
             detail = stringResource(R.string.queue_empty_detail),
+            icon = R.drawable.ic_flat_transfers,
             modifier = modifier,
         )
         return

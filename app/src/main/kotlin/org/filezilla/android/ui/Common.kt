@@ -1,5 +1,6 @@
 package org.filezilla.android.ui
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,12 +16,33 @@ import androidx.compose.ui.unit.dp
 
 /** The "nothing here yet, and here is what to do about it" panel. */
 @Composable
-fun EmptyState(title: String, detail: String, modifier: Modifier = Modifier) {
+fun EmptyState(
+    title: String,
+    detail: String,
+    modifier: Modifier = Modifier,
+    /**
+     * The thing that is missing, drawn above the words.
+     *
+     * An empty screen is the one place with room for it, and the icon says
+     * which empty screen this is before the text is read -- a queue with
+     * nothing in it and a log with nothing in it otherwise look identical.
+     */
+    @DrawableRes icon: Int? = null,
+) {
     Column(
         modifier = modifier.fillMaxSize().padding(32.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        if (icon != null) {
+            FlatIcon(
+                icon = icon,
+                contentDescription = null,
+                chipSize = 76.dp,
+                cornerRadius = 22.dp,
+                modifier = Modifier.padding(bottom = 18.dp),
+            )
+        }
         Text(
             title,
             style = MaterialTheme.typography.titleLarge,

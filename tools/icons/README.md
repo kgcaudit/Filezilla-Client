@@ -11,7 +11,7 @@ control has to tint with its state and multi-coloured artwork cannot.
 | `build_icons.py` | Traces the artwork to vector drawables, recolouring as it goes |
 | `authored.py` | Draws the icons the artwork does not contain, and the launcher |
 | `preview.py` | Renders the drawables at the sizes they are shown at |
-| `screen_preview.py` | Puts them in the rows and the tab bar, light and dark |
+| `screen_preview.py` | Puts them in the rows, the tab bar and the empty screens, light and dark |
 | `launcher_preview.py` | Cuts the launcher with the masks the system uses |
 
 ## Rebuilding
@@ -45,6 +45,10 @@ go. Every artwork icon sits on `FlatIconChip` instead, including the selected
 tab, whose indicator is that same chip — on the dark theme's own indicator the
 artwork's deep blue sat on deeper blue and the selected tab was the hardest
 one to make out.
+
+**The error mark keeps no chip.** It is a solid amber disc, so it carries
+its own background and reads on both the light and the dark error card --
+checked against both. Tinting it to the card's colour would erase it.
 
 **Unmapped colours stop the build.** A colour the table has not seen means the
 artwork changed. Approximating it is how a palette drifts: the icons would

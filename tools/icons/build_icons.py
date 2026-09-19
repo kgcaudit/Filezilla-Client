@@ -43,6 +43,7 @@ RECOLOUR = {
     "#DAEBFF": "#D5E7F9",  # primaryContainer
     "#CADEFF": "#D5E7F9",
     "#80B0F0": "#7FB0DE",
+    "#EEF6FE": "#D5E7F9",  # the magnifier's lens
 
     # Greys carry most of the artwork. They go to the theme's neutrals.
     "#70706F": "#44505C",  # onSurfaceVariant
@@ -67,6 +68,8 @@ RECOLOUR = {
     "#FBD8DA": "#F4DDDB",
     "#FBDADC": "#F4DDDB",
     "#70D0B0": "#2E9E68",
+    "#FFC738": "#D98A2B",
+    "#FFFEFD": "#F1F4F8",
     "#FFFFFF": "#FFFFFF",
 }
 
@@ -77,6 +80,8 @@ MAPPING = {
     "088.서버.png": "ic_flat_server",
     "012.폴더,저장소.png": "ic_flat_folder",
     "001.문서,글.png": "ic_flat_file",
+    "025.검색.png": "ic_flat_search",
+    "117.주의,강조.png": "ic_flat_warning",
 }
 
 TRACE = dict(colormode="color", mode="polygon", filter_speckle=8,

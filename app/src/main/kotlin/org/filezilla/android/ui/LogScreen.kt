@@ -32,6 +32,7 @@ fun LogScreen(lines: List<LogLine>, modifier: Modifier = Modifier) {
         EmptyState(
             title = stringResource(R.string.log_empty_title),
             detail = stringResource(R.string.log_empty_detail),
+            icon = R.drawable.ic_flat_log,
             modifier = modifier,
         )
         return

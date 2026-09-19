@@ -86,13 +86,43 @@ def screen(theme: str) -> Image.Image:
     return im
 
 
+def empty(theme: str) -> Image.Image:
+    """An empty screen and an error card, which is where the icons are biggest."""
+    t = THEMES[theme]
+    W, H = 460, 400
+    im = Image.new("RGB", (W, H), t["bg"])
+    d = ImageDraw.Draw(im)
+    d.text((16, 12), f"{theme}  —  empty queue, then a failure", fill=t["text"])
+
+    c = chip("ic_flat_transfers", 76, 46, 22)
+    im.paste(c, (W // 2 - 38, 60), c)
+    d.text((W // 2 - 62, 152), "전송 목록이 비었습니다", fill=t["text"])
+    d.text((W // 2 - 96, 174), "파일 탭에서 받을 항목을 선택하세요", fill=t["dim"])
+
+    card = (0xF9, 0xDE, 0xDC) if theme == "light" else (0x8C, 0x1D, 0x18)
+    ink = (0x41, 0x0E, 0x0B) if theme == "light" else (0xF9, 0xDE, 0xDC)
+    d.rounded_rectangle([16, 240, W - 16, 356], radius=14, fill=card)
+    art = render("ic_flat_warning", 26)
+    im.paste(art, (36, 258), art)
+    d.text((72, 260), "서버에 연결할 수 없습니다", fill=ink)
+    d.text((32, 292), "주소와 포트를 확인하세요.", fill=ink)
+    d.text((32, 322), "ECONNREFUSED", fill=ink)
+    return im
+
+
 def main() -> None:
     light, dark = screen("light"), screen("dark")
     sheet = Image.new("RGB", (light.width + dark.width + 12, light.height), (210, 214, 220))
     sheet.paste(light, (0, 0))
     sheet.paste(dark, (light.width + 12, 0))
     sheet.save("/tmp/screen-preview.png")
-    print("wrote /tmp/screen-preview.png")
+
+    el, ed = empty("light"), empty("dark")
+    sheet2 = Image.new("RGB", (el.width + ed.width + 12, el.height), (210, 214, 220))
+    sheet2.paste(el, (0, 0))
+    sheet2.paste(ed, (el.width + 12, 0))
+    sheet2.save("/tmp/empty-preview.png")
+    print("wrote /tmp/screen-preview.png and /tmp/empty-preview.png")
 
 
 if __name__ == "__main__":
