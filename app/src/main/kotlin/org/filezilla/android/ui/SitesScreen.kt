@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material3.CardDefaults
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -86,21 +85,12 @@ fun SitesScreen(
                         // A filled icon chip, the way a file manager marks a
                         // row: colour carries the "this is a server" before
                         // any text is read.
-                        Box(
-                            modifier = Modifier
-                                .size(42.dp)
-                                .background(
-                                    MaterialTheme.colorScheme.primaryContainer,
-                                    RoundedCornerShape(12.dp),
-                                ),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                Icons.Filled.Dns,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            )
-                        }
+                        FlatIcon(
+                            icon = R.drawable.ic_flat_server,
+                            contentDescription = null,
+                            chipSize = 44.dp,
+                            cornerRadius = 12.dp,
+                        )
                         Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
                             Text(
                                 site.name.ifBlank { site.host },

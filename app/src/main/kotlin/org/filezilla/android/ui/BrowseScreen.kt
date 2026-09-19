@@ -255,20 +255,11 @@ private fun EntryRow(
         // The icon is a second way into selection mode, and the quickest one:
         // picking a folder otherwise means finding "select" in the overflow
         // menu first. The checkbox beside it still shows the state.
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(11.dp))
-                .background(chip.copy(alpha = 0.14f))
-                .clickable { actions.onToggleSelected(entry) },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                if (entry.isDirectory) Icons.Filled.Folder else Icons.AutoMirrored.Filled.InsertDriveFile,
-                contentDescription = stringResource(R.string.browse_select, entry.name),
-                tint = chip,
-            )
-        }
+        FlatIcon(
+            icon = if (entry.isDirectory) R.drawable.ic_flat_folder else R.drawable.ic_flat_file,
+            contentDescription = stringResource(R.string.browse_select, entry.name),
+            modifier = Modifier.clickable { actions.onToggleSelected(entry) },
+        )
         Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
             Text(
                 entry.name,

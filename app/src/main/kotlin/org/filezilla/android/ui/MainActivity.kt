@@ -8,20 +8,18 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.SwapVert
-import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -32,6 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -48,9 +47,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
@@ -338,8 +340,25 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                     NavigationBarItem(
                         selected = tab == candidate,
                         onClick = { tab = candidate },
-                        icon = { Icon(iconFor(candidate), contentDescription = null) },
+                        icon = {
+                            Icon(
+                                painter = painterResource(iconFor(candidate)),
+                                contentDescription = null,
+                                // Unbounded, so the artwork keeps its own
+                                // colours instead of being flattened to one.
+                                tint = Color.Unspecified,
+                                modifier = Modifier.size(26.dp),
+                            )
+                        },
                         label = { Text(stringResource(candidate.label)) },
+                        // The selected tab's indicator is the same pale chip
+                        // the rows give these icons, for the same reason: on
+                        // the dark theme's indicator the artwork's deep blue
+                        // sat on deeper blue and the selected tab was the
+                        // hardest one to make out.
+                        colors = NavigationBarItemDefaults.colors(
+                            indicatorColor = FlatIconChip,
+                        ),
                     )
                 }
             }
@@ -489,9 +508,19 @@ private fun titleFor(tab: Tab, model: MainViewModel): String = when (tab) {
     Tab.LOG -> stringResource(R.string.title_log)
 }
 
-private fun iconFor(tab: Tab) = when (tab) {
-    Tab.SITES -> Icons.Filled.Dns
-    Tab.BROWSE -> Icons.Filled.Folder
-    Tab.QUEUE -> Icons.Filled.SwapVert
-    Tab.LOG -> Icons.AutoMirrored.Filled.List
+/**
+ * The tab icons, which are the app's own artwork rather than Material glyphs.
+ *
+ * These are identity, not controls: they say what each place is, and they are
+ * the same four shapes wherever those places appear. Being multi-coloured they
+ * do not tint with selection, so the bar's own indicator is what marks the
+ * selected tab -- which is how it reads anyway, the colour being a repeat of
+ * something the shape already said.
+ */
+@DrawableRes
+private fun iconFor(tab: Tab): Int = when (tab) {
+    Tab.SITES -> R.drawable.ic_flat_server
+    Tab.BROWSE -> R.drawable.ic_flat_folder
+    Tab.QUEUE -> R.drawable.ic_flat_transfers
+    Tab.LOG -> R.drawable.ic_flat_log
 }
