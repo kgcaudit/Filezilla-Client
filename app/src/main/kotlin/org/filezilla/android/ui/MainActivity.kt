@@ -72,15 +72,12 @@ private enum class Tab(val label: Int) {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // The status bar was the same near-white as the content, so the clock
-        // and the signal icons sat on nothing and were hard to pick out. The
-        // app bar now runs under it in the brand colour, and the system icons
-        // are told to go light so they have something to contrast with.
+        // The app bar runs under the status bar, so the status bar itself is
+        // transparent and takes the app bar's colour. Which way its icons
+        // should face depends on the theme, so OloTheme decides that.
         WindowCompat.setDecorFitsSystemWindows(window, false)
         @Suppress("DEPRECATION")
         window.statusBarColor = android.graphics.Color.TRANSPARENT
-        WindowCompat.getInsetsController(window, window.decorView)
-            .isAppearanceLightStatusBars = false
         setContent {
             OloTheme {
                 AppScreen()
@@ -206,11 +203,30 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                         overflow = TextOverflow.Ellipsis,
                     )
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
-                ),
+                // A surface, not the brand colour. A deep blue bar covered
+                // about a fifth of every screen, and against that much
+                // saturation the status colours -- which are the ones that
+                // actually mean something here -- read as muted. The brand is
+                // now what marks an action, not what fills a background.
+                colors = if (tab == Tab.BROWSE && model.browse.selecting) {
+                    // Selecting is a mode, and a mode should look like one. A
+                    // tint rather than a saturated fill, so it stands out
+                    // from the plain bar without going back to the wall of
+                    // colour this change is undoing.
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                } else {
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                        actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
                 navigationIcon = {
                     if (tab == Tab.BROWSE && model.browse.selecting) {
                         IconButton(onClick = model::clearSelection) {
@@ -351,6 +367,11 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                             )
                         },
                         label = { Text(stringResource(candidate.label)) },
+                        // Material shows labels on every item up to three and
+                        // only on the selected one from four up, which is
+                        // what this is. The label stays in the tree either
+                        // way, so a screen reader still announces it.
+                        alwaysShowLabel = false,
                         // The selected tab's indicator is the same pale chip
                         // the rows give these icons, for the same reason: on
                         // the dark theme's indicator the artwork's deep blue

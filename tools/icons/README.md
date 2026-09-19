@@ -13,6 +13,7 @@ control has to tint with its state and multi-coloured artwork cannot.
 | `preview.py` | Renders the drawables at the sizes they are shown at |
 | `screen_preview.py` | Puts them in the rows, the tab bar and the empty screens, light and dark |
 | `launcher_preview.py` | Cuts the launcher with the masks the system uses |
+| `theme_preview.py` | Renders the screens from the theme's own values, light and dark |
 
 ## Rebuilding
 

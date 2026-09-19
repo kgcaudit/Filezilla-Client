@@ -1,11 +1,15 @@
 package org.filezilla.android.ui.theme
 
+import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 
 /**
  * The app's colours, defined rather than taken from the wallpaper.
@@ -26,7 +30,7 @@ private val OceanLight = Color(0xFF8FC2F0)
 private val Slate = Color(0xFF3F5A73)
 private val SlateLight = Color(0xFFB4CAE0)
 
-private val LightColors = lightColorScheme(
+internal val LightColors = lightColorScheme(
     primary = Ocean,
     onPrimary = Color.White,
     primaryContainer = Color(0xFFD5E7F9),
@@ -50,7 +54,7 @@ private val LightColors = lightColorScheme(
     onErrorContainer = Color(0xFF410E0B),
 )
 
-private val DarkColors = darkColorScheme(
+internal val DarkColors = darkColorScheme(
     primary = OceanLight,
     onPrimary = Color(0xFF002F52),
     primaryContainer = Color(0xFF004574),
@@ -88,8 +92,13 @@ val MaterialTheme.status: StatusColors
     @Composable
     get() = if (colorScheme.background.luminanceIsDark()) DarkStatus else LightStatus
 
-private val LightStatus = StatusColors(
-    running = Color(0xFF0B5FA5),
+internal val LightStatus = StatusColors(
+    // Deliberately not the primary colour, which it used to be exactly. With
+    // the same value, a blue progress bar under a blue app bar left blue
+    // meaning both "this app" and "this is moving", and neither clearly. They
+    // are now near relations with separate jobs: primary marks what you can
+    // press, this marks what is happening.
+    running = Color(0xFF1273BE),
     waiting = Color(0xFF6B7885),
     paused = Color(0xFFB26A00),
     done = Color(0xFF1B7F4B),
@@ -97,8 +106,8 @@ private val LightStatus = StatusColors(
     progressTrack = Color(0xFFC9D6E3),
 )
 
-private val DarkStatus = StatusColors(
-    running = Color(0xFF8FC2F0),
+internal val DarkStatus = StatusColors(
+    running = Color(0xFF7FC0F5),
     waiting = Color(0xFF98A4B0),
     paused = Color(0xFFFFB95C),
     done = Color(0xFF6FD79B),
@@ -113,6 +122,16 @@ fun OloTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as Activity).window
+            // The app bar is the surface colour now, not the brand's. Light
+            // system icons were right when it was deep blue and would be
+            // invisible on it today, so they follow the theme instead.
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+        }
+    }
     MaterialTheme(
         colorScheme = if (darkTheme) DarkColors else LightColors,
         content = content,
