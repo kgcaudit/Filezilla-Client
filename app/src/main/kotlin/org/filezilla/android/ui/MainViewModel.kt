@@ -29,6 +29,7 @@ import org.filezilla.android.files.StorageRoot
 import org.filezilla.android.transfer.ActiveProgress
 import org.filezilla.android.transfer.LogLine
 import org.filezilla.ftp.journal.TransferRecord
+import org.filezilla.ftp.journal.TransferState
 import org.filezilla.ftp.listing.DirectoryEntry
 
 /**
@@ -692,18 +693,80 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** A local paste waiting on the user to say what to do about what is there. */
+    data class PendingPaste(
+        val held: Clipboard,
+        val pane: PaneId,
+        val target: String,
+        val conflicts: List<DownloadConflict>,
+    )
+
+    var pendingPasteConflicts by mutableStateOf<PendingPaste?>(null)
+        private set
+
+    fun dismissPasteConflicts() {
+        pendingPasteConflicts = null
+    }
+
+    fun resolvePasteConflicts(choice: ConflictChoice) {
+        val pending = pendingPasteConflicts ?: return
+        pendingPasteConflicts = null
+        runPaste(pending.held, pending.pane, pending.target, choice)
+    }
+
+    /**
+     * Puts down what is held, asking first about anything already there.
+     *
+     * It did not ask. The operations refuse to write over something, so a
+     * paste onto an existing name failed outright -- and the pane, re-listed
+     * and unchanged, looked as though the paste had simply not happened.
+     */
     fun paste(id: PaneId) {
         val held = clipboard ?: return
         if (pasteRefusal(id) != null) return
         val target = pane(id).path
+        viewModelScope.launch {
+            val conflicts = withContext(Dispatchers.IO) {
+                localPasteConflicts(target, held.directory, held.names.toList())
+            }
+            if (conflicts.isEmpty()) {
+                runPaste(held, id, target, ConflictChoice.DEFAULT)
+            } else {
+                pendingPasteConflicts = PendingPaste(held, id, target, conflicts)
+            }
+        }
+    }
+
+    private fun runPaste(
+        held: Clipboard,
+        id: PaneId,
+        target: String,
+        choice: ConflictChoice,
+    ) {
         update(id) { it.copy(loading = true, error = null) }
         viewModelScope.launch {
             val failure = withContext(Dispatchers.IO) {
                 runCatching {
                     for (path in held.paths()) {
+                        val name = FilePath.name(path)
+                        val existing = java.io.File(FilePath.child(target, name))
+                        var asName: String? = null
+                        if (existing.exists()) {
+                            when (choice) {
+                                ConflictChoice.SKIP -> continue
+                                // Removed first: the operations refuse to
+                                // write over anything, which is what makes
+                                // them safe, so replacing is a decision taken
+                                // here rather than a rule bent down there.
+                                ConflictChoice.OVERWRITE ->
+                                    LocalOperations.delete(existing.absolutePath)
+
+                                ConflictChoice.KEEP_BOTH -> asName = freeNameIn(target, name)
+                            }
+                        }
                         when (held.mode) {
-                            ClipboardMode.COPY -> LocalOperations.copy(path, target)
-                            ClipboardMode.MOVE -> LocalOperations.move(path, target)
+                            ClipboardMode.COPY -> LocalOperations.copy(path, target, asName)
+                            ClipboardMode.MOVE -> LocalOperations.move(path, target, asName)
                         }
                     }
                 }.exceptionOrNull()
@@ -1249,6 +1312,49 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearLog() = graph.log.clear()
 
     /**
+     * Ids of the transfers already seen finished, so each is acted on once.
+     *
+     * Seeded from the first emission without re-listing anything: everything
+     * completed in an earlier run is already finished as far as the panes are
+     * concerned, and re-listing for it would mean a connection on every start.
+     */
+    private var finishedSeen: Set<String>? = null
+
+    /**
+     * Re-lists a pane when a transfer puts something new in the folder it is
+     * showing; see [finishedTransferTouches].
+     */
+    private fun watchFinishedTransfers() {
+        viewModelScope.launch {
+            transfers.collect { records ->
+                val finished = records
+                    .filter { it.state == TransferState.COMPLETED }
+                    .associateBy { it.id }
+                val seen = finishedSeen
+                finishedSeen = finished.keys
+                if (seen == null) return@collect
+                val fresh = finished.filterKeys { it !in seen }.values
+                if (fresh.isEmpty()) return@collect
+                for (id in PaneId.entries) {
+                    val state = pane(id)
+                    if (state.path.isEmpty()) continue
+                    val touched = fresh.any {
+                        finishedTransferTouches(
+                            record = it,
+                            isLocal = state.isLocal,
+                            path = state.path,
+                            host = state.site?.host,
+                            port = state.site?.port,
+                            user = state.site?.user,
+                        )
+                    }
+                    if (touched) open(id)
+                }
+            }
+        }
+    }
+
+    /**
      * Last in the class on purpose, not for tidiness.
      *
      * An init block runs where it is written, and this one assigns to state
@@ -1259,6 +1365,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     init {
         restorePanes()
+        watchFinishedTransfers()
     }
 
     private companion object {

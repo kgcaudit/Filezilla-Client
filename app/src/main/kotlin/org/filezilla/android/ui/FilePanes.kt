@@ -62,6 +62,7 @@ fun FilePanes(
     onRequestNotifications: () -> Unit,
     onTransfersQueued: (Int) -> Unit,
     onDownloadSelected: () -> Unit,
+    onOpenLocalFile: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val pager = rememberPagerState(initialPage = pageOf(model.activePane)) { PaneId.entries.size }
@@ -135,6 +136,7 @@ fun FilePanes(
                                 onGrant = onGrant,
                                 onPickSite = onPickSite,
                                 onDownload = onDownload,
+                                onOpenLocalFile = onOpenLocalFile,
                             )
                         }
                     }
@@ -151,6 +153,7 @@ fun FilePanes(
                         onGrant = onGrant,
                         onPickSite = onPickSite,
                         onDownload = onDownload,
+                        onOpenLocalFile = onOpenLocalFile,
                     )
                 }
             }
@@ -328,8 +331,18 @@ private fun PaneBody(
     onGrant: () -> Unit,
     onPickSite: () -> Unit,
     onDownload: (org.filezilla.ftp.listing.DirectoryEntry) -> Unit,
+    onOpenLocalFile: (String) -> Unit,
 ) {
     val state = model.pane(id)
+
+    // Sorting and filtering the listing is the one piece of real work this
+    // composable does, and a folder can hold thousands of rows. Keyed on
+    // everything that changes the answer, so a recomposition caused by
+    // anything else -- a selection, a touch landing in the other pane -- does
+    // not re-sort the whole listing before drawing a frame.
+    val rows = remember(state.entries, options, state.filter) {
+        BrowseListing.arrange(state.entries, options, state.filter)
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         PaneHeader(id = id, model = model, onPickSite = onPickSite)
@@ -351,7 +364,7 @@ private fun PaneBody(
 
             else -> BrowseScreen(
                 state = state,
-                rows = model.visibleEntries(id),
+                rows = rows,
                 options = options,
                 downloadFolderName = downloadFolderName,
                 onUp = { model.up(id) },
@@ -361,7 +374,17 @@ private fun PaneBody(
                 onCloseFilter = model::toggleFilter,
                 actions = EntryActions(
                     onOpen = { model.openChild(id, it.name) },
-                    onDownload = onDownload,
+                    // On the phone a tap opens the file; on a server it
+                    // fetches it. Tapping a local file used to start a
+                    // download of a file that was already here, and with no
+                    // download folder chosen that opened the folder picker.
+                    onDownload = { entry ->
+                        if (state.isLocal) {
+                            onOpenLocalFile(FilePath.child(model.pane(id).path, entry.name))
+                        } else {
+                            onDownload(entry)
+                        }
+                    },
                     onDelete = model::delete,
                     onRename = model::rename,
                     onProperties = { model.showProperties(it) },

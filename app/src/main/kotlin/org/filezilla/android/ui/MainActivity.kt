@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -32,6 +33,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
@@ -58,16 +60,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import org.filezilla.android.R
 import org.filezilla.android.data.SiteEntity
+import org.filezilla.android.files.OpenFile
 import org.filezilla.android.service.TransferService
 import org.filezilla.android.storage.ConflictChoice
 import org.filezilla.android.ui.theme.OloTheme
-
-private enum class Tab(val label: Int) {
-    SITES(R.string.tab_sites),
-    BROWSE(R.string.tab_browse),
-    QUEUE(R.string.tab_queue),
-    LOG(R.string.tab_log),
-}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -109,6 +105,40 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
     // folder, so choosing one finishes the job instead of making them tap the
     // file again.
     var pendingDownload by remember { mutableStateOf<org.filezilla.ftp.listing.DirectoryEntry?>(null) }
+
+    // Back does the nearest thing first and leaves last; see [backActionFor].
+    // It used to do only the last one, so back from six folders deep closed
+    // the app outright.
+    var exitArmedAt by remember { mutableStateOf(0L) }
+    val exitMessage = stringResource(R.string.exit_confirm)
+    BackHandler {
+        val armed = System.currentTimeMillis() - exitArmedAt < EXIT_CONFIRM_MILLIS
+        when (
+            backActionFor(
+                tab = tab,
+                selecting = model.browse.selecting,
+                canGoUp = tab == Tab.BROWSE && model.canGoUp(model.activePane),
+                exitArmed = armed,
+            )
+        ) {
+            BackAction.CLEAR_SELECTION -> model.clearSelection()
+            BackAction.GO_UP -> model.goUp()
+            BackAction.SHOW_FIRST_TAB -> tab = FIRST_TAB
+            BackAction.CONFIRM_EXIT -> {
+                exitArmedAt = System.currentTimeMillis()
+                scope.launch {
+                    // Short, and replacing whatever is up: this is a prompt
+                    // for the next two seconds, not a report.
+                    snackbars.currentSnackbarData?.dismiss()
+                    snackbars.showSnackbar(exitMessage, duration = SnackbarDuration.Short)
+                }
+            }
+            // finish() rather than passing the press on: re-dispatching it
+            // from inside the handler that caught it comes straight back
+            // here, and the app never closes at all.
+            BackAction.EXIT -> (context as? android.app.Activity)?.finish()
+        }
+    }
 
     val uploadQueuedMessage = stringResource(R.string.queue_upload_toast)
 
@@ -409,6 +439,17 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                 onPickSite = { tab = Tab.SITES },
                 onDownload = ::startDownload,
                 onRequestNotifications = ::requestNotifications,
+                onOpenLocalFile = { path ->
+                    val intent = OpenFile.intentFor(context, java.io.File(path))
+                    val opened = intent != null && runCatching { context.startActivity(intent) }
+                        .isSuccess
+                    // Said rather than swallowed: a phone with nothing that
+                    // opens a .srt is a fair state, and silence from a tap
+                    // looks like the app ignoring it.
+                    if (!opened) {
+                        scope.launch { snackbars.showSnackbar(context.getString(R.string.open_no_app)) }
+                    }
+                },
                 onDownloadSelected = {
                     requestNotifications()
                     val queued = model.enqueueSelected { plan ->
@@ -520,6 +561,18 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                 }
             },
             onDismiss = model::dismissUploadConflicts,
+        )
+    }
+
+    // A paste inside the phone asks the same question, for the same reason.
+    // It did not: the file operations refuse to write over anything, so a
+    // paste onto a name already there failed outright and the pane came back
+    // looking exactly as it had -- as though nothing had been pasted at all.
+    model.pendingPasteConflicts?.let { pending ->
+        ConflictDialog(
+            conflicts = pending.conflicts,
+            onChoose = model::resolvePasteConflicts,
+            onDismiss = model::dismissPasteConflicts,
         )
     }
 

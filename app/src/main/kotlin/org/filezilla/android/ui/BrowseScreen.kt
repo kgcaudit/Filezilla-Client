@@ -273,10 +273,16 @@ private fun EntryRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            val detail = listOfNotNull(
-                if (entry.isDirectory) null else formatSize(entry.size).ifBlank { null },
-                formatEntryTime(entry).ifBlank { null },
-            ).joinToString("  ·  ")
+            // Remembered against the row: formatting a date builds a
+            // calendar and a formatted string, and doing that for every
+            // visible row on every recomposition is paid for in dropped
+            // frames while the list is moving.
+            val detail = remember(entry) {
+                listOfNotNull(
+                    if (entry.isDirectory) null else formatSize(entry.size).ifBlank { null },
+                    formatEntryTime(entry).ifBlank { null },
+                ).joinToString("  ·  ")
+            }
             if (detail.isNotBlank()) {
                 Text(
                     detail,

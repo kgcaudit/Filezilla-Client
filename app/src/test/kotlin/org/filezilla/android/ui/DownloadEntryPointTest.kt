@@ -138,6 +138,34 @@ class DownloadEntryPointTest {
         assertEquals(setOf("queueUploads"), membersContaining("transfers.enqueueUpload("))
     }
 
+    // ------------------------------------------- a paste inside the phone
+
+    /**
+     * And again for the third way files get written, which had the same hole.
+     *
+     * Copying inside the phone did not ask either. The file operations refuse
+     * to write over anything, so the paste failed and the pane re-listed
+     * unchanged -- which looks precisely like a paste that never ran.
+     */
+    @Test
+    fun `only one place copies or moves what is held`() {
+        assertEquals(setOf("runPaste"), membersContaining("LocalOperations.copy("))
+        assertEquals(setOf("runPaste"), membersContaining("LocalOperations.move("))
+    }
+
+    @Test
+    fun `and it is reached only after the question has been put`() {
+        // paste gathers the collisions and either runs straight away or holds
+        // the paste for the dialog; resolvePasteConflicts is the dialog's
+        // answer arriving. A third caller would be a paste that never asked.
+        assertEquals(setOf("paste", "resolvePasteConflicts"), membersContaining("runPaste("))
+    }
+
+    @Test
+    fun `exactly one place looks for what a paste would land on`() {
+        assertEquals(setOf("paste"), membersContaining("localPasteConflicts("))
+    }
+
     @Test
     fun `queueing uploads is fed by the paths that looked at the server`() {
         assertEquals(

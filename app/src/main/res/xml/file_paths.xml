@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    What the app may hand to another app.
+
+    Shared storage only: the phone's own files are what a file manager opens,
+    and nothing here exposes the app's private directory, which holds the
+    partial downloads and the database.
+-->
+<paths>
+    <external-path name="external_storage" path="." />
+    <root-path name="volumes" path="/storage/" />
+</paths>

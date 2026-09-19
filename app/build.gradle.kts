@@ -62,6 +62,14 @@ kotlin {
     }
 }
 
+composeCompiler {
+    // See the file itself: the listing types come from a module the Compose
+    // compiler never sees, so it has to be told they hold still.
+    stabilityConfigurationFiles.add(
+        rootProject.layout.projectDirectory.file("compose_stability.conf"),
+    )
+}
+
 dependencies {
     implementation(project(":core-ftp"))
 

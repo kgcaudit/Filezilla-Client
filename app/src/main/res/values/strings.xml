@@ -246,4 +246,6 @@
     <string name="action_send">Send</string>
     <string name="paste_go_somewhere">%1$d copied. Open where they should go.</string>
     <string name="paste_go_somewhere_cut">%1$d cut. Open where they should go.</string>
+    <string name="open_no_app">No app on this phone opens that file</string>
+    <string name="exit_confirm">Press back again to leave</string>
 </resources>

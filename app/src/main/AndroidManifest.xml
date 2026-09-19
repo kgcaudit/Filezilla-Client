@@ -50,6 +50,22 @@
             </intent-filter>
         </activity>
 
+        <!--
+            Opening a file means handing it to another app, and since Android 7
+            a file:// URI may not cross that line. The provider grants read
+            access to the one file being opened, for as long as that app is
+            looking at it, and to nothing else.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <service
             android:name=".service.TransferService"
             android:exported="false"
