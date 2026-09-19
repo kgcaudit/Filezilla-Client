@@ -228,9 +228,15 @@ class TransferManager(
             // claim() tell a leftover from a record a live worker holds.
             runInterruptible { database.transfers().releaseStaleClaims(System.currentTimeMillis()) }
 
-            val workers = List(CONCURRENT_TRANSFERS) { index ->
-                launch { worker(index) }
-            }
+            // Work held back for a network the user ruled out is work again
+            // if the network is now fine. Without this a queue parked when the
+            // process was killed would come back to a working connection and
+            // sit there: nothing held for the network is claimable, and only a
+            // worker coming out of a wait released it -- a wait this run never
+            // entered.
+            runInterruptible { if (networkGate.isAllowed) releaseFromNetworkWait() }
+
+            val workers = List(CONCURRENT_TRANSFERS) { launch { worker() } }
             workers.joinAll()
 
             activeState.value = emptyMap()
@@ -247,18 +253,26 @@ class TransferManager(
      * outright -- one FTP control connection cannot carry two transfers -- and
      * closes it on the way out.
      */
-    private suspend fun worker(index: Int) {
+    private suspend fun worker() {
         WorkerConnection(capabilities, log).use { connection ->
             while (!stopRequested) {
                 // Before claiming anything, not after: starting a transfer on
                 // a network the user ruled out and stopping it a moment later
                 // still spends their data.
                 if (!networkGate.isAllowed) {
-                    // One worker parks the queue; the others just wait with it.
-                    if (index == 0) parkForNetwork()
+                    // Every worker parks and every worker releases. Tying
+                    // either to one worker's index looked tidier and stranded
+                    // the queue: the worker holding the transfer when the
+                    // network went is whichever one claimed it, and the other
+                    // may have exited long before -- so the one that woke was
+                    // not the one allowed to put the work back.
+                    //
+                    // Both are idempotent, and claiming is atomic, so there is
+                    // nothing to coordinate.
+                    parkForNetwork()
                     runInterruptible { networkGate.awaitAllowed() }
                     if (stopRequested) break
-                    if (index == 0) releaseFromNetworkWait()
+                    releaseFromNetworkWait()
                     continue
                 }
                 val record = claimNext() ?: break

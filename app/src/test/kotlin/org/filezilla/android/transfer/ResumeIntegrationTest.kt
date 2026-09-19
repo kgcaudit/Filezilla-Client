@@ -51,14 +51,40 @@ class ResumeIntegrationTest {
     private lateinit var partials: PartialFiles
     private lateinit var log: AppLog
 
-    /** Always allowed: connectivity is not what these tests are about. */
-    private val openGate = object : TransferGate {
-        override val isAllowed = true
-        override fun awaitAllowed() = Unit
+    /**
+     * The Wi-Fi switch, as the queue sees it.
+     *
+     * Starts allowed, because connectivity is not what most of these tests are
+     * about; the ones that are turn it off and on again.
+     */
+    private class SwitchableGate : TransferGate {
+        private val lock = Object()
+
+        @Volatile
+        private var allowed = true
+
+        override val isAllowed: Boolean get() = allowed
+
+        fun set(value: Boolean) {
+            synchronized(lock) {
+                allowed = value
+                lock.notifyAll()
+            }
+        }
+
+        override fun awaitAllowed() {
+            synchronized(lock) {
+                // Bounded like the real gate's, so a missed notify recovers.
+                while (!allowed) lock.wait(50)
+            }
+        }
+
         override fun waitBeforeRetry(backoffMillis: Long) {
             if (backoffMillis > 0) Thread.sleep(minOf(backoffMillis, 200))
         }
     }
+
+    private val openGate = SwitchableGate()
 
     @Before
     fun setUp() {
@@ -427,6 +453,89 @@ class ResumeIntegrationTest {
             while ((manager.activeTransfers.value[id]?.bytes ?: 0) < atLeast) {
                 kotlinx.coroutines.delay(20)
             }
+        }
+    }
+
+    // --------------------------------------------------- the Wi-Fi-only path
+
+    /**
+     * Wi-Fi off, Wi-Fi on: exactly what the user did.
+     *
+     * The transfer has to come back by itself. It did not: parking the queue
+     * and releasing it were both tied to one worker's index, and the worker
+     * left holding the transfer is whichever one claimed it -- so the worker
+     * that woke was often not the one allowed to put the work back, and the
+     * queue sat on "waiting for Wi-Fi" with Wi-Fi plainly on.
+     */
+    @Test
+    fun `losing and regaining an allowed network resumes the transfer`() = runBlocking {
+        val size = FILE_SIZE
+        val manager = newManager()
+        val id = enqueue(manager, "wifi.bin", size)
+
+        val queue = async { drain(manager) }
+        awaitBytes(manager, id, atLeast = INTERRUPT_AT)
+
+        // Wi-Fi off. The gate says no and the running transfer is told to stop.
+        openGate.set(false)
+        manager.onNetworkDisallowed()
+        awaitState(id, TransferState.WAITING_FOR_NETWORK)
+
+        val held = bytesRecorded(id)
+        assertPartial(held, size, "the network going away")
+
+        // Wi-Fi on.
+        val mark = log.log.value.size
+        openGate.set(true)
+
+        // Nothing else is touched: the queue is still running and must pick
+        // the transfer back up on its own.
+        withTimeout(60_000) { queue.await() }
+
+        assertEquals(TransferState.COMPLETED, stateOf(id))
+        assertResumedNotRestarted("wifi.bin", held, mark)
+        assertArrayEquals(FtpsTestServer.contentOf(size), bytesOf(id))
+    }
+
+    /**
+     * The same, but the process died while the queue was parked.
+     *
+     * A restarted queue starts with a working network and records held for a
+     * network that is no longer a problem. Nothing held for the network is
+     * claimable, and only a worker coming out of a wait released it -- a wait
+     * this run never enters. So it sat there.
+     */
+    @Test
+    fun `a queue restarted with work held for the network releases it`() = runBlocking {
+        val size = FILE_SIZE
+        val first = newManager()
+        val id = enqueue(first, "restart.bin", size)
+
+        val queue = async { drain(first) }
+        awaitBytes(first, id, atLeast = INTERRUPT_AT)
+        openGate.set(false)
+        first.onNetworkDisallowed()
+        awaitState(id, TransferState.WAITING_FOR_NETWORK)
+        first.requestStop()
+        openGate.set(true)
+        queue.await()
+
+        val held = bytesRecorded(id)
+        assertEquals(TransferState.WAITING_FOR_NETWORK, stateOf(id))
+
+        // A new queue, as a restarted process would start, on a fine network.
+        val mark = log.log.value.size
+        drain(newManager())
+
+        assertEquals(TransferState.COMPLETED, stateOf(id))
+        assertResumedNotRestarted("restart.bin", held, mark)
+        assertArrayEquals(FtpsTestServer.contentOf(size), bytesOf(id))
+    }
+
+    /** Polls the journal until the transfer reaches [state]. */
+    private suspend fun awaitState(id: String, state: TransferState) {
+        withTimeout(60_000) {
+            while (stateOf(id) != state) kotlinx.coroutines.delay(20)
         }
     }
 }
