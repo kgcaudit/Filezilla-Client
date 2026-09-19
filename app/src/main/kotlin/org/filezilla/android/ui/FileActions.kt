@@ -1,0 +1,249 @@
+package org.filezilla.android.ui
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentCut
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.automirrored.filled.NoteAdd
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import org.filezilla.android.R
+
+/** What the speed dial offers. */
+enum class NewThing { FOLDER, FILE, SERVER }
+
+/**
+ * The round button and what unfolds from it.
+ *
+ * Collapsed it is one button; open it is a short list with words beside the
+ * icons, because an icon alone cannot distinguish "new folder" from "new
+ * file" at a glance and this is not a menu anyone uses often enough to learn.
+ */
+@Composable
+fun NewThingFab(
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onPick: (NewThing) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(horizontalAlignment = Alignment.End, modifier = modifier) {
+        AnimatedVisibility(visible = expanded) {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.padding(bottom = 12.dp),
+            ) {
+                DialItem(Icons.Filled.CreateNewFolder, R.string.fab_new_folder) {
+                    onExpandedChange(false)
+                    onPick(NewThing.FOLDER)
+                }
+                DialItem(Icons.AutoMirrored.Filled.NoteAdd, R.string.fab_new_file) {
+                    onExpandedChange(false)
+                    onPick(NewThing.FILE)
+                }
+                DialItem(Icons.Filled.Storage, R.string.fab_new_server) {
+                    onExpandedChange(false)
+                    onPick(NewThing.SERVER)
+                }
+            }
+        }
+        FloatingActionButton(onClick = { onExpandedChange(!expanded) }) {
+            Icon(
+                if (expanded) Icons.Filled.Close else Icons.Filled.Add,
+                contentDescription = stringResource(
+                    if (expanded) R.string.fab_close else R.string.fab_actions,
+                ),
+            )
+        }
+    }
+}
+
+@Composable
+private fun DialItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: Int,
+    onClick: () -> Unit,
+) {
+    ExtendedFloatingActionButton(
+        onClick = onClick,
+        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        icon = { Icon(icon, contentDescription = null) },
+        text = { Text(stringResource(label)) },
+    )
+}
+
+/**
+ * The bar that appears along the bottom once rows are picked.
+ *
+ * Buttons rather than a menu, because these are what selection is *for*: a
+ * menu would put every one of them one tap further away than the thing the
+ * user already decided to do.
+ */
+@Composable
+fun SelectionBar(
+    count: Int,
+    onCut: () -> Unit,
+    onCopy: () -> Unit,
+    onDelete: () -> Unit,
+    onRename: () -> Unit,
+    onClear: () -> Unit,
+    /** Rename takes exactly one row; with several it means nothing. */
+    canRename: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        tonalElevation = 3.dp,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onClear) {
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.menu_select_none))
+            }
+            Text(
+                stringResource(R.string.selection_count, count),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.weight(1f).padding(start = 4.dp),
+            )
+            IconButton(onClick = onCut) {
+                Icon(Icons.Filled.ContentCut, contentDescription = stringResource(R.string.action_cut))
+            }
+            IconButton(onClick = onCopy) {
+                Icon(Icons.Filled.ContentCopy, contentDescription = stringResource(R.string.action_copy))
+            }
+            IconButton(onClick = onRename, enabled = canRename) {
+                Icon(
+                    Icons.Filled.Edit,
+                    contentDescription = stringResource(R.string.action_rename_selected),
+                )
+            }
+            IconButton(onClick = onDelete) {
+                Icon(
+                    Icons.Filled.Delete,
+                    contentDescription = stringResource(R.string.action_delete_selected),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The paste bar, shown only while something is held.
+ *
+ * It says why it cannot be used rather than being greyed out in silence: a
+ * dead button explains nothing, and the two reasons it goes dead -- a folder
+ * into itself, a place a transfer would be needed for -- are both things the
+ * user can act on once they are told.
+ */
+@Composable
+fun PasteBar(
+    count: Int,
+    refusal: PasteRefusal?,
+    onPaste: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        tonalElevation = 3.dp,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onCancel) {
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.action_cancel))
+            }
+            Text(
+                refusalText(refusal) ?: stringResource(R.string.paste_into, count),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f).padding(start = 4.dp),
+            )
+            if (refusal == null) {
+                IconButton(onClick = onPaste) {
+                    Icon(
+                        Icons.Filled.ContentPaste,
+                        contentDescription = stringResource(R.string.action_paste),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun refusalText(refusal: PasteRefusal?): String? = when (refusal) {
+    null, PasteRefusal.NOTHING_HELD -> null
+    PasteRefusal.ALREADY_THERE -> stringResource(R.string.paste_already_there)
+    PasteRefusal.INTO_ITSELF -> stringResource(R.string.paste_into_itself)
+    PasteRefusal.NEEDS_TRANSFER -> stringResource(R.string.paste_needs_transfer)
+}
+
+/** Asks for a name, for a new folder or a new file. */
+@Composable
+fun NameDialog(
+    title: Int,
+    initial: String = "",
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var name by remember { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(title)) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                singleLine = true,
+                label = { Text(stringResource(R.string.name_hint)) },
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(name.trim()) },
+                // A blank name is not a name, and the operation would refuse
+                // it anyway -- better to not offer than to offer and fail.
+                enabled = name.isNotBlank(),
+            ) { Text(stringResource(R.string.action_ok)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
+}

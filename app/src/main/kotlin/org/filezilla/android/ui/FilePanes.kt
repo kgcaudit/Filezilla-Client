@@ -24,6 +24,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,23 +67,131 @@ fun FilePanes(
         snapshotFlow { pager.currentPage }.collect { model.showPane(paneAt(it)) }
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
-        PaneTabs(current = pager.currentPage, model = model)
+    val active = paneAt(pager.currentPage)
+    val state = model.pane(active)
+    var dialOpen by remember { mutableStateOf(false) }
+    var naming by remember { mutableStateOf<NewThing?>(null) }
+    var renaming by remember { mutableStateOf(false) }
+    var confirmingDelete by remember { mutableStateOf(false) }
 
-        HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
-            val id = paneAt(page)
-            PaneBody(
-                id = id,
-                model = model,
-                options = options,
-                downloadFolderName = downloadFolderName,
-                onOpenLog = onOpenLog,
-                onGrant = onGrant,
-                onPickSite = onPickSite,
-                onDownload = onDownload,
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            PaneTabs(current = pager.currentPage, model = model)
+
+            HorizontalPager(state = pager, modifier = Modifier.weight(1f)) { page ->
+                val id = paneAt(page)
+                PaneBody(
+                    id = id,
+                    model = model,
+                    options = options,
+                    downloadFolderName = downloadFolderName,
+                    onOpenLog = onOpenLog,
+                    onGrant = onGrant,
+                    onPickSite = onPickSite,
+                    onDownload = onDownload,
+                )
+            }
+
+            // The bars belong to the pane in front, so they sit outside the
+            // pager rather than inside each page: a selection made on one side
+            // is acted on where it was made, and swiping does not carry the
+            // bar to a pane the selection is not in.
+            if (state.selecting && state.selection.isNotEmpty()) {
+                SelectionBar(
+                    count = state.selection.size,
+                    canRename = state.selection.size == 1,
+                    onCut = { model.cutSelection(active) },
+                    onCopy = { model.copySelection(active) },
+                    onDelete = { confirmingDelete = true },
+                    onRename = { renaming = true },
+                    onClear = model::clearSelection,
+                )
+            } else {
+                model.clipboard?.let { held ->
+                    PasteBar(
+                        count = held.names.size,
+                        refusal = model.pasteRefusal(active),
+                        onPaste = { model.paste(active) },
+                        onCancel = model::clearClipboard,
+                    )
+                }
+            }
+        }
+
+        // Only where something can be made. A server pane cannot yet, and an
+        // offer that fails on every press is worse than none.
+        if (state.isLocal && model.storageGranted) {
+            NewThingFab(
+                expanded = dialOpen,
+                onExpandedChange = { dialOpen = it },
+                onPick = { thing ->
+                    if (thing == NewThing.SERVER) onPickSite() else naming = thing
+                },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
             )
         }
     }
+
+    naming?.let { thing ->
+        NameDialog(
+            title = if (thing == NewThing.FOLDER) R.string.new_folder_title else R.string.new_file_title,
+            onDismiss = { naming = null },
+            onConfirm = { name ->
+                if (thing == NewThing.FOLDER) model.createFolder(active, name)
+                else model.createFile(active, name)
+                naming = null
+            },
+        )
+    }
+
+    if (renaming) {
+        val entry = state.entries.firstOrNull { it.name in state.selection }
+        if (entry == null) {
+            renaming = false
+        } else {
+            NameDialog(
+                title = R.string.action_rename_selected,
+                initial = entry.name,
+                onDismiss = { renaming = false },
+                onConfirm = { name ->
+                    model.renameLocal(active, entry, name)
+                    model.clearSelection()
+                    renaming = false
+                },
+            )
+        }
+    }
+
+    if (confirmingDelete) {
+        ConfirmDelete(
+            count = state.selection.size,
+            onDismiss = { confirmingDelete = false },
+            onConfirm = {
+                model.deleteSelection(active)
+                confirmingDelete = false
+            },
+        )
+    }
+}
+
+/** Deleting takes folders with everything in them, so it is asked about first. */
+@Composable
+private fun ConfirmDelete(count: Int, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.confirm_delete_title, count)) },
+        text = { Text(stringResource(R.string.confirm_delete_detail)) },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onConfirm) {
+                Text(stringResource(R.string.action_delete_selected))
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        },
+    )
 }
 
 /**

@@ -20,6 +20,7 @@ import org.filezilla.android.AppGraph
 import org.filezilla.android.data.SiteEntity
 import org.filezilla.android.files.AccessRoute
 import org.filezilla.android.files.FilePath
+import org.filezilla.android.files.LocalOperations
 import org.filezilla.android.files.StorageRoot
 import org.filezilla.android.transfer.ActiveProgress
 import org.filezilla.android.transfer.LogLine
@@ -304,6 +305,112 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun rememberedRemote(id: PaneId, site: SiteEntity): String? =
         graph.preferences.panePath(id.name)
             ?: site.initialPath?.takeIf { it.isNotBlank() }
+
+    // ------------------------------------------------------- the clipboard
+
+    /** What was cut or copied, and where from. Null until something is. */
+    var clipboard by mutableStateOf<Clipboard?>(null)
+        private set
+
+    /** Picks up the pane's selection, leaving the originals where they are. */
+    fun copySelection(id: PaneId) = pickUp(id, ClipboardMode.COPY)
+
+    /** Picks it up to be moved: the originals go when it is put down. */
+    fun cutSelection(id: PaneId) = pickUp(id, ClipboardMode.MOVE)
+
+    private fun pickUp(id: PaneId, mode: ClipboardMode) {
+        val state = pane(id)
+        if (state.selection.isEmpty()) return
+        clipboard = Clipboard(mode, state.source, state.path, state.selection.toList())
+        update(id) { it.copy(selection = emptySet(), selecting = false) }
+    }
+
+    fun clearClipboard() {
+        clipboard = null
+    }
+
+    /** Why a paste into [id] would not work, or null when it would. */
+    fun pasteRefusal(id: PaneId): PasteRefusal? =
+        PasteRules.refusal(clipboard, pane(id).source, pane(id).path)
+
+    /**
+     * Puts down what is held.
+     *
+     * Each item is done in turn and the failures are collected rather than
+     * thrown, because stopping at the first one leaves the user with half a
+     * paste and no idea which half. A move empties the clipboard afterwards;
+     * a copy keeps it, so the same thing can be put in several places.
+     */
+    fun paste(id: PaneId) {
+        val held = clipboard ?: return
+        if (pasteRefusal(id) != null) return
+        val target = pane(id).path
+        update(id) { it.copy(loading = true, error = null) }
+        viewModelScope.launch {
+            val failure = withContext(Dispatchers.IO) {
+                runCatching {
+                    for (path in held.paths()) {
+                        when (held.mode) {
+                            ClipboardMode.COPY -> LocalOperations.copy(path, target)
+                            ClipboardMode.MOVE -> LocalOperations.move(path, target)
+                        }
+                    }
+                }.exceptionOrNull()
+            }
+            if (held.mode == ClipboardMode.MOVE) {
+                clipboard = null
+                // The folder the items left also has to be redrawn, or the
+                // other pane goes on showing things that are no longer there.
+                for (other in PaneId.entries) {
+                    if (other != id && pane(other).path == held.directory) open(other)
+                }
+            }
+            open(id)
+            failure?.let { error -> update(id) { it.copy(error = describeLocalFailure(error)) } }
+        }
+    }
+
+    // ------------------------------------------------------- file operations
+
+    /** Makes a folder in [id]'s current directory. */
+    fun createFolder(id: PaneId, name: String) = writeThen(id) {
+        LocalOperations.createDirectory(pane(id).path, name)
+    }
+
+    /** Makes an empty file, which is what the screenshot's "new file" does. */
+    fun createFile(id: PaneId, name: String) = writeThen(id) {
+        LocalOperations.createFile(pane(id).path, name)
+    }
+
+    fun renameLocal(id: PaneId, entry: DirectoryEntry, newName: String) = writeThen(id) {
+        LocalOperations.rename(FilePath.child(pane(id).path, entry.name), newName)
+    }
+
+    /** Removes the pane's selection, folders and all. */
+    fun deleteSelection(id: PaneId) {
+        val names = pane(id).selection.toList()
+        if (names.isEmpty()) return
+        update(id) { it.copy(selection = emptySet(), selecting = false) }
+        writeThen(id) {
+            for (name in names) LocalOperations.delete(FilePath.child(pane(id).path, name))
+        }
+    }
+
+    /**
+     * Runs a write and re-lists, whatever it did.
+     *
+     * Re-listing even on failure, because a write that failed partway still
+     * changed something, and a screen showing what was there before the
+     * attempt is the one that misleads.
+     */
+    private fun writeThen(id: PaneId, block: () -> Unit) {
+        update(id) { it.copy(loading = true, error = null) }
+        viewModelScope.launch {
+            val failure = withContext(Dispatchers.IO) { runCatching(block).exceptionOrNull() }
+            open(id)
+            failure?.let { error -> update(id) { it.copy(error = describeLocalFailure(error)) } }
+        }
+    }
 
     // ------------------------------------------------------------ local files
 
@@ -674,6 +781,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun deleteSelected() {
+        if (pane(activePane).isLocal) {
+            deleteSelection(activePane)
+            return
+        }
         val chosen = browse.selection.toSet()
         val rows = browse.entries.filter { it.name in chosen }
         mutate { session ->
@@ -684,11 +795,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         clearSelection()
     }
 
-    fun delete(entry: DirectoryEntry) = mutate { session ->
-        if (entry.isDirectory) session.removeDirectory(entry.name) else session.deleteFile(entry.name)
+    /**
+     * Removes one row from whichever kind of pane it is in.
+     *
+     * Dispatched on the source rather than assuming a server. Keyed on the
+     * site, as it was, a local pane had no site and the call returned having
+     * done nothing at all -- a delete that silently did not happen.
+     */
+    fun delete(entry: DirectoryEntry) {
+        val id = activePane
+        if (pane(id).isLocal) {
+            writeThen(id) { LocalOperations.delete(FilePath.child(pane(id).path, entry.name)) }
+            return
+        }
+        mutate { session ->
+            if (entry.isDirectory) session.removeDirectory(entry.name) else session.deleteFile(entry.name)
+        }
     }
 
-    fun rename(entry: DirectoryEntry, to: String) = mutate { it.rename(entry.name, to) }
+    fun rename(entry: DirectoryEntry, to: String) {
+        val id = activePane
+        if (pane(id).isLocal) {
+            renameLocal(id, entry, to)
+            return
+        }
+        mutate { it.rename(entry.name, to) }
+    }
 
     private fun mutate(block: (org.filezilla.android.transfer.FtpSession) -> Unit) {
         val site = browse.site ?: return

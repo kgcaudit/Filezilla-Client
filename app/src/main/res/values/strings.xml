@@ -226,4 +226,21 @@
     <string name="pane_no_source">Nothing chosen</string>
     <string name="pane_pick_title">Pick what this pane shows</string>
     <string name="pane_pick_detail">Tap My files for this phone, or Server to open a saved server.</string>
+    <string name="fab_actions">File actions</string>
+    <string name="fab_close">Close</string>
+    <string name="fab_new_folder">New folder</string>
+    <string name="fab_new_file">New file</string>
+    <string name="fab_new_server">New server</string>
+    <string name="action_cut">Cut</string>
+    <string name="action_copy">Copy</string>
+    <string name="action_paste">Paste</string>
+    <string name="action_rename_selected">Rename</string>
+    <string name="selection_count">%1$d selected</string>
+    <string name="paste_into">Paste %1$d here</string>
+    <string name="paste_needs_transfer">Sending between the phone and a server is not ready yet</string>
+    <string name="paste_into_itself">A folder cannot go inside itself</string>
+    <string name="paste_already_there">They are already in this folder</string>
+    <string name="new_folder_title">New folder</string>
+    <string name="new_file_title">New file</string>
+    <string name="confirm_delete_detail">Folders go with everything in them. This cannot be undone.</string>
 </resources>
