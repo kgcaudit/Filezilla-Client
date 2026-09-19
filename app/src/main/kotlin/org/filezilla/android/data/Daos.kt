@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -82,8 +83,44 @@ interface SiteDao {
     @Query("SELECT * FROM sites WHERE id = :id")
     suspend fun byId(id: String): SiteEntity?
 
-    @Query("SELECT * FROM sites ORDER BY name ASC")
+    /**
+     * The user's order, with name only as a tiebreak.
+     *
+     * The tiebreak matters: two rows can share a position if a write was
+     * interrupted partway, and without it their order would flip about
+     * between readings for no reason the user could see.
+     */
+    @Query("SELECT * FROM sites ORDER BY position ASC, name ASC")
     fun observeAll(): Flow<List<SiteEntity>>
+
+    @Query("SELECT * FROM sites ORDER BY position ASC, name ASC")
+    suspend fun all(): List<SiteEntity>
+
+    /**
+     * Where a new site goes: after everything already there.
+     *
+     * Appended rather than sorted in. Once the order is the user's, dropping
+     * a new server into the middle of it by name would be the app overruling
+     * an arrangement they made.
+     */
+    @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM sites")
+    suspend fun nextPosition(): Int
+
+    @Query("UPDATE sites SET position = :position WHERE id = :id")
+    suspend fun setPosition(id: String, position: Int)
+
+    /**
+     * Writes [ids] as the order, numbering from zero.
+     *
+     * Every row is renumbered rather than just the two that swapped. There
+     * are a handful of servers, so it costs nothing, and it repairs a list
+     * whose positions have drifted -- duplicates, gaps, rows left at zero by
+     * an older version -- instead of preserving the damage.
+     */
+    @Transaction
+    suspend fun reorder(ids: List<String>) {
+        ids.forEachIndexed { index, id -> setPosition(id, index) }
+    }
 
     /**
      * The site a transfer belongs to.

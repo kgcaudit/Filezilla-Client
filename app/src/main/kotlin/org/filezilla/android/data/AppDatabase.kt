@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [TransferEntity::class, SiteEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -25,12 +25,36 @@ abstract class AppDatabase : RoomDatabase() {
                 AppDatabase::class.java,
                 "filezilla.db",
             )
-                .addMigrations(encryptPasswords(passwords), ADD_ENCODING)
+                .addMigrations(encryptPasswords(passwords), ADD_ENCODING, ADD_POSITION)
                 // No fallbackToDestructiveMigration: dropping this database
                 // throws away the offsets that make a resume safe, which
                 // would turn a schema change into silently re-downloading
                 // everything in the queue -- and now the saved passwords too.
                 .build()
+
+        /**
+         * Version 4 gives each site a place in an order the user arranges.
+         *
+         * The existing rows are numbered in the order they were being shown,
+         * which was by name. Leaving them all at the default zero would have
+         * been a smaller migration and a worse one: the list would fall back
+         * on the name tiebreak and look unchanged until the first move, at
+         * which point every other row would jump at once.
+         */
+        internal val ADD_POSITION = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `sites` ADD COLUMN `position` INTEGER NOT NULL DEFAULT 0")
+                // Numbered through a subquery rather than by reading the rows
+                // out and writing them back: one statement, and no cursor
+                // held open across the writes.
+                db.execSQL(
+                    "UPDATE `sites` SET `position` = (" +
+                        "SELECT COUNT(*) FROM `sites` AS earlier " +
+                        "WHERE earlier.`name` < `sites`.`name` " +
+                        "OR (earlier.`name` = `sites`.`name` AND earlier.`id` < `sites`.`id`))",
+                )
+            }
+        }
 
         /**
          * Version 3 adds the per-site encoding.

@@ -34,6 +34,8 @@
     <string name="sites_add">Add a server</string>
     <string name="sites_edit">Edit %1$s</string>
     <string name="sites_delete">Delete %1$s</string>
+    <string name="sites_move_up">Move %1$s up</string>
+    <string name="sites_move_down">Move %1$s down</string>
     <string name="sites_new_title">New server</string>
     <string name="sites_edit_title">Edit server</string>
     <string name="field_name">Name</string>

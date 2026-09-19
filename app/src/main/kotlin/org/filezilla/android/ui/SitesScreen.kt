@@ -18,6 +18,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenuItem
@@ -56,6 +58,7 @@ fun SitesScreen(
     onSave: (SiteDraft) -> Unit,
     onDelete: (SiteEntity) -> Unit,
     onConnect: (SiteEntity) -> Unit,
+    onMove: (SiteEntity, Move) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (sites.isEmpty()) {
@@ -72,6 +75,7 @@ fun SitesScreen(
             verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp),
         ) {
             items(sites, key = { it.id }) { site ->
+                val index = sites.indexOf(site)
                 Card(
                     modifier = Modifier.fillMaxWidth().clickable { onConnect(site) },
                     colors = CardDefaults.cardColors(
@@ -127,6 +131,18 @@ fun SitesScreen(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                        // Only when there is somewhere to move to. One server
+                        // cannot be reordered, and a pair of dead arrows on
+                        // every row would be two more things to read past on
+                        // a screen whose job is to be scanned.
+                        if (sites.size > 1) {
+                            MoveButtons(
+                                name = site.name.ifBlank { site.host },
+                                canMoveUp = index > 0,
+                                canMoveDown = index < sites.lastIndex,
+                                onMove = { towards -> onMove(site, towards) },
+                            )
+                        }
                     }
                 }
             }
@@ -140,6 +156,65 @@ fun SitesScreen(
             onSave = {
                 onSave(it)
                 onEdit(null)
+            },
+        )
+    }
+}
+
+/**
+ * The up and down arrows, stacked into one column's width.
+ *
+ * Stacked rather than set beside the edit and delete buttons: four buttons in
+ * a row leaves a long server name almost no space on a phone, and these two
+ * belong together anyway. They are half-height for the same reason, which is
+ * why the touch target is set explicitly rather than left to the default --
+ * a 24dp button is a 24dp target, and that is too small to hit.
+ */
+@Composable
+private fun MoveButtons(
+    name: String,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onMove: (Move) -> Unit,
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        MoveButton(
+            icon = Icons.Filled.KeyboardArrowUp,
+            description = stringResource(R.string.sites_move_up, name),
+            enabled = canMoveUp,
+            onClick = { onMove(Move.UP) },
+        )
+        MoveButton(
+            icon = Icons.Filled.KeyboardArrowDown,
+            description = stringResource(R.string.sites_move_down, name),
+            enabled = canMoveDown,
+            onClick = { onMove(Move.DOWN) },
+        )
+    }
+}
+
+@Composable
+private fun MoveButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    description: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    IconButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.size(width = 40.dp, height = 32.dp),
+    ) {
+        Icon(
+            icon,
+            contentDescription = description,
+            modifier = Modifier.size(22.dp),
+            // Dimmed rather than hidden at the ends of the list: a button that
+            // disappears makes the row below it jump under the finger.
+            tint = if (enabled) {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            } else {
+                MaterialTheme.colorScheme.outlineVariant
             },
         )
     }

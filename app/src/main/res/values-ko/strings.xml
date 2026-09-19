@@ -33,6 +33,8 @@
     <string name="sites_add">서버 추가</string>
     <string name="sites_edit">%1$s 편집</string>
     <string name="sites_delete">%1$s 삭제</string>
+    <string name="sites_move_up">%1$s 위로 이동</string>
+    <string name="sites_move_down">%1$s 아래로 이동</string>
     <string name="sites_new_title">새 서버</string>
     <string name="sites_edit_title">서버 편집</string>
     <string name="field_name">이름</string>

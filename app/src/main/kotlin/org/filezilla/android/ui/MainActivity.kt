@@ -403,6 +403,7 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                     model.connect(site)
                     tab = Tab.BROWSE
                 },
+                onMove = model::moveSite,
                 modifier = Modifier.padding(padding),
             )
 

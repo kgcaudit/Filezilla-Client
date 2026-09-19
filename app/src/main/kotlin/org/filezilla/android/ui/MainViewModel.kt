@@ -123,7 +123,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Encrypts the password on its way to the row; see [SiteDraft]. */
     fun saveSite(draft: SiteDraft) {
-        viewModelScope.launch { graph.database.sites().upsert(draft.toEntity(graph.passwords)) }
+        viewModelScope.launch {
+            val dao = graph.database.sites()
+            // A site being edited keeps where the user put it. Only a new one
+            // needs a place, and its place is the end -- see [SiteDao.nextPosition].
+            val position = dao.byId(draft.id)?.position ?: dao.nextPosition()
+            dao.upsert(draft.toEntity(graph.passwords).copy(position = position))
+        }
+    }
+
+    /**
+     * Moves a site one place up or down the list.
+     *
+     * The order comes from what is on screen rather than from the database,
+     * because that is what the user was looking at when they pressed the
+     * button. Reading it again could answer with a list they have not seen.
+     */
+    fun moveSite(site: SiteEntity, towards: Move) {
+        val order = SiteOrder.moved(sites.value.map { it.id }, site.id, towards) ?: return
+        viewModelScope.launch { graph.database.sites().reorder(order) }
     }
 
     /** Opens a site for editing, decrypting its password for the form only. */

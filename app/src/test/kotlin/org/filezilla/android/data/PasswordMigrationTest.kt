@@ -18,9 +18,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * Version 1 stored site passwords in plaintext. Version 2 does not, and
- * version 3 adds the per-site encoding, so this drives the whole chain a
- * phone upgrading from the first build would actually run.
+ * Version 1 stored site passwords in plaintext. Version 2 does not, version
+ * 3 adds the per-site encoding and version 4 the user's own ordering, so this
+ * drives the whole chain a phone upgrading from the first build would run.
  *
  * This is the migration people lose their saved servers to if it is wrong, and
  * every way it can be wrong is quiet: a dropped table, columns in the wrong
@@ -104,12 +104,49 @@ class PasswordMigrationTest {
                 buildList { while (cursor.moveToNext()) add(cursor.getString(1)) }
             }
             assertTrue("password_cipher" in columns)
-            // Version 3 rode along in the same open.
+            // Versions 3 and 4 rode along in the same open.
             assertTrue("encoding" in columns)
+            assertTrue("position" in columns)
             // The reason the table is rebuilt rather than given a new column:
             // a plaintext column left behind is a plaintext column.
             assertFalse("password" in columns)
         }
+    }
+
+    /**
+     * The order the list was already being shown in survives becoming an
+     * order the user can change.
+     *
+     * Leaving every row at the default zero would have looked right until the
+     * first move: the name tiebreak would hold the list together, and then
+     * one press would renumber everything and rearrange rows the user never
+     * touched. So the migration writes down the order they were seeing.
+     */
+    @Test
+    fun `existing sites are numbered in the order they were shown`() {
+        createVersionOne(
+            "INSERT INTO sites VALUES ('c', 'Charlie', 'c.example', 21, 'u', 'p', 'PLAIN', 'DEFAULT', 0, NULL)",
+            "INSERT INTO sites VALUES ('a', 'Alpha', 'a.example', 21, 'u', 'p', 'PLAIN', 'DEFAULT', 0, NULL)",
+            "INSERT INTO sites VALUES ('b', 'Bravo', 'b.example', 21, 'u', 'p', 'PLAIN', 'DEFAULT', 0, NULL)",
+        )
+
+        val ordered = allSites()
+
+        assertEquals(listOf("Alpha", "Bravo", "Charlie"), ordered.map { it.name })
+        // Numbered from zero with no gaps and no ties, which is what makes a
+        // swap a swap rather than a no-op between two rows sharing a place.
+        assertEquals(listOf(0, 1, 2), ordered.map { it.position })
+    }
+
+    /** Two servers named the same still get places of their own. */
+    @Test
+    fun `sites sharing a name are still given distinct places`() {
+        createVersionOne(
+            "INSERT INTO sites VALUES ('b', 'NAS', 'b.example', 21, 'u', 'p', 'PLAIN', 'DEFAULT', 0, NULL)",
+            "INSERT INTO sites VALUES ('a', 'NAS', 'a.example', 21, 'u', 'p', 'PLAIN', 'DEFAULT', 0, NULL)",
+        )
+
+        assertEquals(listOf(0, 1), allSites().map { it.position })
     }
 
     @Test
@@ -169,11 +206,32 @@ class PasswordMigrationTest {
      */
     private fun readSite(host: String, port: Int, user: String): SiteEntity? {
         val database = Room.databaseBuilder(context, AppDatabase::class.java, DB)
-            .addMigrations(AppDatabase.encryptPasswords(passwords), AppDatabase.ADD_ENCODING)
+            .addMigrations(
+                AppDatabase.encryptPasswords(passwords),
+                AppDatabase.ADD_ENCODING,
+                AppDatabase.ADD_POSITION,
+            )
             .allowMainThreadQueries()
             .build()
         return try {
             database.sites().byEndpoint(host, port, user)
+        } finally {
+            database.close()
+        }
+    }
+
+    /** Every site, in the order the app shows them, after the migration. */
+    private fun allSites(): List<SiteEntity> {
+        val database = Room.databaseBuilder(context, AppDatabase::class.java, DB)
+            .addMigrations(
+                AppDatabase.encryptPasswords(passwords),
+                AppDatabase.ADD_ENCODING,
+                AppDatabase.ADD_POSITION,
+            )
+            .allowMainThreadQueries()
+            .build()
+        return try {
+            kotlinx.coroutines.runBlocking { database.sites().all() }
         } finally {
             database.close()
         }
@@ -193,7 +251,7 @@ class PasswordMigrationTest {
 
     private companion object {
         const val DB = "migration-test.db"
-        const val CURRENT_VERSION = 3
+        const val CURRENT_VERSION = 4
         const val V1_IDENTITY_HASH = "77835b154afacbde0754e799cc2b8a3d"
 
         const val V1_SITES =

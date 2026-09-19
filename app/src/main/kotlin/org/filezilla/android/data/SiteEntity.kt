@@ -30,6 +30,14 @@ data class SiteEntity(
     val initialPath: String?,
     /** Null negotiates UTF-8; a name pins it. See [FtpSettings.encoding]. */
     val encoding: String? = null,
+    /**
+     * Where the site sits in the user's own order, smallest first.
+     *
+     * The list was sorted by name, which is an order nobody chose: the server
+     * used every day sat wherever its name happened to fall. This is the one
+     * the user arranged, so it is stored rather than derived.
+     */
+    val position: Int = 0,
 ) {
     /**
      * The connection settings, with the password decrypted for the moment it
