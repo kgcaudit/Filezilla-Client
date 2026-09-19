@@ -118,9 +118,12 @@ fun FilePanes(
             }
         }
 
-        // Only where something can be made. A server pane cannot yet, and an
-        // offer that fails on every press is worse than none.
-        if (state.isLocal && model.storageGranted) {
+        // Hidden while a bar is up, and not only for tidiness: the button
+        // floats over the bottom-right corner, which is exactly where the
+        // paste button sits -- so the one action the paste bar exists for was
+        // underneath it and could not be pressed.
+        val barShowing = (state.selecting && state.selection.isNotEmpty()) || model.clipboard != null
+        if (state.isLocal && model.storageGranted && !barShowing) {
             NewThingFab(
                 expanded = dialOpen,
                 onExpandedChange = { dialOpen = it },

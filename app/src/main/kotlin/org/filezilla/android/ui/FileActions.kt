@@ -179,7 +179,11 @@ fun PasteBar(
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.tertiaryContainer,
+        // A colour the theme actually defines. This was tertiaryContainer,
+        // which it does not: Material filled the gap from its own palette and
+        // the bar came out pink, which on this screen reads as an error.
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
         tonalElevation = 3.dp,
     ) {
         Row(
@@ -194,12 +198,16 @@ fun PasteBar(
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f).padding(start = 4.dp),
             )
+            // Named rather than an icon alone: it is the one thing this bar
+            // is for, and a clipboard glyph is not a word anybody reads.
             if (refusal == null) {
-                IconButton(onClick = onPaste) {
+                androidx.compose.material3.Button(onClick = onPaste) {
                     Icon(
                         Icons.Filled.ContentPaste,
-                        contentDescription = stringResource(R.string.action_paste),
+                        contentDescription = null,
+                        modifier = Modifier.padding(end = 6.dp),
                     )
+                    Text(stringResource(R.string.action_paste))
                 }
             }
         }
