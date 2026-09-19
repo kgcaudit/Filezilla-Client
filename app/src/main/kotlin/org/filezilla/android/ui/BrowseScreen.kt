@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Check
@@ -69,8 +70,6 @@ fun BrowseScreen(
     state: BrowseState,
     rows: List<DirectoryEntry>,
     options: BrowseOptions,
-    downloadFolderName: String?,
-    onUp: () -> Unit,
     onRefresh: () -> Unit,
     onOpenLog: () -> Unit,
     onFilterChange: (String) -> Unit,
@@ -94,8 +93,6 @@ fun BrowseScreen(
     var renaming by remember { mutableStateOf<DirectoryEntry?>(null) }
 
     Column(modifier = modifier) {
-        PathBar(state, rows, downloadFolderName, onUp)
-
         if (state.filterOpen) {
             FilterBar(state.filter, onFilterChange, onCloseFilter)
         }
@@ -137,6 +134,7 @@ fun BrowseScreen(
                             entry = entry,
                             selected = entry.name in state.selection,
                             selecting = state.selecting,
+                            isLocal = state.isLocal,
                             actions = actions,
                             onRename = { renaming = entry },
                         )
@@ -162,45 +160,6 @@ fun BrowseScreen(
 }
 
 @Composable
-private fun PathBar(
-    state: BrowseState,
-    rows: List<DirectoryEntry>,
-    downloadFolderName: String?,
-    onUp: () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IconButton(onClick = onUp, enabled = state.path != "/") {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.browse_up))
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                state.path,
-                style = MaterialTheme.typography.titleSmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            // How many of each, and where a download would land: the two
-            // things worth knowing about a directory before touching it.
-            val folders = rows.count { it.isDirectory }
-            Text(
-                stringResource(R.string.listing_summary, folders, rows.size - folders) +
-                    "  ·  " + (
-                    downloadFolderName?.let { stringResource(R.string.browse_destination, it) }
-                        ?: stringResource(R.string.browse_no_destination)
-                    ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-@Composable
 private fun FilterBar(filter: String, onChange: (String) -> Unit, onClose: () -> Unit) {
     OutlinedTextField(
         value = filter,
@@ -222,6 +181,7 @@ private fun EntryRow(
     entry: DirectoryEntry,
     selected: Boolean,
     selecting: Boolean,
+    isLocal: Boolean,
     actions: EntryActions,
     onRename: () -> Unit,
 ) {
@@ -294,10 +254,17 @@ private fun EntryRow(
         }
         if (!selecting) {
             if (!entry.isDirectory) {
+                // The same action, and two different things: on a server it
+                // fetches the file, on the phone it opens it. A download
+                // arrow beside a file that is already on the phone says the
+                // button does something it does not.
                 IconButton(onClick = { actions.onDownload(entry) }) {
                     Icon(
-                        Icons.Filled.Download,
-                        contentDescription = stringResource(R.string.browse_download, entry.name),
+                        if (isLocal) Icons.AutoMirrored.Filled.OpenInNew else Icons.Filled.Download,
+                        contentDescription = stringResource(
+                            if (isLocal) R.string.browse_open else R.string.browse_download,
+                            entry.name,
+                        ),
                         tint = MaterialTheme.colorScheme.primary,
                     )
                 }
@@ -312,7 +279,7 @@ private fun EntryRow(
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 // A file has the download button beside it; a folder has
                 // nowhere else to be asked for on its own.
-                if (entry.isDirectory) {
+                if (entry.isDirectory && !isLocal) {
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.browse_download_folder)) },
                         onClick = {

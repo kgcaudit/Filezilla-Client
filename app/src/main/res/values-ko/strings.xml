@@ -67,7 +67,6 @@
     <!-- 파일 -->
     <string name="browse_not_connected_title">연결되지 않음</string>
     <string name="browse_not_connected_detail">서버 탭에서 서버를 선택하면 파일을 볼 수 있습니다.</string>
-    <string name="browse_up">상위 디렉터리로</string>
     <string name="browse_refresh">목록 새로고침</string>
     <string name="browse_destination">저장 위치: %1$s</string>
     <string name="browse_no_destination">저장 폴더가 아직 지정되지 않았습니다</string>
@@ -217,12 +216,11 @@
     <string name="storage_unavailable_title">이 안드로이드 버전에서는 불가능합니다</string>
     <string name="storage_unavailable_detail">안드로이드 10은 전체 저장소 접근도, 이를 대체한 권한도 지원하지 않습니다. 휴대폰 탐색은 안드로이드 11 이상이 필요합니다.</string>
     <string name="side_local">내 파일</string>
-    <string name="side_remote">서버</string>
     <string name="fail_local_title">폴더를 읽을 수 없습니다</string>
     <string name="fail_local_advice">폴더가 삭제되었거나, 설정에서 저장소 접근 권한이 꺼졌을 수 있습니다.</string>
     <string name="pane_no_source">선택 안 됨</string>
     <string name="pane_pick_title">이 창에 무엇을 볼지 고르세요</string>
-    <string name="pane_pick_detail">휴대폰은 "내 파일", 저장한 서버는 "서버"를 누르세요.</string>
+    <string name="pane_pick_detail">위의 메뉴 버튼을 눌러 이 휴대폰의 저장소나 저장한 서버를 고르세요.</string>
     <string name="fab_actions">파일 기능</string>
     <string name="fab_close">닫기</string>
     <string name="fab_new_folder">새 폴더</string>
@@ -246,4 +244,12 @@
     <string name="paste_go_somewhere_cut">%1$d개 잘라냄. 옮길 폴더를 여세요.</string>
     <string name="open_no_app">이 파일을 열 수 있는 앱이 없습니다</string>
     <string name="exit_confirm">한 번 더 누르면 종료됩니다</string>
+    <string name="pane_storage">저장소 및 서버</string>
+    <string name="storage_section">저장소</string>
+    <string name="storage_servers_section">서버</string>
+    <string name="storage_not_granted">아직 저장소를 읽을 수 없습니다</string>
+    <string name="storage_grant_action">눌러서 권한을 허용하세요</string>
+    <string name="browse_open">%1$s 열기</string>
+    <string name="storage_free_of">%2$s 중 %1$s 사용 가능</string>
+    <string name="storage_clear_pane">이 창 비우기</string>
 </resources>

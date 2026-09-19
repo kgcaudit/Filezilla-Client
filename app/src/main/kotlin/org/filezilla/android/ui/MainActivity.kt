@@ -93,7 +93,6 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
     var queueMenuOpen by remember { mutableStateOf(false) }
     var editingSite by remember { mutableStateOf<SiteDraft?>(null) }
     var creatingDirectory by remember { mutableStateOf(false) }
-    var viewOptionsOpen by remember { mutableStateOf(false) }
     var confirmingDelete by remember { mutableStateOf(false) }
 
     val sites by model.sites.collectAsState()
@@ -290,34 +289,10 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                 ),
                 actions = {
                     when (tab) {
-                        Tab.BROWSE -> if (model.browse.source !is PaneSource.Empty) {
-                            // Making a folder and uploading are the server
-                            // pane's; the phone has the round button for the
-                            // first and the other pane for the second.
-                            if (model.browse.site != null) {
-                                BrowseQuickActions(
-                                    onNewDirectory = { creatingDirectory = true },
-                                    onUpload = {
-                                        requestNotifications()
-                                        uploadPicker.launch(arrayOf("*/*"))
-                                    },
-                                )
-                            }
-                            // Sorting, hidden files, filtering and select mode
-                            // belong to both. Keyed on the pane's server, as
-                            // they were, a local pane had none of them at all.
-                            BrowseOverflow(
-                                options = model.options,
-                                filterOpen = model.browse.filterOpen,
-                                onSelectMode = model::toggleSelectionMode,
-                                onSelectAll = model::selectAll,
-                                onToggleFilter = model::toggleFilter,
-                                onViewOptions = { viewOptionsOpen = true },
-                                onChooseFolder = { folderPicker.launch(null) },
-                                onRefresh = model::refresh,
-                                onOptions = model::applyOptions,
-                            )
-                        }
+                        // Nothing here: every action on this screen belongs to
+                        // one pane or the other, and a bar above both cannot
+                        // say which. They live in each pane's own header now.
+                        Tab.BROWSE -> Unit
 
                         Tab.QUEUE -> {
                             IconButton(onClick = { model.clearCompleted() }) {
@@ -434,6 +409,12 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                 model = model,
                 options = model.options,
                 downloadFolderName = model.downloadFolderName,
+                onNewDirectory = { creatingDirectory = true },
+                onUpload = {
+                    requestNotifications()
+                    uploadPicker.launch(arrayOf("*/*"))
+                },
+                onChooseFolder = { folderPicker.launch(null) },
                 onOpenLog = { tab = Tab.LOG },
                 onGrant = ::requestStorageAccess,
                 onPickSite = { tab = Tab.SITES },
@@ -489,14 +470,6 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
 
             Tab.LOG -> LogScreen(lines = logLines, modifier = Modifier.padding(padding))
         }
-    }
-
-    if (viewOptionsOpen) {
-        ViewOptionsDialog(
-            options = model.options,
-            onDismiss = { viewOptionsOpen = false },
-            onApply = model::applyOptions,
-        )
     }
 
     model.browse.properties?.let { entry ->

@@ -21,6 +21,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,6 +41,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import org.filezilla.android.R
 import org.filezilla.android.files.FilePath
 
@@ -63,9 +66,13 @@ fun FilePanes(
     onTransfersQueued: (Int) -> Unit,
     onDownloadSelected: () -> Unit,
     onOpenLocalFile: (String) -> Unit,
+    onNewDirectory: () -> Unit,
+    onUpload: () -> Unit,
+    onChooseFolder: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val pager = rememberPagerState(initialPage = pageOf(model.activePane)) { PaneId.entries.size }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     // Asked of the width every time, so folding the device back up puts it
     // back to one pane.
@@ -98,7 +105,13 @@ fun FilePanes(
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            if (!bothPanes) PaneTabs(current = pager.currentPage, model = model)
+            if (!bothPanes) {
+                PaneTabs(
+                    current = pager.currentPage,
+                    model = model,
+                    onPick = { page -> scope.launch { pager.animateScrollToPage(page) } },
+                )
+            }
 
             if (bothPanes) {
                 Row(modifier = Modifier.weight(1f)) {
@@ -137,6 +150,9 @@ fun FilePanes(
                                 onPickSite = onPickSite,
                                 onDownload = onDownload,
                                 onOpenLocalFile = onOpenLocalFile,
+                                onNewDirectory = onNewDirectory,
+                                onUpload = onUpload,
+                                onChooseFolder = onChooseFolder,
                             )
                         }
                     }
@@ -154,6 +170,9 @@ fun FilePanes(
                         onPickSite = onPickSite,
                         onDownload = onDownload,
                         onOpenLocalFile = onOpenLocalFile,
+                        onNewDirectory = onNewDirectory,
+                        onUpload = onUpload,
+                        onChooseFolder = onChooseFolder,
                     )
                 }
             }
@@ -288,26 +307,30 @@ private fun ConfirmDelete(count: Int, onDismiss: () -> Unit, onConfirm: () -> Un
  * a swipe would land on, where "1" and "2" would not.
  */
 @Composable
-private fun PaneTabs(current: Int, model: MainViewModel) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+private fun PaneTabs(current: Int, model: MainViewModel, onPick: (Int) -> Unit) {
+    TabRow(
+        selectedTabIndex = current,
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.primary,
     ) {
         for (id in PaneId.entries) {
-            val selected = pageOf(id) == current
-            Text(
-                paneLabel(model.pane(id).source),
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (selected) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
+            val page = pageOf(id)
+            Tab(
+                selected = page == current,
+                // Tapping is the other way to reach a pane, and the one that
+                // works when there is nothing to tell you a swipe would do
+                // anything. The label alone was not a control.
+                onClick = { onPick(page) },
+                text = {
+                    Text(
+                        paneLabel(model.pane(id).source),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (page == current) FontWeight.SemiBold else FontWeight.Normal,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
+                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -332,6 +355,9 @@ private fun PaneBody(
     onPickSite: () -> Unit,
     onDownload: (org.filezilla.ftp.listing.DirectoryEntry) -> Unit,
     onOpenLocalFile: (String) -> Unit,
+    onNewDirectory: () -> Unit,
+    onUpload: () -> Unit,
+    onChooseFolder: () -> Unit,
 ) {
     val state = model.pane(id)
 
@@ -345,7 +371,17 @@ private fun PaneBody(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        PaneHeader(id = id, model = model, onPickSite = onPickSite)
+        PaneHeader(
+            id = id,
+            model = model,
+            options = options,
+            rows = rows,
+            downloadFolderName = downloadFolderName,
+            onNewDirectory = onNewDirectory,
+            onUpload = onUpload,
+            onChooseFolder = onChooseFolder,
+            onGrant = onGrant,
+        )
         if (state.loading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
 
         when {
@@ -366,8 +402,6 @@ private fun PaneBody(
                 state = state,
                 rows = rows,
                 options = options,
-                downloadFolderName = downloadFolderName,
-                onUp = { model.up(id) },
                 onRefresh = { model.open(id) },
                 onOpenLog = onOpenLog,
                 onFilterChange = model::setFilter,
@@ -393,65 +427,4 @@ private fun PaneBody(
             )
         }
     }
-}
-
-/**
- * What this pane is looking at, and the way to point it somewhere else.
- *
- * The source chip is the whole navigation for a pane: tapping it is how the
- * phone becomes a server and back again, which is what makes either side able
- * to be either thing.
- */
-@Composable
-private fun PaneHeader(id: PaneId, model: MainViewModel, onPickSite: () -> Unit) {
-    val state = model.pane(id)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 12.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        AssistChip(
-            onClick = { model.showLocal(id) },
-            label = { Text(stringResource(R.string.side_local)) },
-            leadingIcon = { SourceDot(active = state.isLocal) },
-        )
-        AssistChip(
-            onClick = onPickSite,
-            label = {
-                Text(state.site?.let { it.name.ifBlank { it.host } } ?: stringResource(R.string.side_remote))
-            },
-            leadingIcon = { SourceDot(active = state.site != null) },
-        )
-        if (model.storageGranted && state.isLocal) {
-            for (root in model.storageRoots()) {
-                AssistChip(
-                    onClick = { model.openPath(id, root.path) },
-                    label = { Text(root.label) },
-                )
-            }
-        }
-        IconButton(onClick = { model.open(id) }) {
-            Icon(
-                Icons.Filled.Refresh,
-                contentDescription = stringResource(R.string.browse_refresh),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-/** Marks which source a pane is actually on, since both chips are always there. */
-@Composable
-private fun SourceDot(active: Boolean) {
-    Box(
-        modifier = Modifier
-            .size(10.dp)
-            .background(
-                if (active) MaterialTheme.colorScheme.primary else Color.Transparent,
-                CircleShape,
-            ),
-    )
 }

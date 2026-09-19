@@ -289,12 +289,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Points a pane at the phone, remembering that it is there. */
-    fun showLocal(id: PaneId) {
+    fun showLocal(id: PaneId) = showLocalAt(id, rememberedLocal(id))
+
+    /**
+     * Points a pane at one folder on the phone, whatever it was showing.
+     *
+     * Separate from [showLocal] because picking a volume from the storage
+     * list means that volume, not the folder the pane was last left in --
+     * which on a pane already showing the phone would ignore the tap.
+     */
+    fun showLocalAt(id: PaneId, path: String) {
         graph.preferences.setPaneIsLocal(id.name, true)
         graph.preferences.setPaneSiteId(id.name, null)
         update(id) { BrowseState(source = PaneSource.Local) }
         refreshStorageAccess()
-        if (storageGranted) openLocal(id, rememberedLocal(id))
+        if (storageGranted) openLocal(id, path)
     }
 
     /** Points a pane at a server, remembering which. */
@@ -842,6 +851,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** The volumes and shortcuts a local pane can jump to. */
     fun storageRoots(): List<StorageRoot> = graph.volumes.roots()
+
+    /** How full a volume is, for the storage list. Null when it cannot be read. */
+    fun capacityOf(path: String) = graph.volumes.capacityOf(path)
+
+    /** Points a pane at nothing, so it offers the choice again. */
+    fun showEmpty(id: PaneId) {
+        graph.preferences.setPaneIsLocal(id.name, false)
+        graph.preferences.setPaneSiteId(id.name, null)
+        update(id) { BrowseState(source = PaneSource.Empty) }
+    }
+
+    /**
+     * This pane's path as a row of places; see [breadcrumbs].
+     *
+     * The trail stops at the volume the folder is on, or at the server's own
+     * root. Shortcuts are not floors: Downloads sits inside internal storage,
+     * and a trail that began there would offer no way back up to the rest of
+     * the phone.
+     */
+    fun breadcrumbsFor(id: PaneId): List<Crumb> {
+        val state = pane(id)
+        if (state.isLocal) {
+            val volume = storageRoots()
+                .filter { it.kind != StorageRoot.Kind.SHORTCUT }
+                .firstOrNull { FilePath.isWithin(state.path, it.path) }
+            return breadcrumbs(
+                state.path,
+                volume?.path ?: FilePath.ROOT,
+                volume?.label ?: FilePath.ROOT,
+            )
+        }
+        val name = state.site?.let { it.name.ifBlank { it.host } } ?: FilePath.ROOT
+        return breadcrumbs(state.path, FilePath.ROOT, name)
+    }
 
     /**
      * Re-asks the platform whether the app may read storage, and lists if so.

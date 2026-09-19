@@ -99,6 +99,11 @@ dependencies {
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.kotlinx.coroutines.test)
 
+    // Compose rendered under Robolectric, so a layout can be looked at rather
+    // than reasoned about. See LayoutShotTest.
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
+
     // The live FTPS server, shared from :core-ftp. The app's resume path is
     // checked against a real server for the same reason the engine's is.
     testImplementation(testFixtures(project(":core-ftp")))

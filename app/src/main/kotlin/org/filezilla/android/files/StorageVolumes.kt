@@ -15,6 +15,29 @@ data class StorageRoot(
 }
 
 /**
+ * How full a volume is.
+ *
+ * Shown beside a volume in the storage list, which is the one place a user
+ * looks to decide where a download should go -- "SD card" alone does not
+ * answer that, and "11.2 GB free of 128 GB" does.
+ */
+data class StorageCapacity(val freeBytes: Long, val totalBytes: Long) {
+
+    /**
+     * How much of the volume is in use, between 0 and 1.
+     *
+     * Clamped, and guarded against a total of zero. Neither is defensive
+     * padding: a volume that cannot be measured reports zeroes, and a bar
+     * drawn from a division by zero is a crash rather than a blank bar.
+     */
+    val usedFraction: Float
+        get() {
+            if (totalBytes <= 0) return 0f
+            return ((totalBytes - freeBytes).toFloat() / totalBytes).coerceIn(0f, 1f)
+        }
+}
+
+/**
  * The volume root an app-specific directory sits on.
  *
  * Android hands out `/storage/XXXX-XXXX/Android/data/<package>/files` and
@@ -97,6 +120,20 @@ class StorageVolumes(private val context: Context) {
 
         return roots
     }
+
+    /**
+     * How full the volume holding [path] is, or null when it cannot be read.
+     *
+     * Null rather than zeroes, so the list can leave the line out entirely
+     * instead of claiming a volume is empty.
+     */
+    fun capacityOf(path: String): StorageCapacity? = runCatching {
+        val stat = android.os.StatFs(path)
+        StorageCapacity(
+            freeBytes = stat.availableBytes,
+            totalBytes = stat.totalBytes,
+        )
+    }.getOrNull()?.takeIf { it.totalBytes > 0 }
 
     /**
      * Where the local pane opens when it has nothing remembered.

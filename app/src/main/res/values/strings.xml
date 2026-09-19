@@ -68,7 +68,6 @@
     <!-- Browse -->
     <string name="browse_not_connected_title">Not connected</string>
     <string name="browse_not_connected_detail">Pick a server on the Servers tab to browse it.</string>
-    <string name="browse_up">Up one directory</string>
     <string name="browse_refresh">Refresh listing</string>
     <string name="browse_destination">Saving to %1$s</string>
     <string name="browse_no_destination">No download folder chosen yet</string>
@@ -219,12 +218,11 @@
     <string name="storage_unavailable_title">Not available on this Android version</string>
     <string name="storage_unavailable_detail">Android 10 allows neither full storage access nor the permission that replaced it. Browsing the phone needs Android 11 or later.</string>
     <string name="side_local">My files</string>
-    <string name="side_remote">Server</string>
     <string name="fail_local_title">This folder could not be read</string>
     <string name="fail_local_advice">The folder may have been removed, or storage access may have been turned off in Settings.</string>
     <string name="pane_no_source">Nothing chosen</string>
     <string name="pane_pick_title">Pick what this pane shows</string>
-    <string name="pane_pick_detail">Tap My files for this phone, or Server to open a saved server.</string>
+    <string name="pane_pick_detail">Use the menu button above to choose this phone\u0027s storage or a saved server.</string>
     <string name="fab_actions">File actions</string>
     <string name="fab_close">Close</string>
     <string name="fab_new_folder">New folder</string>
@@ -248,4 +246,12 @@
     <string name="paste_go_somewhere_cut">%1$d cut. Open where they should go.</string>
     <string name="open_no_app">No app on this phone opens that file</string>
     <string name="exit_confirm">Press back again to leave</string>
+    <string name="pane_storage">Storage and servers</string>
+    <string name="storage_section">Storage</string>
+    <string name="storage_servers_section">Servers</string>
+    <string name="storage_not_granted">This app cannot read storage yet</string>
+    <string name="storage_grant_action">Tap to allow it</string>
+    <string name="browse_open">Open %1$s</string>
+    <string name="storage_free_of">%1$s free of %2$s</string>
+    <string name="storage_clear_pane">Leave this pane empty</string>
 </resources>

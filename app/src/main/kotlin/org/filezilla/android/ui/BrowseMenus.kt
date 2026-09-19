@@ -67,6 +67,10 @@ fun BrowseOverflow(
     onChooseFolder: () -> Unit,
     onRefresh: () -> Unit,
     onOptions: (BrowseOptions) -> Unit,
+    /** Null on a pane showing the phone, which makes folders with its own button. */
+    onNewDirectory: (() -> Unit)? = null,
+    /** Null on a pane showing the phone: "up" from there is the other pane. */
+    onUpload: (() -> Unit)? = null,
 ) {
     var open by remember { mutableStateOf(false) }
 
@@ -74,6 +78,19 @@ fun BrowseOverflow(
         Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.menu_more))
     }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        onNewDirectory?.let { action ->
+            Item(R.string.browse_new_directory, Icons.Filled.CreateNewFolder) {
+                open = false
+                action()
+            }
+        }
+        onUpload?.let { action ->
+            Item(R.string.browse_upload, Icons.Filled.Upload) {
+                open = false
+                action()
+            }
+        }
+        if (onNewDirectory != null || onUpload != null) HorizontalDivider()
         Item(R.string.menu_select, Icons.Filled.Checklist) {
             open = false
             onSelectMode()
@@ -292,16 +309,5 @@ private fun Field(labelRes: Int, value: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(value, style = MaterialTheme.typography.bodyMedium)
-    }
-}
-
-/** The icons the app bar keeps, because they are used on every visit. */
-@Composable
-fun BrowseQuickActions(onNewDirectory: () -> Unit, onUpload: () -> Unit) {
-    IconButton(onClick = onNewDirectory) {
-        Icon(Icons.Filled.CreateNewFolder, contentDescription = stringResource(R.string.browse_new_directory))
-    }
-    IconButton(onClick = onUpload) {
-        Icon(Icons.Filled.Upload, contentDescription = stringResource(R.string.browse_upload))
     }
 }
