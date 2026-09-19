@@ -88,4 +88,33 @@ class PaneTest {
         assertEquals(PaneId.LEFT, paneAt(0))
         assertEquals(PaneId.RIGHT, paneAt(1))
     }
+
+    // -------------------------------------------------- one pane or two
+
+    @Test
+    fun `a phone shows one pane at a time`() {
+        // A tall phone is around 360-430dp wide; a wide one in landscape is
+        // still short of room for two readable listings.
+        assertFalse(showsBothPanes(360))
+        assertFalse(showsBothPanes(430))
+        assertFalse(showsBothPanes(SIDE_BY_SIDE_WIDTH_DP - 1))
+    }
+
+    @Test
+    fun `an opened foldable or a tablet shows both`() {
+        assertTrue(showsBothPanes(SIDE_BY_SIDE_WIDTH_DP))
+        // A Fold opened out, and a tablet.
+        assertTrue(showsBothPanes(840))
+        assertTrue(showsBothPanes(1280))
+    }
+
+    /**
+     * Folding the device back up has to put it back to one pane, so the
+     * question is asked of the width every time rather than answered once.
+     */
+    @Test
+    fun `the answer follows the width in both directions`() {
+        assertTrue(showsBothPanes(800))
+        assertFalse(showsBothPanes(400))
+    }
 }

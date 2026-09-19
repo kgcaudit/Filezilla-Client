@@ -256,14 +256,22 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                 ),
                 actions = {
                     when (tab) {
-                        Tab.BROWSE -> if (model.browse.site != null) {
-                            BrowseQuickActions(
-                                onNewDirectory = { creatingDirectory = true },
-                                onUpload = {
-                                    requestNotifications()
-                                    uploadPicker.launch(arrayOf("*/*"))
-                                },
-                            )
+                        Tab.BROWSE -> if (model.browse.source !is PaneSource.Empty) {
+                            // Making a folder and uploading are the server
+                            // pane's; the phone has the round button for the
+                            // first and the other pane for the second.
+                            if (model.browse.site != null) {
+                                BrowseQuickActions(
+                                    onNewDirectory = { creatingDirectory = true },
+                                    onUpload = {
+                                        requestNotifications()
+                                        uploadPicker.launch(arrayOf("*/*"))
+                                    },
+                                )
+                            }
+                            // Sorting, hidden files, filtering and select mode
+                            // belong to both. Keyed on the pane's server, as
+                            // they were, a local pane had none of them at all.
                             BrowseOverflow(
                                 options = model.options,
                                 filterOpen = model.browse.filterOpen,

@@ -44,3 +44,22 @@ fun defaultSourceFor(pane: PaneId): PaneSource =
 fun paneAt(page: Int): PaneId = if (page == 0) PaneId.LEFT else PaneId.RIGHT
 
 fun pageOf(pane: PaneId): Int = if (pane == PaneId.LEFT) 0 else 1
+
+/**
+ * The width at which both panes fit side by side.
+ *
+ * Two listings need room for two file names, and a file manager whose names
+ * are all truncated is one nobody can use -- so the panes only sit together
+ * once there is space for both to stay readable. 720dp is a folded phone
+ * opened out, or a tablet; a phone on its own is nowhere near it.
+ */
+const val SIDE_BY_SIDE_WIDTH_DP = 720
+
+/**
+ * Whether to show both panes at once.
+ *
+ * Decided from the width alone rather than from a device class: a phone in
+ * landscape, a folded phone opened out and a small tablet are three different
+ * classes and one question, which is whether two file names fit.
+ */
+fun showsBothPanes(widthDp: Int): Boolean = widthDp >= SIDE_BY_SIDE_WIDTH_DP

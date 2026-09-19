@@ -141,6 +141,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun pane(id: PaneId): BrowseState = paneStates.getValue(id)
 
+    /**
+     * Makes [id] the pane the toolbar and the bars act on, without opening it.
+     *
+     * Separate from [showPane] because with both panes on screen focus moves
+     * by touch, many times, and re-listing a folder on every touch would be a
+     * listing nobody asked for -- and, on a server, a login.
+     */
+    fun focusPane(id: PaneId) {
+        if (activePane != id) activePane = id
+    }
+
+    /** Lists [id] if it has nothing yet, and leaves it alone if it has. */
+    fun ensureOpen(id: PaneId) {
+        val state = pane(id)
+        if (state.entries.isEmpty() && !state.loading && state.error == null) open(id)
+    }
+
     fun showPane(id: PaneId) {
         activePane = id
         val state = pane(id)

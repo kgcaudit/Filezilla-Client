@@ -30,6 +30,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -63,14 +66,29 @@ fun FilePanes(
 ) {
     val pager = rememberPagerState(initialPage = pageOf(model.activePane)) { PaneId.entries.size }
 
+    // Asked of the width every time, so folding the device back up puts it
+    // back to one pane.
+    val bothPanes = showsBothPanes(
+        LocalConfiguration.current.screenWidthDp,
+    )
+
     // The pager is the one record of which pane is in front. Tracking it
     // separately as well would give two answers that drift apart, and the
     // toolbar would start acting on the pane the user cannot see.
-    LaunchedEffect(pager) {
-        snapshotFlow { pager.currentPage }.collect { model.showPane(paneAt(it)) }
+    LaunchedEffect(pager, bothPanes) {
+        if (bothPanes) {
+            // Both are on screen, so both need contents -- the one behind is
+            // no longer filled by being swiped to.
+            for (id in PaneId.entries) model.ensureOpen(id)
+        } else {
+            snapshotFlow { pager.currentPage }.collect { model.showPane(paneAt(it)) }
+        }
     }
 
-    val active = paneAt(pager.currentPage)
+    // With both panes on screen the pager is not what says which one is being
+    // acted on -- the last one touched is -- so the active pane comes from
+    // the view model there and from the pager otherwise.
+    val active = if (bothPanes) model.activePane else paneAt(pager.currentPage)
     val state = model.pane(active)
     var dialOpen by remember { mutableStateOf(false) }
     var naming by remember { mutableStateOf<NewThing?>(null) }
@@ -79,20 +97,62 @@ fun FilePanes(
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            PaneTabs(current = pager.currentPage, model = model)
+            if (!bothPanes) PaneTabs(current = pager.currentPage, model = model)
 
-            HorizontalPager(state = pager, modifier = Modifier.weight(1f)) { page ->
-                val id = paneAt(page)
-                PaneBody(
-                    id = id,
-                    model = model,
-                    options = options,
-                    downloadFolderName = downloadFolderName,
-                    onOpenLog = onOpenLog,
-                    onGrant = onGrant,
-                    onPickSite = onPickSite,
-                    onDownload = onDownload,
-                )
+            if (bothPanes) {
+                Row(modifier = Modifier.weight(1f)) {
+                    for (id in PaneId.entries) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxSize()
+                                // Touching a pane is what makes it the one the
+                                // bars act on. Without this the toolbar would
+                                // keep acting on whichever was active last,
+                                // which with both in view is invisible.
+                                .pointerInput(id) {
+                                    awaitPointerEventScope {
+                                        while (true) {
+                                            awaitPointerEvent(PointerEventPass.Initial)
+                                            model.focusPane(id)
+                                        }
+                                    }
+                                }
+                                .background(
+                                    if (id == active) {
+                                        MaterialTheme.colorScheme.surface
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                    },
+                                ),
+                        ) {
+                            PaneBody(
+                                id = id,
+                                model = model,
+                                options = options,
+                                downloadFolderName = downloadFolderName,
+                                onOpenLog = onOpenLog,
+                                onGrant = onGrant,
+                                onPickSite = onPickSite,
+                                onDownload = onDownload,
+                            )
+                        }
+                    }
+                }
+            } else {
+                HorizontalPager(state = pager, modifier = Modifier.weight(1f)) { page ->
+                    val id = paneAt(page)
+                    PaneBody(
+                        id = id,
+                        model = model,
+                        options = options,
+                        downloadFolderName = downloadFolderName,
+                        onOpenLog = onOpenLog,
+                        onGrant = onGrant,
+                        onPickSite = onPickSite,
+                        onDownload = onDownload,
+                    )
+                }
             }
 
             // The bars belong to the pane in front, so they sit outside the
