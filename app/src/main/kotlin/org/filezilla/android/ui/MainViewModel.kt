@@ -278,6 +278,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun restorePanes() {
         for (id in PaneId.entries) {
             val siteId = graph.preferences.paneSiteId(id.name)
+
             when {
                 graph.preferences.paneIsLocal(id.name) ->
                     update(id) { it.copy(source = PaneSource.Local) }
@@ -300,12 +301,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         open(activePane)
     }
 
-    private fun rememberedLocal(id: PaneId): String =
-        graph.preferences.panePath(id.name) ?: graph.volumes.defaultPath()
+    /**
+     * Where this pane last was on the phone.
+     *
+     * Kept apart from where it last was on a server, which is the bug this
+     * shape fixes: one slot per pane meant switching a pane from a server to
+     * the phone reused the server's path. A server sitting at "/" therefore
+     * sent the pane to the root of the filesystem, which cannot be listed.
+     *
+     * A folder that has since gone -- deleted, or on a card that was removed
+     * -- falls back to the default rather than opening an error, since the
+     * pane has somewhere sensible to be and no reason not to be there.
+     */
+    private fun rememberedLocal(id: PaneId): String {
+        val remembered = graph.preferences.panePath(id.name, LOCAL_SOURCE_KEY)
+        if (remembered != null && java.io.File(remembered).isDirectory) return remembered
+        return graph.volumes.defaultPath()
+    }
 
     private fun rememberedRemote(id: PaneId, site: SiteEntity): String? =
-        graph.preferences.panePath(id.name)
+        graph.preferences.panePath(id.name, siteSourceKey(site))
             ?: site.initialPath?.takeIf { it.isNotBlank() }
+
+    /**
+     * The slot a path is remembered in.
+     *
+     * Per server rather than one for all of them, so moving a pane between
+     * two servers does not take one's folder to the other -- the same
+     * mistake, one level down.
+     */
+    private fun siteSourceKey(site: SiteEntity) = "site:${site.id}"
+
 
     // ------------------------------------------------------- the clipboard
 
@@ -565,7 +591,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 runCatching { graph.localFiles.list(target) }
             }
             rows.onSuccess { entries ->
-                graph.preferences.setPanePath(id.name, target)
+                graph.preferences.setPanePath(id.name, LOCAL_SOURCE_KEY, target)
                 update(id) {
                     it.copy(
                         entries = entries,
@@ -662,7 +688,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     here to session.list()
                 }
             }.onSuccess { (here, entries) ->
-                graph.preferences.setPanePath(id.name, here)
+                graph.preferences.setPanePath(id.name, siteSourceKey(site), here)
                 update(id) {
                     it.copy(
                         path = here,
@@ -1006,5 +1032,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     init {
         restorePanes()
+    }
+
+    private companion object {
+        /** The slot the phone's own folder is remembered in, per pane. */
+        const val LOCAL_SOURCE_KEY = "local"
     }
 }

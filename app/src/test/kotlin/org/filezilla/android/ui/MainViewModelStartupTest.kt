@@ -53,7 +53,10 @@ class MainViewModelStartupTest {
         for (id in PaneId.entries) {
             prefs.setPaneIsLocal(id.name, false)
             prefs.setPaneSiteId(id.name, null)
-            prefs.setPanePath(id.name, null)
+            // Both slots: a pane remembers the phone and each server apart,
+            // so clearing one would leave the other steering the next test.
+            prefs.setPanePath(id.name, "local", null)
+            prefs.setPanePath(id.name, "site:s1", null)
         }
     }
 
@@ -126,5 +129,48 @@ class MainViewModelStartupTest {
         model.showPane(PaneId.RIGHT)
 
         assertNotEquals("/", model.pane(PaneId.RIGHT).path)
+    }
+
+    // ------------------------------- a path belongs to one kind of place
+
+    /**
+     * Switching a pane from a server to the phone must not send it to the
+     * server's folder.
+     *
+     * The bug: one remembered path per pane, shared by both kinds of place. A
+     * server sitting at "/" therefore sent the pane to the root of the
+     * filesystem when it next showed the phone -- which cannot be listed, so
+     * the user got "this folder could not be read" instead of their files.
+     */
+    @Test
+    fun `a remote folder is not reused as a local one`() {
+        val prefs = org.filezilla.android.AppGraph.of(application).preferences
+        // What a server sitting at its root leaves behind, and a pane since
+        // pointed at the phone.
+        prefs.setPanePath(PaneId.RIGHT.name, "site:s1", "/")
+        prefs.setPaneIsLocal(PaneId.RIGHT.name, true)
+
+        val model = MainViewModel(application)
+        // Swiped to, rather than switched with showLocal: that one opens the
+        // folder only once storage access has been granted, which a test host
+        // never grants -- so asserting through it proved nothing at all.
+        model.showPane(PaneId.RIGHT)
+
+        assertNotEquals("/", model.pane(PaneId.RIGHT).path)
+    }
+
+    /**
+     * A folder that has gone -- deleted, or on a card that was taken out --
+     * sends the pane to its default rather than to an error.
+     */
+    @Test
+    fun `a remembered folder that is gone falls back to the default`() {
+        val prefs = org.filezilla.android.AppGraph.of(application).preferences
+        prefs.setPanePath(PaneId.LEFT.name, "local", "/storage/emulated/0/GoneForever")
+
+        val model = MainViewModel(application)
+
+        assertNotEquals("/storage/emulated/0/GoneForever", model.pane(PaneId.LEFT).path)
+        assertTrue(FilePath.segments(model.pane(PaneId.LEFT).path).size > 1)
     }
 }

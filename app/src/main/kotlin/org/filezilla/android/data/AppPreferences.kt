@@ -47,10 +47,11 @@ class AppPreferences(context: Context) {
      * time. Null until they have been somewhere, which is what lets the
      * default apply on a first run and not afterwards.
      */
-    fun panePath(pane: String): String? = prefs.getString("$KEY_PANE_PATH$pane", null)
+    fun panePath(pane: String, source: String): String? =
+        prefs.getString(panePathKey(pane, source), null)
 
-    fun setPanePath(pane: String, path: String?) =
-        prefs.edit().putString("$KEY_PANE_PATH$pane", path).apply()
+    fun setPanePath(pane: String, source: String, path: String?) =
+        prefs.edit().putString(panePathKey(pane, source), path).apply()
 
     /** The saved server a pane was on, by id, or null when it was the phone. */
     fun paneSiteId(pane: String): String? = prefs.getString("$KEY_PANE_SITE$pane", null)
@@ -88,6 +89,8 @@ class AppPreferences(context: Context) {
         }
 
     /** A stored name that no longer exists falls back rather than throwing. */
+    private fun panePathKey(pane: String, source: String) = "$KEY_PANE_PATH$pane/$source"
+
     private inline fun <reified T : Enum<T>> enumOrDefault(name: String?, fallback: T): T =
         name?.let { runCatching { enumValueOf<T>(it) }.getOrNull() } ?: fallback
 
