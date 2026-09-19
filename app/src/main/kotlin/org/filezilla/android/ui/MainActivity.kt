@@ -126,6 +126,21 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
         else -> context.getString(R.string.queued_many, plan.files.size)
     }
 
+    /**
+     * What to say about one row the user asked for.
+     *
+     * A single file is named rather than counted -- "One.Night.Only.mkv" says
+     * more than "1 file" when that is all there was -- but only when it was
+     * actually queued. A file the user chose to skip has an empty plan, and
+     * saying it was queued would be the wrong answer to their own choice.
+     */
+    fun queuedEntryMessage(entry: org.filezilla.ftp.listing.DirectoryEntry, plan: DownloadPlan) =
+        if (entry.isDirectory || plan.files.size != 1) {
+            queuedPlanMessage(plan)
+        } else {
+            queuedMessage(entry.name)
+        }
+
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { /* The transfer runs either way; without it the progress is just invisible. */ }
@@ -140,13 +155,9 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
             // The same two cases as startDownload, which cannot be called from
             // here: it is declared below, because it is what launches this
             // picker when there is no folder yet.
-            if (entry.isDirectory) {
-                model.enqueueFolder(entry) { plan ->
-                    if (plan.files.isNotEmpty()) TransferService.start(context)
-                    scope.launch { snackbars.showSnackbar(queuedPlanMessage(plan)) }
-                }
-            } else if (model.enqueueDownload(entry) { TransferService.start(context) }) {
-                scope.launch { snackbars.showSnackbar(queuedMessage(entry.name)) }
+            model.enqueueEntry(entry) { plan ->
+                if (plan.files.isNotEmpty()) TransferService.start(context)
+                scope.launch { snackbars.showSnackbar(queuedEntryMessage(entry, plan)) }
             }
         }
     }
@@ -167,17 +178,13 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
 
     fun startDownload(entry: org.filezilla.ftp.listing.DirectoryEntry) {
         requestNotifications()
-        val queued = if (entry.isDirectory) {
-            // A folder has to be walked before anything can be queued, so it
-            // reports what it found rather than assuming one file.
-            model.enqueueFolder(entry) { plan ->
-                if (plan.files.isNotEmpty()) TransferService.start(context)
-                scope.launch { snackbars.showSnackbar(queuedPlanMessage(plan)) }
-            }
-        } else {
-            model.enqueueDownload(entry) { TransferService.start(context) }.also { started ->
-                if (started) scope.launch { snackbars.showSnackbar(queuedMessage(entry.name)) }
-            }
+        // A file and a folder take the same path on purpose. A file used to
+        // have one of its own, and it was the one that never looked in the
+        // destination folder first -- so downloading the same file twice
+        // asked nothing and quietly saved a second numbered copy.
+        val queued = model.enqueueEntry(entry) { plan ->
+            if (plan.files.isNotEmpty()) TransferService.start(context)
+            scope.launch { snackbars.showSnackbar(queuedEntryMessage(entry, plan)) }
         }
         if (!queued) {
             // Nowhere to put it yet: ask first, rather than spending the

@@ -2,6 +2,7 @@ package org.filezilla.android.ui
 
 import org.filezilla.ftp.listing.DirectoryEntry
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -141,5 +142,38 @@ class FolderDownloadTest {
         val plan = FolderDownload.plan(lister, "/", listOf(dir("Vision")))
 
         assertEquals("/Vision/a.mp4", plan.files.single().remotePath)
+    }
+
+    // ------------------------------------------- whether to ask the server
+
+    /**
+     * A file names itself in the listing that showed it, so planning one
+     * needs nothing from the server. Worth knowing, because a single file is
+     * most of what gets downloaded, and connecting to plan it would put a
+     * login in front of every one of them.
+     */
+    @Test
+    fun `files alone need no walk`() {
+        assertFalse(FolderDownload.needsRemoteWalk(listOf(file("a.mkv"), file("b.mkv"))))
+    }
+
+    @Test
+    fun `a folder needs a walk`() {
+        assertTrue(FolderDownload.needsRemoteWalk(listOf(file("a.mkv"), dir("Vision"))))
+    }
+
+    /**
+     * A link is reported as a directory whether or not it is one, and
+     * [FolderDownload.plan] passes over it rather than following it. Walking
+     * for something that will be skipped anyway is a connection for nothing.
+     */
+    @Test
+    fun `a link needs no walk, since it is not followed`() {
+        assertFalse(FolderDownload.needsRemoteWalk(listOf(link("elsewhere"))))
+    }
+
+    @Test
+    fun `nothing picked needs no walk`() {
+        assertFalse(FolderDownload.needsRemoteWalk(emptyList()))
     }
 }

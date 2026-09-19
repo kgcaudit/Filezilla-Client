@@ -256,8 +256,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun enqueueSelected(onQueued: (DownloadPlan) -> Unit): Boolean =
         enqueuePicks(visibleEntries.filter { it.name in browse.selection }, onQueued)
 
-    /** Queues one folder and everything under it, without selection mode. */
-    fun enqueueFolder(entry: DirectoryEntry, onQueued: (DownloadPlan) -> Unit): Boolean =
+    /**
+     * Queues one row -- a file, or a folder and everything under it.
+     *
+     * A file used to have a path of its own that queued it directly, and the
+     * bug that came of it is the reason this does not: only the selection and
+     * folder paths checked the destination for a file of the same name, so
+     * downloading a single file twice never asked anything and quietly saved
+     * a second numbered copy. Everything now goes through [enqueuePicks], so
+     * there is one place where that check can be forgotten rather than three.
+     */
+    fun enqueueEntry(entry: DirectoryEntry, onQueued: (DownloadPlan) -> Unit): Boolean =
         enqueuePicks(listOf(entry), onQueued)
 
     private fun enqueuePicks(picks: List<DirectoryEntry>, onQueued: (DownloadPlan) -> Unit): Boolean {
@@ -272,17 +281,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         browse = browse.copy(loading = true, error = null)
         viewModelScope.launch {
             runCatching {
-                // One connection for the whole walk: a session per folder
-                // would reconnect for every level of the tree.
-                val plan = graph.transfers.browse(site) { session ->
-                    FolderDownload.plan(
-                        lister = { path ->
-                            session.changeDirectory(path)
-                            session.list()
-                        },
-                        directory = directory,
-                        picks = picks,
-                    )
+                val plan = if (FolderDownload.needsRemoteWalk(picks)) {
+                    // One connection for the whole walk: a session per folder
+                    // would reconnect for every level of the tree.
+                    graph.transfers.browse(site) { session ->
+                        FolderDownload.plan(
+                            lister = { path ->
+                                session.changeDirectory(path)
+                                session.list()
+                            },
+                            directory = directory,
+                            picks = picks,
+                        )
+                    }
+                } else {
+                    // Files name themselves, so there is nothing to ask the
+                    // server. Connecting anyway would put a login in front of
+                    // every single-file download, which is most of them.
+                    FolderDownload.plan({ emptyList() }, directory, picks)
                 }
                 plan to findConflicts(plan, folder)
             }.onSuccess { (plan, conflicts) ->
@@ -434,22 +450,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         graph.storage.persistTreePermission(tree)
         graph.preferences.downloadFolder = tree
         downloadFolder = tree
-    }
-
-    /**
-     * Queues a download. Returns false when there is nowhere to put it yet, so
-     * the caller can ask the user for a folder first -- better than starting a
-     * transfer that has nowhere to land.
-     */
-    fun enqueueDownload(entry: DirectoryEntry, onQueued: () -> Unit): Boolean {
-        val site = browse.site ?: return false
-        val folder = downloadFolder ?: return false
-        val path = remotePathOf(browse.path, entry.name)
-        viewModelScope.launch {
-            graph.transfers.enqueueDownload(site, path, entry.size.takeIf { it >= 0 }, folder)
-            onQueued()
-        }
-        return true
     }
 
     fun enqueueUpload(source: Uri, onQueued: () -> Unit) {

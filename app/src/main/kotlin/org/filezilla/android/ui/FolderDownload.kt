@@ -48,6 +48,16 @@ object FolderDownload {
     const val MAX_FILES = 5_000
 
     /**
+     * Whether planning [picks] has to ask the server anything.
+     *
+     * Only a folder does: a file already knows its own name and size from the
+     * listing that showed it. Worth asking, because the answer decides
+     * whether a single-file download pays for a login before it starts.
+     */
+    fun needsRemoteWalk(picks: List<DirectoryEntry>): Boolean =
+        picks.any { it.isDirectory && !it.isLink }
+
+    /**
      * Expands [picks] -- rows of [directory] -- into the files to download.
      *
      * Symbolic links are left out rather than followed. A link can point at
