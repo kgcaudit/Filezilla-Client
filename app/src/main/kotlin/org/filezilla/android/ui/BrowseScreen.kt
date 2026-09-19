@@ -78,7 +78,10 @@ fun BrowseScreen(
     actions: EntryActions,
     modifier: Modifier = Modifier,
 ) {
-    if (state.site == null) {
+    // On the source, not on the site: a pane showing the phone has no site
+    // and is not "not connected" -- it is exactly where it should be. Keyed
+    // on the site, every local pane claimed to need a server.
+    if (state.source is PaneSource.Empty) {
         EmptyState(
             title = stringResource(R.string.browse_not_connected_title),
             detail = stringResource(R.string.browse_not_connected_detail),

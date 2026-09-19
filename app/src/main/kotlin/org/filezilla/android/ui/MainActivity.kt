@@ -145,11 +145,11 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
     // is used is the platform's decision, not a preference.
     val storagePermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
-    ) { model.refreshLocalAccess() }
+    ) { model.refreshStorageAccess() }
 
     val storageSettings = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
-    ) { model.refreshLocalAccess() }
+    ) { model.refreshStorageAccess() }
 
     fun requestStorageAccess() {
         val intent = model.storageSettingsIntent()
@@ -169,7 +169,7 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) model.refreshLocalAccess()
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) model.refreshStorageAccess()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -441,49 +441,16 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                 modifier = Modifier.padding(padding),
             )
 
-            Tab.BROWSE -> Column(modifier = Modifier.padding(padding)) {
-                SideSwitch(
-                    side = model.fileSide,
-                    remoteLabel = model.browse.site?.name?.ifBlank { model.browse.site?.host.orEmpty() },
-                    onSelect = model::showSide,
-                )
-                when (model.fileSide) {
-                    FileSide.LOCAL -> LocalFilesScreen(
-                        path = model.local.path,
-                        rows = model.visibleLocalEntries,
-                        roots = model.storageRoots(),
-                        granted = model.local.granted,
-                        route = model.local.route,
-                        loading = model.local.loading,
-                        error = model.local.error,
-                        canGoUp = model.canGoLocalUp(),
-                        onOpen = { model.openLocalChild(it.name) },
-                        onUp = model::localUp,
-                        onOpenPath = model::openLocal,
-                        onGrant = ::requestStorageAccess,
-                    )
-
-                    FileSide.REMOTE -> BrowseScreen(
-                state = model.browse,
-                rows = model.visibleEntries,
+            Tab.BROWSE -> FilePanes(
+                model = model,
                 options = model.options,
                 downloadFolderName = model.downloadFolderName,
-                onUp = model::goUp,
-                onRefresh = model::refresh,
                 onOpenLog = { tab = Tab.LOG },
-                onFilterChange = model::setFilter,
-                onCloseFilter = model::toggleFilter,
-                actions = EntryActions(
-                    onOpen = { model.openDirectory(it.name) },
-                    onDownload = ::startDownload,
-                    onDelete = model::delete,
-                    onRename = model::rename,
-                    onProperties = { model.showProperties(it) },
-                    onToggleSelected = { model.toggleSelected(it.name) },
-                ),
-                    )
-                }
-            }
+                onGrant = ::requestStorageAccess,
+                onPickSite = { tab = Tab.SITES },
+                onDownload = ::startDownload,
+                modifier = Modifier.padding(padding),
+            )
 
             Tab.QUEUE -> QueueScreen(
                 transfers = transfers,

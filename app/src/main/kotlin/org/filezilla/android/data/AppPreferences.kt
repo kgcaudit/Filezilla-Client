@@ -37,16 +37,32 @@ class AppPreferences(context: Context) {
         get() = if (wifiOnly) NetworkPolicy.UNMETERED else NetworkPolicy.ANY
 
     /**
-     * The folder the local pane was last looking at.
+     * The folder a pane was last looking at, and the server it was on.
      *
-     * Remembered for the same reason the sort is: a file manager that opens
-     * on the same folder every time makes the user walk back down to where
-     * they were, every time. Null until they have been somewhere, which is
-     * what lets the default apply on a first run and not afterwards.
+     * Per pane rather than one for the app: the two sides are used for
+     * different things, and restoring both to the same folder would undo the
+     * arrangement that makes the screen worth having. Remembered for the same
+     * reason the sort is -- a file manager that opens on the same folder
+     * every time makes the user walk back down to where they were, every
+     * time. Null until they have been somewhere, which is what lets the
+     * default apply on a first run and not afterwards.
      */
-    var localPath: String?
-        get() = prefs.getString(KEY_LOCAL_PATH, null)
-        set(value) = prefs.edit().putString(KEY_LOCAL_PATH, value).apply()
+    fun panePath(pane: String): String? = prefs.getString("$KEY_PANE_PATH$pane", null)
+
+    fun setPanePath(pane: String, path: String?) =
+        prefs.edit().putString("$KEY_PANE_PATH$pane", path).apply()
+
+    /** The saved server a pane was on, by id, or null when it was the phone. */
+    fun paneSiteId(pane: String): String? = prefs.getString("$KEY_PANE_SITE$pane", null)
+
+    fun setPaneSiteId(pane: String, siteId: String?) =
+        prefs.edit().putString("$KEY_PANE_SITE$pane", siteId).apply()
+
+    /** True when the pane showed the phone rather than a server. */
+    fun paneIsLocal(pane: String): Boolean = prefs.getBoolean("$KEY_PANE_LOCAL$pane", false)
+
+    fun setPaneIsLocal(pane: String, local: Boolean) =
+        prefs.edit().putBoolean("$KEY_PANE_LOCAL$pane", local).apply()
 
     /**
      * How this person likes a directory shown. Remembered, because re-picking
@@ -77,7 +93,9 @@ class AppPreferences(context: Context) {
 
     private companion object {
         const val KEY_DOWNLOAD_FOLDER = "download_folder"
-        const val KEY_LOCAL_PATH = "local_path"
+        const val KEY_PANE_PATH = "pane_path_"
+        const val KEY_PANE_SITE = "pane_site_"
+        const val KEY_PANE_LOCAL = "pane_local_"
         const val KEY_SORT = "browse_sort"
         const val KEY_ASCENDING = "browse_ascending"
         const val KEY_FOLDERS_FIRST = "browse_folders_first"

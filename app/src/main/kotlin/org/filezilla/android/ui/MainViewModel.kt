@@ -26,9 +26,17 @@ import org.filezilla.android.transfer.LogLine
 import org.filezilla.ftp.journal.TransferRecord
 import org.filezilla.ftp.listing.DirectoryEntry
 
-/** What the browse screen is showing, and whether it is busy or broken. */
+/**
+ * What one pane is showing, and whether it is busy or broken.
+ *
+ * One type for both sides. The phone and a server differ in how their rows
+ * are fetched and in nothing else the screen cares about, so a second
+ * near-identical state would only be a second place for the two to drift --
+ * which is exactly how the single-file download path came to skip a check
+ * the other paths made.
+ */
 data class BrowseState(
-    val site: SiteEntity? = null,
+    val source: PaneSource = PaneSource.Empty,
     val path: String = "/",
     val entries: List<DirectoryEntry> = emptyList(),
     val loading: Boolean = false,
@@ -43,6 +51,12 @@ data class BrowseState(
     /** The entry whose properties are being shown, if any. */
     val properties: DirectoryEntry? = null,
 ) {
+
+    /** The server this pane is on, or null when it is the phone or empty. */
+    val site: SiteEntity? get() = (source as? PaneSource.Remote)?.site
+
+    val isLocal: Boolean get() = source is PaneSource.Local
+
     /** Selection survives a refresh only for rows that are still there. */
     fun prunedSelection(rows: List<DirectoryEntry>): Set<String> =
         selection intersect rows.map { it.name }.toSet()
@@ -95,8 +109,55 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     val active: StateFlow<Map<String, ActiveProgress>> = graph.transfers.activeTransfers
 
-    var browse by mutableStateOf(BrowseState())
+    // ------------------------------------------------------------ the panes
+
+    private var paneStates by mutableStateOf(
+        mapOf(
+            PaneId.LEFT to BrowseState(source = defaultSourceFor(PaneId.LEFT)),
+            PaneId.RIGHT to BrowseState(source = defaultSourceFor(PaneId.RIGHT)),
+        ),
+    )
+
+    /**
+     * The pane the user is looking at.
+     *
+     * Read from the pager rather than tracked alongside it: two ideas of
+     * which pane is in front is one more than can be kept in step, and the
+     * toolbar acting on the pane you cannot see is the bug that would follow.
+     */
+    var activePane by mutableStateOf(PaneId.LEFT)
         private set
+
+    init {
+        restorePanes()
+    }
+
+    fun pane(id: PaneId): BrowseState = paneStates.getValue(id)
+
+    fun showPane(id: PaneId) {
+        activePane = id
+        val state = pane(id)
+        // A pane swiped to for the first time has nothing in it yet.
+        if (state.entries.isEmpty() && !state.loading && state.error == null) open(id)
+    }
+
+    private fun update(id: PaneId, block: (BrowseState) -> BrowseState) {
+        paneStates = paneStates + (id to block(paneStates.getValue(id)))
+    }
+
+    /**
+     * The pane every existing action works on.
+     *
+     * The toolbar, the selection and the download button were all written
+     * against one browser, and they all mean "the one in front" -- so rather
+     * than thread a pane through every one of them, the one in front is what
+     * this returns.
+     */
+    var browse: BrowseState
+        get() = pane(activePane)
+        private set(value) {
+            paneStates = paneStates + (activePane to value)
+        }
 
     /** Sort, view and folder options, remembered between runs. */
     var options by mutableStateOf(graph.preferences.browseOptions)
@@ -104,7 +165,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** The listing as the screen shows it: filtered, sorted, arranged. */
     val visibleEntries: List<DirectoryEntry>
-        get() = BrowseListing.arrange(browse.entries, options, browse.filter)
+        get() = visibleEntries(activePane)
+
+    /** One pane's rows as the screen shows them, through the shared ordering. */
+    fun visibleEntries(id: PaneId): List<DirectoryEntry> =
+        pane(id).let { BrowseListing.arrange(it.entries, options, it.filter) }
 
     /** Whether transfers wait for Wi-Fi rather than using mobile data. */
     var wifiOnly by mutableStateOf(graph.preferences.wifiOnly)
@@ -137,25 +202,110 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val downloadFolderName: String?
         get() = downloadFolder?.let { graph.storage.displayNameOfTree(it) }
 
-    // ------------------------------------------------------------ local files
+    // ------------------------------------------------------- pane navigation
 
     /**
-     * Which side the file tab shows. One switch now, two panes later; the
-     * state it reads is already split by side so that adding the second is
-     * laying them out rather than pulling them apart.
+     * Lists whatever [id] is pointed at, from its own remembered folder.
+     *
+     * One entry point for both sides. Which one it goes to is the pane's
+     * source and nothing else, so a pane that is switched from the phone to a
+     * server keeps behaving like the same pane.
      */
-    var fileSide by mutableStateOf(FileSide.LOCAL)
-        private set
+    fun open(id: PaneId) {
+        when (val source = pane(id).source) {
+            is PaneSource.Local -> openLocal(id, pane(id).path.ifEmpty { rememberedLocal(id) })
+            is PaneSource.Remote -> loadRemote(
+                id,
+                source.site,
+                pane(id).path.takeIf { it.isNotEmpty() && it != FilePath.ROOT }
+                    ?: rememberedRemote(id, source.site),
+            )
 
-    fun showSide(side: FileSide) {
-        fileSide = side
-        if (side == FileSide.LOCAL && local.entries.isEmpty()) refreshLocalAccess()
+            PaneSource.Empty -> Unit
+        }
     }
 
-    var local by mutableStateOf(LocalBrowseState())
+    /** Lists [path] in [id], whichever kind of place it is. */
+    fun openPath(id: PaneId, path: String) {
+        when (val source = pane(id).source) {
+            is PaneSource.Local -> openLocal(id, path)
+            is PaneSource.Remote -> loadRemote(id, source.site, path)
+            PaneSource.Empty -> Unit
+        }
+    }
+
+    fun openChild(id: PaneId, name: String) = openPath(id, FilePath.child(pane(id).path, name))
+
+    /** Walks up, or does nothing at the top rather than looping. */
+    fun up(id: PaneId) {
+        FilePath.parent(pane(id).path)?.let { openPath(id, it) }
+    }
+
+    fun canGoUp(id: PaneId): Boolean = FilePath.parent(pane(id).path) != null
+
+    /** Points a pane at the phone, remembering that it is there. */
+    fun showLocal(id: PaneId) {
+        graph.preferences.setPaneIsLocal(id.name, true)
+        graph.preferences.setPaneSiteId(id.name, null)
+        update(id) { BrowseState(source = PaneSource.Local) }
+        refreshStorageAccess()
+        if (storageGranted) openLocal(id, rememberedLocal(id))
+    }
+
+    /** Points a pane at a server, remembering which. */
+    fun showSite(id: PaneId, site: SiteEntity) {
+        graph.preferences.setPaneIsLocal(id.name, false)
+        graph.preferences.setPaneSiteId(id.name, site.id)
+        update(id) { BrowseState(source = PaneSource.Remote(site), loading = true) }
+        loadRemote(id, site, site.initialPath?.takeIf { it.isNotBlank() })
+    }
+
+    /**
+     * Puts each pane back where it was left.
+     *
+     * Run once, from the view model's own start rather than from the screen,
+     * so that a pane is already pointed somewhere before it is first drawn --
+     * otherwise the left pane appears empty for as long as the first listing
+     * takes, which reads as having lost the folder.
+     */
+    private fun restorePanes() {
+        for (id in PaneId.entries) {
+            val siteId = graph.preferences.paneSiteId(id.name)
+            when {
+                graph.preferences.paneIsLocal(id.name) ->
+                    update(id) { it.copy(source = PaneSource.Local) }
+
+                siteId != null -> viewModelScope.launch {
+                    // The saved server may have been deleted since. Then the
+                    // pane offers a choice rather than pointing at nothing.
+                    graph.database.sites().byId(siteId)?.let { site ->
+                        update(id) { it.copy(source = PaneSource.Remote(site)) }
+                        if (activePane == id) open(id)
+                    }
+                }
+            }
+        }
+        refreshStorageAccess()
+        open(activePane)
+    }
+
+    private fun rememberedLocal(id: PaneId): String =
+        graph.preferences.panePath(id.name) ?: graph.volumes.defaultPath()
+
+    private fun rememberedRemote(id: PaneId, site: SiteEntity): String? =
+        graph.preferences.panePath(id.name)
+            ?: site.initialPath?.takeIf { it.isNotBlank() }
+
+    // ------------------------------------------------------------ local files
+
+    /** Whether the app may read the device's storage at all. Device-wide, not per pane. */
+    var storageGranted by mutableStateOf(false)
         private set
 
-    /** The volumes and shortcuts the local pane can jump to. */
+    var storageRoute by mutableStateOf(AccessRoute.ALL_FILES_SETTING)
+        private set
+
+    /** The volumes and shortcuts a local pane can jump to. */
     fun storageRoots(): List<StorageRoot> = graph.volumes.roots()
 
     /**
@@ -166,57 +316,48 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * has to notice that they did. Remembering the answer instead would show
      * them an empty pane after they had just said yes.
      */
-    fun refreshLocalAccess() {
-        val granted = graph.storageAccess.isGranted()
-        local = local.copy(granted = granted, route = graph.storageAccess.route)
-        if (!granted) {
-            local = local.copy(entries = emptyList(), error = null)
-            return
+    fun refreshStorageAccess() {
+        val was = storageGranted
+        storageGranted = graph.storageAccess.isGranted()
+        storageRoute = graph.storageAccess.route
+        if (storageGranted && !was) {
+            // Only the panes actually pointed at the phone, and only once the
+            // answer has changed: re-listing a server every time the screen
+            // resumes would be a login nobody asked for.
+            for (id in PaneId.entries) if (pane(id).isLocal) openLocal(id, rememberedLocal(id))
         }
-        openLocal(local.path.ifEmpty { graph.preferences.localPath ?: graph.volumes.defaultPath() })
     }
 
-    /** Lists [path] and remembers it as where this pane was left. */
-    fun openLocal(path: String) {
+    private fun openLocal(id: PaneId, path: String) {
         val target = FilePath.normalize(path)
-        local = local.copy(path = target, loading = true, error = null)
+        update(id) { it.copy(path = target, loading = true, error = null) }
         viewModelScope.launch {
             val rows = withContext(Dispatchers.IO) {
                 runCatching { graph.localFiles.list(target) }
             }
-            local = rows.fold(
-                onSuccess = { entries ->
-                    graph.preferences.localPath = target
-                    local.copy(entries = entries, loading = false, error = null)
-                },
-                onFailure = { failure ->
-                    // The rows already on screen are left alone: replacing a
-                    // listing with nothing because one folder could not be
-                    // opened loses the user their place as well as the folder.
-                    local.copy(loading = false, error = failure.message ?: failure.javaClass.simpleName)
-                },
-            )
+            rows.onSuccess { entries ->
+                graph.preferences.setPanePath(id.name, target)
+                update(id) {
+                    it.copy(
+                        entries = entries,
+                        selection = if (target == it.path) it.prunedSelection(entries) else emptySet(),
+                        loading = false,
+                        error = null,
+                    )
+                }
+            }.onFailure { failure ->
+                // The rows already on screen are left alone: replacing a
+                // listing with nothing because one folder could not be opened
+                // loses the user their place as well as the folder.
+                update(id) { it.copy(loading = false, error = describeLocalFailure(failure)) }
+            }
         }
     }
-
-    /** The local rows as the screen shows them, through the same sort as the remote pane. */
-    val visibleLocalEntries: List<DirectoryEntry>
-        get() = BrowseListing.arrange(local.entries, options, filter = "")
 
     /** Where to send the user to grant access, or null when asking is the way. */
     fun storageSettingsIntent(): android.content.Intent? = graph.storageAccess.settingsIntent()
 
     fun storagePermissionsToRequest(): Array<String> = graph.storageAccess.permissionsToRequest()
-
-    fun openLocalChild(name: String) = openLocal(FilePath.child(local.path, name))
-
-    /** Walks up, or does nothing at the top rather than looping. */
-    fun localUp() {
-        FilePath.parent(local.path)?.let(::openLocal)
-    }
-
-    /** Whether there is anywhere above the current folder to go. */
-    fun canGoLocalUp(): Boolean = FilePath.parent(local.path) != null
 
     // ----------------------------------------------------------------- sites
 
@@ -257,29 +398,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // ---------------------------------------------------------------- browse
 
+    /**
+     * Opens a server from the site list.
+     *
+     * Into the right pane, which is the server side of the arrangement the
+     * screen is built around: what you have on the left, what you are sending
+     * it to on the right.
+     */
     fun connect(site: SiteEntity) {
-        browse = BrowseState(site = site, loading = true)
-        load(site, site.initialPath?.takeIf { it.isNotBlank() })
+        showSite(PaneId.RIGHT, site)
+        activePane = PaneId.RIGHT
     }
 
-    fun openDirectory(name: String) {
-        val site = browse.site ?: return
-        load(site, remotePathOf(browse.path, name))
-    }
+    // These three are what the toolbar has always called, and they now mean
+    // the same thing on either kind of pane -- which is the point of there
+    // being one pane type rather than two.
+    fun openDirectory(name: String) = openChild(activePane, name)
 
-    fun goUp() {
-        val site = browse.site ?: return
-        val parent = browse.path.trimEnd('/').substringBeforeLast('/', "")
-        load(site, if (parent.isEmpty()) "/" else parent)
-    }
+    fun goUp() = up(activePane)
 
-    fun refresh() {
-        val site = browse.site ?: return
-        load(site, browse.path)
-    }
+    fun refresh() = open(activePane)
 
-    private fun load(site: SiteEntity, path: String?) {
-        browse = browse.copy(site = site, loading = true, error = null)
+    private fun loadRemote(id: PaneId, site: SiteEntity, path: String?) {
+        update(id) { it.copy(source = PaneSource.Remote(site), loading = true, error = null) }
         viewModelScope.launch {
             runCatching {
                 graph.transfers.browse(site) { session ->
@@ -292,20 +433,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     here to session.list()
                 }
             }.onSuccess { (here, entries) ->
-                browse = browse.copy(
-                    path = here,
-                    entries = entries,
-                    // A directory the user moved into has nothing selected,
-                    // and a refresh keeps only what is still there.
-                    selection = if (here == browse.path) browse.prunedSelection(entries) else emptySet(),
-                    loading = false,
-                    error = null,
-                )
+                graph.preferences.setPanePath(id.name, here)
+                update(id) {
+                    it.copy(
+                        path = here,
+                        entries = entries,
+                        // A directory the user moved into has nothing selected,
+                        // and a refresh keeps only what is still there.
+                        selection = if (here == it.path) it.prunedSelection(entries) else emptySet(),
+                        loading = false,
+                        error = null,
+                    )
+                }
             }.onFailure { error ->
-                browse = browse.copy(
-                    loading = false,
-                    error = describeFailure(error, graph.networkGate.currentlyOnline()),
-                )
+                update(id) {
+                    it.copy(
+                        loading = false,
+                        error = describeFailure(error, graph.networkGate.currentlyOnline()),
+                    )
+                }
             }
         }
     }

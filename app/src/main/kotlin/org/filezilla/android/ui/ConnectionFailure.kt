@@ -109,3 +109,19 @@ private fun describeReply(error: FtpCommandException): ConnectionFailure {
     }
     return ConnectionFailure(title, advice, R.string.detail_server_reply, raw)
 }
+
+/**
+ * A local filesystem failure in the same shape as a connection one.
+ *
+ * One failure type across both panes, so the screen has one thing to draw.
+ * The message is kept verbatim underneath for the same reason a server's
+ * reply is: it is the evidence, and a folder that cannot be read is usually
+ * a permission that was taken away or a card that was removed, both of which
+ * the original text names and a tidied-up sentence would not.
+ */
+fun describeLocalFailure(error: Throwable): ConnectionFailure = ConnectionFailure(
+    title = R.string.fail_local_title,
+    advice = R.string.fail_local_advice,
+    detailFormat = R.string.detail_plain,
+    detailArg = error.message ?: error.javaClass.simpleName,
+)

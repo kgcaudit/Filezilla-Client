@@ -219,9 +219,11 @@
     <string name="storage_permission_action">Grant access</string>
     <string name="storage_unavailable_title">Not available on this Android version</string>
     <string name="storage_unavailable_detail">Android 10 allows neither full storage access nor the permission that replaced it. Browsing the phone needs Android 11 or later.</string>
-    <string name="storage_up">Up one folder</string>
-    <string name="storage_empty_title">This folder is empty</string>
-    <string name="storage_empty_detail">Nothing here yet.</string>
     <string name="side_local">My files</string>
     <string name="side_remote">Server</string>
+    <string name="fail_local_title">This folder could not be read</string>
+    <string name="fail_local_advice">The folder may have been removed, or storage access may have been turned off in Settings.</string>
+    <string name="pane_no_source">Nothing chosen</string>
+    <string name="pane_pick_title">Pick what this pane shows</string>
+    <string name="pane_pick_detail">Tap My files for this phone, or Server to open a saved server.</string>
 </resources>
