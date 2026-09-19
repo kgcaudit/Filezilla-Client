@@ -164,4 +164,50 @@ class LocalFileSourceTest {
         // Nothing in front of it is not a volume either.
         assertNull(volumeRootOf("/Android/data/org.filezilla.android/files"))
     }
+
+    // --------------------------------------- how far up a pane may walk
+
+    private val volumes = listOf("/storage/emulated/0", "/storage/1A2B-3C4D")
+
+    @Test
+    fun `walking up inside a volume works`() {
+        assertEquals(
+            "/storage/emulated/0/Download",
+            localParent("/storage/emulated/0/Download/Quick Share", volumes),
+        )
+    }
+
+    /**
+     * The bug this exists for. Above a volume are folders no app may list, and
+     * plain path arithmetic walks straight into them: "/storage/emulated/0"
+     * leads to "/storage/emulated" and on to "/". The up button kept working
+     * three more times and each press produced "this folder could not be
+     * read" where the files had been.
+     */
+    @Test
+    fun `the top of a volume is the top`() {
+        assertNull(localParent("/storage/emulated/0", volumes))
+        assertNull(localParent("/storage/1A2B-3C4D", volumes))
+    }
+
+    @Test
+    fun `nowhere above a volume is reachable`() {
+        assertNull(localParent("/storage/emulated", volumes))
+        assertNull(localParent("/storage", volumes))
+        assertNull(localParent("/", volumes))
+    }
+
+    /**
+     * A card taken out takes its folder with it. Better to stop than to offer
+     * a walk up into a volume that is no longer there.
+     */
+    @Test
+    fun `a path on no known volume cannot walk up`() {
+        assertNull(localParent("/storage/GONE-CARD/Music", volumes))
+    }
+
+    @Test
+    fun `with no volumes at all there is nowhere to go`() {
+        assertNull(localParent("/storage/emulated/0/Download", emptyList()))
+    }
 }

@@ -33,6 +33,23 @@ fun volumeRootOf(appSpecificDir: String): String? {
 }
 
 /**
+ * The folder above [path], or null when going up would leave the volumes.
+ *
+ * A local pane must not walk above the storage it is browsing. Left to plain
+ * path arithmetic it does: "/storage/emulated/0" leads to "/storage/emulated"
+ * and on to "/", none of which an app may list -- so the up button kept
+ * working, three more times, and each press produced "this folder could not
+ * be read" where the files had been.
+ *
+ * [roots] are the volumes, not the shortcuts: Downloads sits inside internal
+ * storage and is somewhere to jump to, not a floor to stop at.
+ */
+fun localParent(path: String, roots: List<String>): String? {
+    val parent = FilePath.parent(path) ?: return null
+    return parent.takeIf { candidate -> roots.any { FilePath.isWithin(candidate, it) } }
+}
+
+/**
  * Where the panes can begin.
  *
  * The device's own storage, whatever removable volumes it has, and a shortcut
@@ -40,6 +57,10 @@ fun volumeRootOf(appSpecificDir: String): String? {
  * time, and which the Storage Access Framework cannot reach at all.
  */
 class StorageVolumes(private val context: Context) {
+
+    /** Just the volumes, which is what bounds how far up a pane may walk. */
+    fun volumePaths(): List<String> =
+        roots().filter { it.kind != StorageRoot.Kind.SHORTCUT }.map { it.path }
 
     fun roots(): List<StorageRoot> {
         val roots = mutableListOf<StorageRoot>()

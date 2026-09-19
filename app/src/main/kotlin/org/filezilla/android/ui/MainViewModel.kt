@@ -22,6 +22,7 @@ import org.filezilla.android.files.AccessRoute
 import org.filezilla.android.files.FilePath
 import org.filezilla.android.files.LocalOperations
 import org.filezilla.android.files.LocalWalk
+import org.filezilla.android.files.localParent
 import org.filezilla.android.files.StorageRoot
 import org.filezilla.android.transfer.ActiveProgress
 import org.filezilla.android.transfer.LogLine
@@ -245,10 +246,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Walks up, or does nothing at the top rather than looping. */
     fun up(id: PaneId) {
-        FilePath.parent(pane(id).path)?.let { openPath(id, it) }
+        parentOf(id)?.let { openPath(id, it) }
     }
 
-    fun canGoUp(id: PaneId): Boolean = FilePath.parent(pane(id).path) != null
+    fun canGoUp(id: PaneId): Boolean = parentOf(id) != null
+
+    /**
+     * The folder above this pane's, bounded by what the pane can reach.
+     *
+     * A server's tree ends at its own root, which plain path arithmetic
+     * already gets right. The phone's does not: above a volume there are
+     * folders no app may list, and walking into one turned the up button into
+     * three more presses that each produced an error.
+     */
+    private fun parentOf(id: PaneId): String? {
+        val state = pane(id)
+        return if (state.isLocal) {
+            localParent(state.path, graph.volumes.volumePaths())
+        } else {
+            FilePath.parent(state.path)
+        }
+    }
 
     /** Points a pane at the phone, remembering that it is there. */
     fun showLocal(id: PaneId) {
@@ -585,6 +603,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun openLocal(id: PaneId, path: String) {
         val target = FilePath.normalize(path)
+        val cameFrom = pane(id).path
         update(id) { it.copy(path = target, loading = true, error = null) }
         viewModelScope.launch {
             val rows = withContext(Dispatchers.IO) {
@@ -601,10 +620,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
             }.onFailure { failure ->
-                // The rows already on screen are left alone: replacing a
-                // listing with nothing because one folder could not be opened
-                // loses the user their place as well as the folder.
-                update(id) { it.copy(loading = false, error = describeLocalFailure(failure)) }
+                // Back to where the pane was. The rows already on screen are
+                // kept -- losing someone's place because one folder would not
+                // open is the worse answer -- but the path has to go back with
+                // them, or the header names a folder the rows did not come
+                // from and the screen is telling two different stories.
+                update(id) {
+                    it.copy(path = cameFrom, loading = false, error = describeLocalFailure(failure))
+                }
             }
         }
     }
