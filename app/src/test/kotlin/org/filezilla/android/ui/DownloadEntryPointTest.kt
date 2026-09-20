@@ -1,6 +1,7 @@
 package org.filezilla.android.ui
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
@@ -184,6 +185,47 @@ class DownloadEntryPointTest {
      * an existing name is refused by some servers and silently overwrites on
      * others, so neither is left to chance.
      */
+    // ------------------------- the phone's own work, on the phone's own pane
+
+    /**
+     * That nothing does file work on a pane without asking where it points.
+     *
+     * The fourth time this shape of bug appeared. The screen called the
+     * phone's own delete, rename and new-folder on whichever pane was in
+     * front, including a server one -- so selecting files on a server and
+     * pressing delete ran java.io.File work against the server's path. The
+     * phone has no such path, so nothing was deleted; then the pane was
+     * re-listed by the phone's file reader, which reported the server's
+     * folder missing, in the phone's words, above the server's rows.
+     *
+     * The three that dispatch are the only ones the screen may call, so this
+     * reads the screen rather than the view model.
+     */
+    @Test
+    fun `the screen never calls the phone's own operations directly`() {
+        val phoneOnly = listOf(
+            "model.deleteSelection(",
+            "model.renameLocal(",
+            "model.createFolder(",
+            "model.createFile(",
+        )
+        val screens = uiSources().filter { (name, _) -> name != "MainViewModel.kt" }
+        for (call in phoneOnly) {
+            val callers = screens.filter { (_, source) -> call in source }.map { it.first }
+            assertEquals("$call is called from the screen", emptyList<String>(), callers)
+        }
+    }
+
+    /** And each of the three that may be called does dispatch. */
+    @Test
+    fun `each pane operation asks where the pane points`() {
+        val source = viewModelFile.readText()
+        for (member in listOf("deleteSelectionIn", "renameIn", "createFolderIn", "createFileIn")) {
+            val body = source.substringAfter("fun $member(").substringBefore("\n    fun ")
+            assertTrue("$member does not look at the pane's source", "isLocal" in body)
+        }
+    }
+
     @Test
     fun `only the two places that walked the folder remove anything from a server`() {
         val removers = setOf("removeRemotely", "runRemoteMove")

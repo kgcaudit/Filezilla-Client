@@ -962,6 +962,63 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // ------------------------------------------------------- file operations
 
+    // ------------------------------------ what the screen asks of one pane
+
+    /*
+     * These three dispatch on the pane's source, and that is the whole reason
+     * they exist. The screen used to call the phone's own versions directly,
+     * on whichever pane was in front -- so selecting files on a server and
+     * pressing delete ran java.io.File work against the server's path. The
+     * phone has no such path, so nothing was deleted, and the pane was then
+     * re-listed by the phone's file reader, which reported the server's
+     * folder as missing in the phone's words. Three call sites, one wrong
+     * assumption each, and nothing in a compile to say so.
+     */
+
+    /** Removes [id]'s selection, wherever that pane is pointed. */
+    fun deleteSelectionIn(id: PaneId) {
+        if (pane(id).isLocal) {
+            deleteSelection(id)
+            return
+        }
+        val chosen = pane(id).selection.toSet()
+        removeRemotely(id, pane(id).entries.filter { it.name in chosen })
+        clearSelectionIn(id)
+    }
+
+    /** Renames one row of [id], wherever that pane is pointed. */
+    fun renameIn(id: PaneId, entry: DirectoryEntry, newName: String) {
+        if (pane(id).isLocal) {
+            renameLocal(id, entry, newName)
+        } else {
+            mutate(id) { it.rename(entry.name, newName) }
+        }
+    }
+
+    /** Makes a folder in [id]'s current directory, wherever that is. */
+    fun createFolderIn(id: PaneId, name: String) {
+        if (pane(id).isLocal) {
+            createFolder(id, name)
+        } else {
+            mutate(id) { it.createDirectory(name) }
+        }
+    }
+
+    /**
+     * Makes an empty file, which only the phone's side offers.
+     *
+     * A server could be sent an empty file, but "new file" on a server is not
+     * something this app claims to do, and doing it silently by upload would
+     * be a surprise. Refused visibly instead of half-done.
+     */
+    fun createFileIn(id: PaneId, name: String) {
+        if (pane(id).isLocal) createFile(id, name)
+    }
+
+    fun clearSelectionIn(id: PaneId) {
+        update(id) { it.copy(selecting = false, selection = emptySet()) }
+    }
+
     /** Makes a folder in [id]'s current directory. */
     fun createFolder(id: PaneId, name: String) = writeThen(id) {
         LocalOperations.createDirectory(pane(id).path, name)
@@ -1267,7 +1324,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         browse = browse.copy(properties = entry)
     }
 
-    fun createDirectory(name: String) = mutate { it.createDirectory(name) }
+    fun createDirectory(name: String) = createFolderIn(activePane, name)
 
     /**
      * Queues everything selected, walking into any selected folder.
@@ -1430,15 +1487,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return plan.copy(files = queued)
     }
 
-    fun deleteSelected() {
-        if (pane(activePane).isLocal) {
-            deleteSelection(activePane)
-            return
-        }
-        val chosen = browse.selection.toSet()
-        removeRemotely(browse.entries.filter { it.name in chosen })
-        clearSelection()
-    }
+    fun deleteSelected() = deleteSelectionIn(activePane)
 
     /**
      * Removes one row from whichever kind of pane it is in.
@@ -1453,7 +1502,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             writeThen(id) { LocalOperations.delete(FilePath.child(pane(id).path, entry.name)) }
             return
         }
-        removeRemotely(listOf(entry))
+        removeRemotely(id, listOf(entry))
     }
 
     /**
@@ -1465,10 +1514,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * it look like the app was broken rather than the protocol being narrow.
      * The walk that empties it first is [RemoteDelete].
      */
-    private fun removeRemotely(rows: List<DirectoryEntry>) {
+    private fun removeRemotely(id: PaneId, rows: List<DirectoryEntry>) {
         if (rows.isEmpty()) return
-        val directory = browse.path
-        mutate { session ->
+        val directory = pane(id).path
+        mutate(id) { session ->
             val plan = RemoteDelete.plan(
                 // One connection for the whole walk, and the same one that
                 // then does the removing: a session per folder would
@@ -1494,37 +1543,47 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun rename(entry: DirectoryEntry, to: String) {
-        val id = activePane
-        if (pane(id).isLocal) {
-            renameLocal(id, entry, to)
-            return
-        }
-        mutate { it.rename(entry.name, to) }
-    }
+    fun rename(entry: DirectoryEntry, to: String) = renameIn(activePane, entry, to)
 
-    private fun mutate(block: (org.filezilla.android.transfer.FtpSession) -> Unit) {
-        val site = browse.site ?: return
-        val path = browse.path
-        browse = browse.copy(loading = true, error = null)
+    private fun mutate(
+        id: PaneId = activePane,
+        block: (org.filezilla.android.transfer.FtpSession) -> Unit,
+    ) {
+        val site = pane(id).site ?: return
+        val path = pane(id).path
+        update(id) { it.copy(loading = true, error = null) }
         viewModelScope.launch {
             runCatching {
                 graph.transfers.browse(site) { session ->
                     session.changeDirectory(path)
                     block(session)
-                    session.list()
+                    // Where the server says it is, not where the pane thought
+                    // it was: an operation can leave the connection somewhere
+                    // else, and a pane whose path and rows disagree shows a
+                    // trail of folders the rows did not come from.
+                    session.currentDirectory() to session.list()
                 }
-            }.onSuccess { entries ->
-                browse = browse.copy(
-                    entries = entries,
-                    selection = browse.prunedSelection(entries),
-                    loading = false,
-                )
+            }.onSuccess { (here, entries) ->
+                update(id) {
+                    it.copy(
+                        path = here,
+                        entries = entries,
+                        selection = if (here == it.path) it.prunedSelection(entries) else emptySet(),
+                        loading = false,
+                        // Cleared, which it was not. A successful operation
+                        // left the last failure's card sitting above the rows
+                        // for the rest of the session -- so the app went on
+                        // reporting a folder as unreadable while listing it.
+                        error = null,
+                    )
+                }
             }.onFailure { error ->
-                browse = browse.copy(
-                    loading = false,
-                    error = describeFailure(error, graph.networkGate.currentlyOnline()),
-                )
+                update(id) {
+                    it.copy(
+                        loading = false,
+                        error = describeFailure(error, graph.networkGate.currentlyOnline()),
+                    )
+                }
             }
         }
     }

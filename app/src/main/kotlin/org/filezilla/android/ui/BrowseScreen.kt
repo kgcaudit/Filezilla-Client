@@ -40,7 +40,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -54,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import org.filezilla.android.R
 import org.filezilla.ftp.listing.DirectoryEntry
 
@@ -109,7 +112,12 @@ fun BrowseScreen(
         HorizontalDivider()
 
         PullToRefreshBox(
-            isRefreshing = state.loading,
+            // Held briefly; see [heldTrue]. Listing a folder on the phone is
+            // a readdir and is over in well under a frame, so the indicator
+            // was told to hide before it had finished being shown -- and the
+            // hide ran first, leaving it parked over the rows, not spinning,
+            // for the rest of the session.
+            isRefreshing = heldTrue(state.loading, REFRESH_SHOWN_FOR),
             onRefresh = onRefresh,
             modifier = Modifier.fillMaxSize(),
         ) {
@@ -453,4 +461,39 @@ fun TextPromptDialog(
             }
         },
     )
+}
+
+/**
+ * How long the refresh indicator stays up once something has asked for one.
+ *
+ * Long enough for its own appear-and-settle to finish, short enough that a
+ * fast listing does not feel padded.
+ */
+private const val REFRESH_SHOWN_FOR = 450L
+
+/**
+ * [value], but true for at least [atLeastMillis] once it has been true.
+ *
+ * Not decoration. The pull-to-refresh indicator animates itself in when told
+ * a refresh is running and out when told it has stopped, and it runs those
+ * two as separate jobs. A refresh that starts and finishes inside one frame
+ * gets both orders at once, they land in the wrong order, and the indicator
+ * is left sitting on the list.
+ */
+@Composable
+private fun heldTrue(value: Boolean, atLeastMillis: Long): Boolean {
+    var shown by remember { mutableStateOf(value) }
+    var shownSince by remember { mutableLongStateOf(0L) }
+
+    LaunchedEffect(value) {
+        if (value) {
+            shownSince = System.currentTimeMillis()
+            shown = true
+        } else if (shown) {
+            val left = atLeastMillis - (System.currentTimeMillis() - shownSince)
+            if (left > 0) delay(left)
+            shown = false
+        }
+    }
+    return shown
 }

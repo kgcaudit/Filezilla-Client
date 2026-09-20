@@ -257,8 +257,10 @@ fun FilePanes(
             title = if (thing == NewThing.FOLDER) R.string.new_folder_title else R.string.new_file_title,
             onDismiss = { naming = null },
             onConfirm = { name ->
-                if (thing == NewThing.FOLDER) model.createFolder(active, name)
-                else model.createFile(active, name)
+                // Through the pane, not through the phone: the dial can be
+                // opened on one pane and confirmed after a swipe to the other.
+                if (thing == NewThing.FOLDER) model.createFolderIn(active, name)
+                else model.createFileIn(active, name)
                 naming = null
             },
         )
@@ -274,8 +276,8 @@ fun FilePanes(
                 initial = entry.name,
                 onDismiss = { renaming = false },
                 onConfirm = { name ->
-                    model.renameLocal(active, entry, name)
-                    model.clearSelection()
+                    model.renameIn(active, entry, name)
+                    model.clearSelectionIn(active)
                     renaming = false
                 },
             )
@@ -287,7 +289,7 @@ fun FilePanes(
             count = state.selection.size,
             onDismiss = { confirmingDelete = false },
             onConfirm = {
-                model.deleteSelection(active)
+                model.deleteSelectionIn(active)
                 confirmingDelete = false
             },
         )
