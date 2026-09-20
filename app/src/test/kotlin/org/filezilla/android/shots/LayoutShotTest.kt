@@ -17,6 +17,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.filezilla.android.R
+import org.filezilla.android.ui.ErrorPanel
+import org.filezilla.android.ui.describeFailure
 import org.filezilla.android.ui.DangerButton
 import org.filezilla.android.ui.FileKind
 import org.filezilla.android.ui.FileTile
@@ -283,6 +285,32 @@ class LayoutShotTest {
                 }
             }
         }
+    }
+
+    /**
+     * The card a failure arrives in.
+     *
+     * Shot because the user saw it before this did: it was a pink card on a
+     * cream page, and nothing that rendered a screen here had ever drawn one.
+     */
+    @Test
+    fun `an error card`() {
+        shoot("error-panel", height = 520) { FailureFace() }
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-night-xhdpi")
+    fun `an error card at night`() {
+        shoot("error-panel-night", height = 520) { FailureFace() }
+    }
+
+    @Composable
+    private fun FailureFace() {
+        ErrorPanel(
+            failure = describeFailure(java.net.SocketTimeoutException("Read timed out"), online = false),
+            onRetry = {},
+            onOpenLog = {},
+        )
     }
 
     /** The strip the transfers tab was replaced by, at the foot of the screen. */

@@ -111,8 +111,17 @@ internal val LightColors = lightColorScheme(
     // so danger is told from brand by hue and by weight rather than by neither.
     error = Color(0xFFA50E2E),
     onError = Color.White,
-    errorContainer = Color(0xFFFBDCE1),
-    onErrorContainer = Color(0xFF3F0313),
+    // Warm, where the error colour it belongs to is not.
+    //
+    // A container fills a region, and a region has to belong to the app it
+    // is drawn in. This was the crimson's own tint -- blue ahead of green,
+    // the magenta side of the wheel -- and the app's surfaces are an ivory
+    // with green ahead of blue. On screen that was a pink card sitting on a
+    // cream page, which is the one thing about the palette the user picked
+    // out unprompted. The crimson stays where it carries meaning and costs
+    // no area: the mark and the title on that card.
+    errorContainer = Color(0xFFF8DCDA),
+    onErrorContainer = Color(0xFF3B100B),
 )
 
 internal val DarkColors = darkColorScheme(
@@ -157,8 +166,8 @@ internal val DarkColors = darkColorScheme(
 
     error = Color(0xFFFFB0BE),
     onError = Color(0xFF5E001C),
-    errorContainer = Color(0xFF8C0F30),
-    onErrorContainer = Color(0xFFFFD9E0),
+    errorContainer = Color(0xFF7E2A24),
+    onErrorContainer = Color(0xFFFFDAD3),
 )
 
 /**

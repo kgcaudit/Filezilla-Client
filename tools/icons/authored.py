@@ -311,6 +311,16 @@ ICONS = {
 # shape that sits behind, so the pair reads as down-and-up rather than as a
 # solid block.
 TILES = {
+    # The mark on the error card. Drawn here rather than taken from the pack,
+    # whose warning icon is a white exclamation on an amber disc: two light
+    # fills, which the tile builder's figure-from-ground rule reads as two
+    # grounds and ghosts them both. A tile supplies its own disc anyway --
+    # what it wants inside is the mark alone.
+    "ic_tile_alert": [
+        (WHITE, rounded_rect(225, 104, 62, 200, 31)),
+        (WHITE, rounded_rect(218, 336, 76, 76, 38)),
+    ],
+
     "ic_tile_transfers": [
         (WHITE, lane(-LANE_OFFSET, LANE_TRAVEL, scale=1.5)),
         (GHOST_WHITE, lane(LANE_OFFSET, LANE_TRAVEL + 180.0, scale=1.5)),

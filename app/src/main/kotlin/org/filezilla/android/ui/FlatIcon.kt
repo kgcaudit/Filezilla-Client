@@ -100,6 +100,15 @@ fun TileIcon(
     modifier: Modifier = Modifier,
     size: Dp = 40.dp,
     cornerRadius: Dp = 12.dp,
+    /**
+     * What to draw the glyph in, for the tiles whose fill is not always dark.
+     *
+     * Left unspecified by the file kinds, whose colours are picked to carry
+     * white in either theme. The error tile cannot be: its fill is the error
+     * colour, which is a deep crimson in the light theme and a pale pink in
+     * the dark one, so a baked-in white mark disappeared at night.
+     */
+    glyphTint: Color = Color.Unspecified,
 ) {
     Box(
         modifier = modifier
@@ -111,11 +120,11 @@ fun TileIcon(
         Icon(
             painter = androidx.compose.ui.res.painterResource(glyph),
             contentDescription = contentDescription,
-            // Unspecified, because the glyph is already white -- and part of
-            // it is white at reduced alpha, which is what keeps a document's
-            // page distinct from the lines on it. A tint would flatten the
-            // two back together.
-            tint = Color.Unspecified,
+            // Unspecified by default, because the glyph is already white --
+            // and part of it is white at reduced alpha, which is what keeps a
+            // document's page distinct from the lines on it. A tint would
+            // flatten the two back together.
+            tint = glyphTint,
             modifier = Modifier.size(size * 0.58f),
         )
     }
