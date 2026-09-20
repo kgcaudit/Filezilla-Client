@@ -133,6 +133,14 @@
     <plurals name="confirm_delete_selected">
         <item quantity="other">%d개 항목을 삭제할까요?</item>
     </plurals>
+    <string name="done_channel">전송 완료</string>
+    <string name="done_channel_description">대기열이 끝나면 알립니다</string>
+    <string name="done_all">%1$d개 전송 완료</string>
+    <string name="done_all_one">전송 완료</string>
+    <string name="done_some_failed">%1$d개 완료 · %2$d개 실패</string>
+    <string name="done_all_failed">%1$d개 전송 실패</string>
+    <string name="done_all_failed_one">전송 실패</string>
+    <string name="done_tap">전송 목록을 보려면 누르세요</string>
     <string name="prompt_name">이름</string>
 
     <!-- 전송 -->
@@ -248,6 +256,7 @@
     <string name="exit_confirm">한 번 더 누르면 종료됩니다</string>
     <string name="action_back">뒤로</string>
     <string name="transfers_running">%1$d개 전송 중</string>
+    <string name="transfers_waiting">%1$d개 전송 대기 중</string>
     <string name="transfers_percent">%1$d%%</string>
     <string name="pane_storage">저장소 및 서버</string>
     <string name="storage_section">저장소</string>

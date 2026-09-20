@@ -30,7 +30,21 @@ import org.filezilla.ftp.journal.TransferState
  * the server never gave -- and the strip then shows an indeterminate bar
  * rather than a figure it made up.
  */
-data class TransferSummary(val count: Int, val fraction: Float?)
+data class TransferSummary(
+    val count: Int,
+    val fraction: Float?,
+    /**
+     * True when the queue is only outstanding, not moving.
+     *
+     * "38 transferring · 0%" on a phone in airplane mode is two wrong
+     * statements at once: nothing is transferring, and the nought is not
+     * progress but the absence of it. The queue counts work held for a
+     * network as still in hand -- it restarts itself, so from the user's
+     * side it has not stopped -- but what the strip says about it has to be
+     * the truth of the moment.
+     */
+    val waiting: Boolean = false,
+)
 
 /**
  * The queue's state, or null when there is nothing to say.
@@ -46,13 +60,30 @@ data class TransferSummary(val count: Int, val fraction: Float?)
  * screen by a transfer the user paused on purpose is the bar that would not
  * go away -- which this app has already shipped once.
  */
-fun summariseTransfers(records: List<TransferRecord>): TransferSummary? {
+fun summariseTransfers(
+    records: List<TransferRecord>,
+    /**
+     * What the running transfers have moved so far, by record id.
+     *
+     * Without this the strip sat at 0% for as long as a file took. The
+     * journal's byte count is written when a transfer ends, not while it
+     * runs -- that is the point of a journal, and it is why a resume knows
+     * where to pick up. So a queue of thirty-eight files with one of them
+     * halfway through reported nothing moved at all, and the figure only
+     * jumped when a file finished. The queue screen had always merged the
+     * live figures; the strip never did.
+     */
+    live: Map<String, Long> = emptyMap(),
+): TransferSummary? {
     val busy = records.filter { it.state in MOVING }
     if (busy.isEmpty()) return null
-    val total = busy.sumOf { it.totalBytes ?: return TransferSummary(busy.size, null) }
-    if (total <= 0) return TransferSummary(busy.size, null)
-    val done = busy.sumOf { it.bytesTransferred }
-    return TransferSummary(busy.size, (done.toFloat() / total).coerceIn(0f, 1f))
+    val waiting = busy.none { it.state == TransferState.RUNNING }
+    val total = busy.sumOf { it.totalBytes ?: return TransferSummary(busy.size, null, waiting) }
+    if (total <= 0) return TransferSummary(busy.size, null, waiting)
+    // The larger of the two: a record that has just finished has its
+    // journalled figure while its live one is already gone.
+    val done = busy.sumOf { maxOf(it.bytesTransferred, live[it.id] ?: 0L) }
+    return TransferSummary(busy.size, (done.toFloat() / total).coerceIn(0f, 1f), waiting)
 }
 
 /**
@@ -111,13 +142,18 @@ fun TransferStrip(summary: TransferSummary, onOpen: () -> Unit) {
                     modifier = Modifier.size(20.dp),
                 )
                 Text(
-                    stringResource(R.string.transfers_running, summary.count),
+                    stringResource(
+                        if (summary.waiting) R.string.transfers_waiting else R.string.transfers_running,
+                        summary.count,
+                    ),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                     modifier = Modifier.weight(1f).padding(start = 10.dp),
                     maxLines = 1,
                 )
-                summary.fraction?.let {
+                // No figure while nothing is moving: a nought there reads as
+                // progress rather than as its absence.
+                summary.fraction?.takeIf { !summary.waiting }?.let {
                     Text(
                         stringResource(R.string.transfers_percent, (it * 100).toInt()),
                         style = MaterialTheme.typography.labelLarge,

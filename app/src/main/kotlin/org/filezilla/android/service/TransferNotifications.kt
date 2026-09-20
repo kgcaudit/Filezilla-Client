@@ -33,6 +33,50 @@ class TransferNotifications(private val context: Context) {
         manager.createNotificationChannel(channel)
     }
 
+    /**
+     * Says the queue has finished, and stays said.
+     *
+     * Its own id and its own channel, and both matter. The progress
+     * notification belongs to the foreground service and is taken down with
+     * it, so posting the ending there would show it for an instant and then
+     * remove it. And the progress channel is deliberately silent -- a
+     * transfer updates constantly and would chime every time -- while an
+     * ending is the one moment worth a sound, which is a different channel's
+     * job.
+     */
+    fun announce(notice: QueueNotice) {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(
+            NotificationChannel(
+                DONE_CHANNEL_ID,
+                context.getString(R.string.done_channel),
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ).apply {
+                description = context.getString(R.string.done_channel_description)
+            },
+        )
+
+        val open = PendingIntent.getActivity(
+            context,
+            2,
+            Intent(context, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        val title = context.getString(notice.title, *notice.args.toTypedArray())
+        val notification = NotificationCompat.Builder(context, DONE_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setContentTitle(title)
+            .setContentText(context.getString(R.string.done_tap))
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .build()
+
+        runCatching { manager.notify(DONE_NOTIFICATION_ID, notification) }
+    }
+
     fun build(progress: ActiveProgress?, queued: Int, heldForNetwork: Boolean = false): Notification {
         val open = PendingIntent.getActivity(
             context,
@@ -122,6 +166,10 @@ class TransferNotifications(private val context: Context) {
     companion object {
         const val CHANNEL_ID = "transfers"
         const val NOTIFICATION_ID = 1
+
+        /** The ending, which outlives the service that was running. */
+        private const val DONE_CHANNEL_ID = "transfers-done"
+        private const val DONE_NOTIFICATION_ID = 2
     }
 }
 

@@ -260,7 +260,9 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
 
     // The queue's own line along the foot, and only while it has something
     // to say; see [summariseTransfers].
-    val queue = remember(transfers) { summariseTransfers(transfers) }
+    val queue = remember(transfers, active) {
+        summariseTransfers(transfers, active.mapValues { it.value.bytes })
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbars) },

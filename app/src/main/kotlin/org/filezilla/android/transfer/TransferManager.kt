@@ -260,8 +260,25 @@ class TransferManager(
      * file and its journalled offset survive, which is what lets the next run
      * pick it up.
      */
-    suspend fun runQueue() = coroutineScope {
+    /**
+     * What one run of the queue got through.
+     *
+     * Returned rather than left in the journal for a caller to work out,
+     * because "since this run started" is a fact only the run has: the
+     * journal keeps every transfer the app has ever done, and counting the
+     * completed ones would count last week's.
+     */
+    data class QueueOutcome(val completed: Int, val failed: Int) {
+        val isEmpty: Boolean get() = completed == 0 && failed == 0
+
+        companion object {
+            val NOTHING = QueueOutcome(0, 0)
+        }
+    }
+
+    suspend fun runQueue(): QueueOutcome = coroutineScope {
         stopRequested = false
+        val startedAt = System.currentTimeMillis()
         withContext(io) {
             // A download whose bytes are all here but which never reached the
             // user's folder is finished as far as the journal is concerned.
@@ -287,7 +304,17 @@ class TransferManager(
 
             activeState.value = emptyMap()
             waitingState.value = 0
-            partials.pruneOrphans(journal.all().map { it.id }.toSet())
+            val finished = journal.all()
+            partials.pruneOrphans(finished.map { it.id }.toSet())
+
+            // Only what this run touched. A record that finished earlier
+            // keeps its old timestamp, so the clock is what separates this
+            // run's work from every run before it.
+            val mine = finished.filter { it.updatedAtMillis >= startedAt }
+            QueueOutcome(
+                completed = mine.count { it.state == TransferState.COMPLETED },
+                failed = mine.count { it.state == TransferState.FAILED },
+            )
         }
     }
 

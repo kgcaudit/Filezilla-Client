@@ -101,7 +101,12 @@ class TransferService : LifecycleService() {
         if (queueJob?.isActive == true) return
         queueJob = lifecycleScope.launch {
             try {
-                graph.transfers.runQueue()
+                val outcome = graph.transfers.runQueue()
+                // After the call and not in the finally: the finally also
+                // runs when the user pressed stop, and announcing an ending
+                // to somebody who has just cancelled is the app arguing with
+                // them.
+                QueueNotice.of(outcome)?.let { notifications.announce(it) }
             } finally {
                 // Whether the queue drained or the job was cancelled, there is
                 // no longer a reason to hold the process in the foreground.

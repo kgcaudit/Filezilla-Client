@@ -3,6 +3,8 @@ package org.filezilla.android.ui
 import org.filezilla.ftp.journal.TransferDirection
 import org.filezilla.ftp.journal.TransferRecord
 import org.filezilla.ftp.journal.TransferState
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -128,5 +130,143 @@ class TransferStripTest {
         val summary = summariseTransfers(listOf(record("a", TransferState.RUNNING, 200, 100)))
 
         assertEquals(1f, summary?.fraction!!, 0.001f)
+    }
+}
+
+/**
+ * That the strip counts what is moving now, not only what has landed.
+ *
+ * The bug: thirty-eight files queued, one of them running, and the strip sat
+ * at "0%" for as long as that file took. The journal's byte count is written
+ * when a transfer ends, not while it runs -- that is what makes a resume
+ * know where to pick up -- so reading only the journal says nothing has
+ * moved until something finishes. The queue screen had always merged the
+ * live figures; the strip never did.
+ */
+class TransferStripLiveProgressTest {
+
+    private fun record(
+        id: String,
+        state: TransferState,
+        done: Long = 0,
+        total: Long? = null,
+    ) = TransferRecord(
+        id = id,
+        direction = TransferDirection.DOWNLOAD,
+        host = "example.org",
+        port = 21,
+        user = "bob",
+        remotePath = "/pub/$id",
+        localPath = "/tmp/$id",
+        state = state,
+        bytesTransferred = done,
+        totalBytes = total,
+        updatedAtMillis = 0,
+    )
+
+    @Test
+    fun `a running transfer's progress counts before it finishes`() {
+        val records = listOf(
+            record("a", TransferState.RUNNING, done = 0, total = 100),
+            record("b", TransferState.PENDING, done = 0, total = 100),
+        )
+
+        // Half of the first file is on the wire and none of it is journalled,
+        // which is the state the user was looking at.
+        val summary = summariseTransfers(records, live = mapOf("a" to 50L))
+
+        assertEquals(2, summary!!.count)
+        assertEquals(0.25f, summary.fraction!!, 0.001f)
+    }
+
+    /** Without the live figures it is the nothing the user saw. */
+    @Test
+    fun `the journal alone says nothing has moved`() {
+        val records = listOf(
+            record("a", TransferState.RUNNING, done = 0, total = 100),
+            record("b", TransferState.PENDING, done = 0, total = 100),
+        )
+
+        assertEquals(0f, summariseTransfers(records)!!.fraction!!, 0.001f)
+    }
+
+    /**
+     * A transfer that has just landed has its journalled figure and no live
+     * one, so the larger of the two is what counts -- taking the live figure
+     * alone would drop finished files back to zero.
+     */
+    @Test
+    fun `a finished transfer keeps its journalled bytes`() {
+        val records = listOf(
+            record("a", TransferState.PENDING, done = 100, total = 100),
+            record("b", TransferState.RUNNING, done = 0, total = 100),
+        )
+
+        val summary = summariseTransfers(records, live = mapOf("b" to 20L))
+
+        assertEquals(0.6f, summary!!.fraction!!, 0.001f)
+    }
+
+    /** And a live figure for something no longer moving is not counted twice. */
+    @Test
+    fun `a stale live figure cannot push the bar past the end`() {
+        val records = listOf(record("a", TransferState.RUNNING, done = 100, total = 100))
+
+        val summary = summariseTransfers(records, live = mapOf("a" to 999L))
+
+        assertEquals(1f, summary!!.fraction!!, 0.001f)
+    }
+}
+
+/**
+ * That the strip does not claim to be transferring while it is not.
+ *
+ * The screenshot that started this was a phone in airplane mode reading
+ * "38 transferring · 0%". Both halves were wrong: nothing was transferring,
+ * and the nought was the absence of progress rather than progress. The queue
+ * counts work held for a network as still in hand, which is right -- it
+ * restarts itself -- but what the strip says about it has to be the truth of
+ * the moment.
+ */
+class TransferStripWaitingTest {
+
+    private fun record(id: String, state: TransferState, done: Long = 0, total: Long? = 100) =
+        TransferRecord(
+            id = id,
+            direction = TransferDirection.DOWNLOAD,
+            host = "example.org",
+            port = 21,
+            user = "bob",
+            remotePath = "/pub/$id",
+            localPath = "/tmp/$id",
+            state = state,
+            bytesTransferred = done,
+            totalBytes = total,
+            updatedAtMillis = 0,
+        )
+
+    @Test
+    fun `a queue with nothing running is waiting`() {
+        val summary = summariseTransfers(
+            listOf(
+                record("a", TransferState.WAITING_FOR_NETWORK),
+                record("b", TransferState.PENDING),
+            ),
+        )
+
+        assertEquals(2, summary!!.count)
+        assertTrue("it says it is transferring", summary.waiting)
+    }
+
+    @Test
+    fun `one transfer actually running is not waiting`() {
+        val summary = summariseTransfers(
+            listOf(
+                record("a", TransferState.RUNNING, done = 10),
+                record("b", TransferState.WAITING_FOR_NETWORK),
+            ),
+        )
+
+        assertFalse(summary!!.waiting)
     }
 }

@@ -135,6 +135,14 @@
         <item quantity="one">Delete this item?</item>
         <item quantity="other">Delete %d items?</item>
     </plurals>
+    <string name="done_channel">Finished transfers</string>
+    <string name="done_channel_description">A notice when the queue has finished</string>
+    <string name="done_all">%1$d transfers finished</string>
+    <string name="done_all_one">Transfer finished</string>
+    <string name="done_some_failed">%1$d finished · %2$d failed</string>
+    <string name="done_all_failed">%1$d transfers failed</string>
+    <string name="done_all_failed_one">Transfer failed</string>
+    <string name="done_tap">Tap to see the transfer list</string>
     <string name="prompt_name">Name</string>
 
     <!-- Queue -->
@@ -251,6 +259,7 @@
     <string name="exit_confirm">Press back again to leave</string>
     <string name="action_back">Back</string>
     <string name="transfers_running">%1$d transferring</string>
+    <string name="transfers_waiting">%1$d waiting to transfer</string>
     <string name="transfers_percent">%1$d%%</string>
     <string name="pane_storage">Storage and servers</string>
     <string name="storage_section">Storage</string>

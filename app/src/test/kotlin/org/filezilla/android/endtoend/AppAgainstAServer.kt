@@ -139,13 +139,12 @@ abstract class AppAgainstAServer {
      * that never happened. This one did, until it started checking that the
      * files had contents.
      */
-    protected fun runTheQueue() {
+    protected fun runTheQueue(): org.filezilla.android.transfer.TransferManager.QueueOutcome =
         kotlinx.coroutines.runBlocking {
             kotlinx.coroutines.withTimeout(60_000) {
                 AppGraph.of(application).transfers.runQueue()
             }
         }
-    }
 
     /** Points a pane at a folder on the phone and waits for the rows. */
     protected fun openOnPhone(model: MainViewModel, id: PaneId, folder: File) {

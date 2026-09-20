@@ -1,5 +1,6 @@
 package org.filezilla.android.endtoend
 
+import org.filezilla.android.service.QueueNotice
 import org.filezilla.ftp.journal.TransferState
 import org.filezilla.android.ui.PaneId
 import org.junit.Assert.assertEquals
@@ -118,7 +119,7 @@ class PasteToServerTest : AppAgainstAServer() {
             org.filezilla.android.AppGraph.of(application).transfers.let { true } &&
                 model.transfers.value.size >= 2
         }
-        runTheQueue()
+        val outcome = runTheQueue()
 
         assertTrue("the folder is missing", File(onServer, "Vision").isDirectory)
         assertTrue("the subfolder is missing", File(onServer, "Vision/test").isDirectory)
@@ -128,6 +129,18 @@ class PasteToServerTest : AppAgainstAServer() {
         // on an upload that never happened.
         assertEquals("one", File(onServer, "Vision/test/film.mkv").readText())
         assertEquals("two", File(onServer, "Vision/subtitle.srt").readText())
+
+        // And what the run reports of itself, which is what the notice at
+        // the end of it is built from. The count is filtered by "since this
+        // run started", so a journal carrying older work must not leak in.
+        assertEquals(
+            org.filezilla.android.transfer.TransferManager.QueueOutcome(completed = 2, failed = 0),
+            outcome,
+        )
+        assertEquals(
+            QueueNotice(org.filezilla.android.R.string.done_all, listOf(2)),
+            QueueNotice.of(outcome),
+        )
 
         // Nothing was refused. The whole failure was that every file came
         // back 550, so a queue with no failures is the assertion.
