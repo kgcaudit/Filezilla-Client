@@ -652,17 +652,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
 
     /** Queues the held remote files into an ordinary folder on the phone. */
+    /**
+     * The listing a clipboard was taken from, as the panes still hold it.
+     *
+     * A clipboard carries names, not rows, and a name on its own does not say
+     * whether it is a folder. The pane it came from still has the rows, so
+     * this finds it by what the clipboard remembers about its origin.
+     */
+    private fun rowsHeldIn(held: Clipboard): List<DirectoryEntry> =
+        PaneId.entries.map { pane(it) }
+            .firstOrNull {
+                it.source == held.source &&
+                    FilePath.normalize(it.path) == FilePath.normalize(held.directory)
+            }
+            ?.entries
+            .orEmpty()
+
     private fun downloadHeld(
         held: Clipboard,
         site: SiteEntity,
         localDirectory: String,
         onQueued: (Int) -> Unit,
     ) {
-        val rows = pane(activePane).entries
+        // The rows of the pane the items were picked up in, not of the active
+        // one -- the active pane is the target, which is the phone. Taken
+        // from there, no name ever matched and every pick fell back to a bare
+        // DirectoryEntry, whose isDirectory is false. So a folder pasted from
+        // a server was planned as if it were a file, and the download fetched
+        // nothing.
+        val rows = rowsHeldIn(held)
         viewModelScope.launch {
-            val picks = held.names.mapNotNull { name ->
-                rows.firstOrNull { it.name == name }
-                    ?: DirectoryEntry(name = name)
+            val picks = held.names.map { name ->
+                rows.firstOrNull { it.name == name } ?: DirectoryEntry(name = name)
             }
             runCatching {
                 val plan = if (FolderDownload.needsRemoteWalk(picks)) {
