@@ -437,6 +437,50 @@ class LayoutShotTest {
         }
     }
 
+    /**
+     * A long folder, with the index rail the user asked for.
+     *
+     * Three thousand films is the case: the rail is what gives the list a
+     * length you can see, and it is built from the rows, so this is also
+     * where a rail that does not match what it is sitting next to shows up.
+     */
+    @Test
+    fun `a long list with its index rail`() {
+        val names = listOf(
+            "28년 후(2025)", "2번 배심원(2024)", "365일(2020)", "40 에이커스(2024)",
+            "가족의 탄생", "거미집", "곡성", "기생충", "나랏말싸미", "노량",
+            "다만 악에서", "라스트 듀얼", "마녀", "명량", "바람",
+            "밀수", "범죄도시", "사바하", "서울대작전", "아가씨", "올드보이",
+            "외계+인", "자산어보", "천문", "택시운전사", "파묘", "한산",
+            "Avatar", "Dune", "Oppenheimer",
+        )
+        val model = MainViewModel(application)
+        // Sorted the way the screen sorts, because the rail is built from
+        // the rows it is standing next to. An unsorted fixture draws a rail
+        // that climbs the alphabet twice and says nothing about the app.
+        val rows = names.sortedWith(String.CASE_INSENSITIVE_ORDER)
+            .map { entry(it, directory = true) }
+        shoot("index-rail", height = 1800) {
+            BrowseScreen(
+                state = model.pane(PaneId.LEFT).copy(source = PaneSource.Local, entries = rows),
+                rows = rows,
+                options = model.options,
+                onRefresh = {},
+                onOpenLog = {},
+                onFilterChange = {},
+                onCloseFilter = {},
+                actions = EntryActions(
+                    onOpen = {},
+                    onDownload = {},
+                    onDelete = {},
+                    onRename = { _, _ -> },
+                    onProperties = {},
+                    onToggleSelected = {},
+                ),
+            )
+        }
+    }
+
     /** The strip the transfers tab was replaced by, at the foot of the screen. */
     @Test
     fun `the transfer strip`() {

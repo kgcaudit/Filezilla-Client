@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -76,8 +77,11 @@ fun QueueScreen(
     // what lets the screen notice the silence.
     val now = tickWhile(active.isNotEmpty())
 
+    Box(modifier = modifier) {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     LazyColumn(
-        modifier = modifier,
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -110,6 +114,16 @@ fun QueueScreen(
                 onCancel = { onCancel(record.id) },
             )
         }
+    }
+    // No letters: the queue is in the order things were queued, and a rail
+    // reading ㄱ ㄴ ㄷ would be a lie about where a tap lands. A thumb still
+    // says how far down a long queue you are, which is what was missing.
+    FastScroller(
+        state = listState,
+        rowCount = transfers.size,
+        stops = emptyList(),
+        modifier = Modifier.align(Alignment.CenterEnd),
+    )
     }
 }
 

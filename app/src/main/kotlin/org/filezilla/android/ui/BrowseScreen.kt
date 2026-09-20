@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -134,19 +135,49 @@ fun BrowseScreen(
                     }
                 }
 
-                else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(rows, key = { it.name }) { entry ->
-                        EntryRow(
-                            entry = entry,
-                            selected = entry.name in state.selection,
-                            selecting = state.selecting,
-                            isLocal = state.isLocal,
-                            actions = actions,
-                            onRename = { renaming = entry },
-                            onDelete = { deleting = entry },
-                        )
-                        HorizontalDivider()
+                else -> Box(modifier = Modifier.fillMaxSize()) {
+                    val listState = rememberLazyListState()
+                    // Letters only when the rows are in an order letters
+                    // describe. Sorted by date, a rail reading ㄱ ㄴ ㄷ would
+                    // be a lie about where a tap lands.
+                    val stops = remember(rows, options.sortKey) {
+                        if (options.sortKey == SortKey.NAME) {
+                            ScrollIndex.stopsFor(rows.map { it.name })
+                        } else {
+                            emptyList()
+                        }
                     }
+                    val railed = rows.size >= FAST_SCROLL_FROM
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        // The rail gets a lane of its own. Drawn over the
+                        // rows it lands on the row menus, and a list whose
+                        // last control is under a scroll bar is a list with
+                        // two things fighting for the same thumb.
+                        contentPadding = PaddingValues(
+                            end = if (railed) FAST_SCROLL_WIDTH else 0.dp,
+                        ),
+                    ) {
+                        items(rows, key = { it.name }) { entry ->
+                            EntryRow(
+                                entry = entry,
+                                selected = entry.name in state.selection,
+                                selecting = state.selecting,
+                                isLocal = state.isLocal,
+                                actions = actions,
+                                onRename = { renaming = entry },
+                                onDelete = { deleting = entry },
+                            )
+                            HorizontalDivider()
+                        }
+                    }
+                    FastScroller(
+                        state = listState,
+                        rowCount = rows.size,
+                        stops = stops,
+                        modifier = Modifier.align(Alignment.CenterEnd),
+                    )
                 }
             }
         }
