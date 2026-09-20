@@ -46,12 +46,19 @@ fun StorageSheet(
     id: PaneId,
     model: MainViewModel,
     onGrant: () -> Unit,
+    onOpenScreen: (Screen) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
-        StoragePlaces(id = id, model = model, onGrant = onGrant, onDismiss = onDismiss)
+        StoragePlaces(
+            id = id,
+            model = model,
+            onGrant = onGrant,
+            onOpenScreen = onOpenScreen,
+            onDismiss = onDismiss,
+        )
     }
 }
 
@@ -67,6 +74,7 @@ fun StoragePlaces(
     id: PaneId,
     model: MainViewModel,
     onGrant: () -> Unit,
+    onOpenScreen: (Screen) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sites by model.sites.collectAsStateWithLifecycle()
@@ -154,6 +162,40 @@ fun StoragePlaces(
                     },
                 )
             }
+
+            PlaceRow(
+                artwork = R.drawable.ic_flat_server,
+                title = stringResource(R.string.storage_manage_servers),
+                subtitle = null,
+                onClick = {
+                    onOpenScreen(Screen.SITES)
+                    onDismiss()
+                },
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // The two screens that used to be tabs along the bottom. They are
+            // places you visit, not places you live, and a permanent seat for
+            // each cost 80dp of every screen in the app.
+            PlaceRow(
+                artwork = R.drawable.ic_flat_transfers,
+                title = stringResource(R.string.title_queue),
+                subtitle = null,
+                onClick = {
+                    onOpenScreen(Screen.QUEUE)
+                    onDismiss()
+                },
+            )
+            PlaceRow(
+                artwork = R.drawable.ic_flat_log,
+                title = stringResource(R.string.title_log),
+                subtitle = null,
+                onClick = {
+                    onOpenScreen(Screen.LOG)
+                    onDismiss()
+                },
+            )
 
             TextButton(
                 onClick = {

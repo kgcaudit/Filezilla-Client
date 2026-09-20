@@ -1,20 +1,19 @@
 package org.filezilla.android.ui
 
-import org.filezilla.android.R
-
 /**
- * The four places the app has, in the order the bar shows them.
+ * Where the app is.
  *
- * Here rather than beside the screen that draws them because the back button
- * has to reason about them too, and that reasoning is worth testing without a
- * device attached.
+ * [FILES] is the app. The other three are places you go and come back from,
+ * and they were four tabs along the bottom of every screen -- 80dp of it,
+ * permanently. One of the four was a tab to the screen you were already on;
+ * another listed the servers the storage sheet already lists; a third was a
+ * diagnostic log. None of them earned a permanent seat, so none of them has
+ * one: they open over the files screen and close again.
  */
-enum class Tab(val label: Int) {
-    SITES(R.string.tab_sites),
-    BROWSE(R.string.tab_browse),
-    QUEUE(R.string.tab_queue),
-    LOG(R.string.tab_log),
-}
+enum class Screen { FILES, SITES, QUEUE, LOG }
+
+/** Where the app opens, and where back finally lands. */
+val HOME = Screen.FILES
 
 /**
  * What the system back button does next.
@@ -34,8 +33,8 @@ enum class BackAction {
     /** Up one folder. The common case, and the reason the rest of this exists. */
     GO_UP,
 
-    /** Back to the first tab from any other. */
-    SHOW_FIRST_TAB,
+    /** Close whatever opened over the files screen. */
+    CLOSE_SCREEN,
 
     /** Say that another press leaves, and wait for it. */
     CONFIRM_EXIT,
@@ -52,23 +51,20 @@ enum class BackAction {
  * into [EXIT] rather than another warning.
  */
 fun backActionFor(
-    tab: Tab,
+    screen: Screen,
     selecting: Boolean,
     canGoUp: Boolean,
     exitArmed: Boolean,
 ): BackAction = when {
-    // Both only mean anything on the files tab; a selection made there is
+    // Both only mean anything on the files screen; a selection made there is
     // still held while the user reads the log, and back should not silently
     // discard it from a screen that never showed it.
-    tab == Tab.BROWSE && selecting -> BackAction.CLEAR_SELECTION
-    tab == Tab.BROWSE && canGoUp -> BackAction.GO_UP
-    tab != FIRST_TAB -> BackAction.SHOW_FIRST_TAB
+    screen == HOME && selecting -> BackAction.CLEAR_SELECTION
+    screen == HOME && canGoUp -> BackAction.GO_UP
+    screen != HOME -> BackAction.CLOSE_SCREEN
     exitArmed -> BackAction.EXIT
     else -> BackAction.CONFIRM_EXIT
 }
-
-/** Where back finally lands, and where the app opens. */
-val FIRST_TAB = Tab.SITES
 
 /** How long a [BackAction.CONFIRM_EXIT] stays armed. */
 const val EXIT_CONFIRM_MILLIS = 2_500L

@@ -10,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -27,6 +28,8 @@ import org.filezilla.android.ui.MainViewModel
 import org.filezilla.android.ui.PaneHeader
 import org.filezilla.android.ui.PaneId
 import org.filezilla.android.ui.PaneSource
+import org.filezilla.android.ui.TransferStrip
+import org.filezilla.android.ui.TransferSummary
 import org.filezilla.android.ui.StoragePlaces
 import org.filezilla.android.ui.theme.OloTheme
 import org.filezilla.ftp.listing.DirectoryEntry
@@ -117,6 +120,7 @@ class LayoutShotTest {
                 onUpload = {},
                 onChooseFolder = {},
                 onGrant = {},
+                onOpenScreen = {},
             )
         }
     }
@@ -143,6 +147,7 @@ class LayoutShotTest {
                 onUpload = {},
                 onChooseFolder = {},
                 onGrant = {},
+                onOpenScreen = {},
             )
             BrowseScreen(
                 state = model.pane(PaneId.LEFT).copy(source = PaneSource.Local, entries = rows),
@@ -186,6 +191,16 @@ class LayoutShotTest {
         val out = File("build/shots").apply { mkdirs() }.resolve("whole-screen.png")
         out.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         controller.close()
+    }
+
+    /** The strip the transfers tab was replaced by, at the foot of the screen. */
+    @Test
+    fun `the transfer strip`() {
+        shoot("transfer-strip", height = 200) {
+            TransferStrip(TransferSummary(count = 3, fraction = 0.42f), onOpen = {})
+            androidx.compose.foundation.layout.Spacer(Modifier.height(16.dp))
+            TransferStrip(TransferSummary(count = 1, fraction = null), onOpen = {})
+        }
     }
 
     /** The sites list, where a server says how it is reached before it is tapped. */
@@ -310,6 +325,7 @@ class LayoutShotTest {
                 onUpload = {},
                 onChooseFolder = {},
                 onGrant = {},
+                onOpenScreen = {},
             )
             BrowseScreen(
                 state = model.pane(PaneId.LEFT).copy(source = PaneSource.Local, entries = rows),
@@ -355,6 +371,7 @@ class LayoutShotTest {
                 onNewDirectory = {},
                 onUpload = {},
                 onChooseFolder = {},
+                onOpenScreen = {},
             )
         }
     }
@@ -370,7 +387,13 @@ class LayoutShotTest {
     fun `the storage sheet`() {
         val model = MainViewModel(application)
         shoot("storage-sheet") {
-            StoragePlaces(id = PaneId.LEFT, model = model, onGrant = {}, onDismiss = {})
+            StoragePlaces(
+                id = PaneId.LEFT,
+                model = model,
+                onGrant = {},
+                onOpenScreen = {},
+                onDismiss = {},
+            )
         }
     }
 }

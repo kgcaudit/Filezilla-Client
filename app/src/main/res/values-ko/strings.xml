@@ -16,14 +16,9 @@
     <string name="action_stop">중지</string>
 
     <!-- 탭 -->
-    <string name="tab_sites">서버</string>
-    <string name="tab_browse">파일</string>
-    <string name="tab_queue">전송</string>
-    <string name="tab_log">로그</string>
 
     <!-- 제목 -->
     <string name="title_sites">서버 목록</string>
-    <string name="title_browse">파일</string>
     <string name="title_queue">전송 목록</string>
     <string name="title_log">메시지 로그</string>
 
@@ -244,6 +239,9 @@
     <string name="paste_go_somewhere_cut">%1$d개 잘라냄. 옮길 폴더를 여세요.</string>
     <string name="open_no_app">이 파일을 열 수 있는 앱이 없습니다</string>
     <string name="exit_confirm">한 번 더 누르면 종료됩니다</string>
+    <string name="action_back">뒤로</string>
+    <string name="transfers_running">%1$d개 전송 중</string>
+    <string name="transfers_percent">%1$d%%</string>
     <string name="pane_storage">저장소 및 서버</string>
     <string name="storage_section">저장소</string>
     <string name="storage_servers_section">서버</string>
@@ -252,4 +250,5 @@
     <string name="browse_open">%1$s 열기</string>
     <string name="storage_free_of">%2$s 중 %1$s 사용 가능</string>
     <string name="storage_clear_pane">이 창 비우기</string>
+    <string name="storage_manage_servers">서버 추가·편집</string>
 </resources>

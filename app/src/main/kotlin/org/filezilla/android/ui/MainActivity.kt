@@ -9,16 +9,13 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.AlertDialog
@@ -29,9 +26,6 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -45,21 +39,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import org.filezilla.android.R
-import org.filezilla.android.data.SiteEntity
 import org.filezilla.android.files.OpenFile
 import org.filezilla.android.service.TransferService
 import org.filezilla.android.storage.ConflictChoice
@@ -89,7 +80,7 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
     val scope = rememberCoroutineScope()
     val snackbars = remember { SnackbarHostState() }
 
-    var tab by remember { mutableStateOf(Tab.SITES) }
+    var screen by remember { mutableStateOf(HOME) }
     var queueMenuOpen by remember { mutableStateOf(false) }
     var editingSite by remember { mutableStateOf<SiteDraft?>(null) }
     var creatingDirectory by remember { mutableStateOf(false) }
@@ -114,15 +105,15 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
         val armed = System.currentTimeMillis() - exitArmedAt < EXIT_CONFIRM_MILLIS
         when (
             backActionFor(
-                tab = tab,
+                screen = screen,
                 selecting = model.browse.selecting,
-                canGoUp = tab == Tab.BROWSE && model.canGoUp(model.activePane),
+                canGoUp = screen == Screen.FILES && model.canGoUp(model.activePane),
                 exitArmed = armed,
             )
         ) {
             BackAction.CLEAR_SELECTION -> model.clearSelection()
             BackAction.GO_UP -> model.goUp()
-            BackAction.SHOW_FIRST_TAB -> tab = FIRST_TAB
+            BackAction.CLOSE_SCREEN -> screen = HOME
             BackAction.CONFIRM_EXIT -> {
                 exitArmedAt = System.currentTimeMillis()
                 scope.launch {
@@ -264,37 +255,43 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbars) },
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        // No selection title: the bar along the bottom says
-                        // what is picked, and two bars saying it at once was
-                        // one of them saying it twice.
-                        titleFor(tab, model),
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                // A surface, not the brand colour. A deep blue bar covered
-                // about a fifth of every screen, and against that much
-                // saturation the status colours -- which are the ones that
-                // actually mean something here -- read as muted. The brand is
-                // now what marks an action, not what fills a background.
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                ),
-                actions = {
-                    when (tab) {
-                        // Nothing here: every action on this screen belongs to
-                        // one pane or the other, and a bar above both cannot
-                        // say which. They live in each pane's own header now.
-                        Tab.BROWSE -> Unit
-
-                        Tab.QUEUE -> {
+            // Only for a screen that opens over the files screen. The
+            // files screen has no bar of its own: every action on it
+            // belongs to one pane or the other and lives in that pane's
+            // header, so all that was left up here was a title -- and the
+            // tab strip, the pane header and the first crumb of the path
+            // were already saying the same word.
+            if (screen != HOME) {
+                TopAppBar(
+                    title = {
+                        Text(
+                            titleFor(screen),
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { screen = HOME }) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.action_back),
+                            )
+                        }
+                    },
+                    // A surface, not the brand colour. A deep blue bar
+                    // covered about a fifth of every screen, and against
+                    // that much saturation the status colours -- the ones
+                    // that actually mean something here -- read as muted.
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                        actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                    actions = {
+                        when (screen) {
+                            Screen.QUEUE -> {
                             IconButton(onClick = { model.clearCompleted() }) {
                                 Icon(Icons.AutoMirrored.Filled.List, contentDescription = stringResource(R.string.queue_clear_finished))
                             }
@@ -332,18 +329,18 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                                 )
                             }
                         }
-
-                        Tab.LOG -> IconButton(onClick = { model.clearLog() }) {
+                        Screen.LOG -> IconButton(onClick = { model.clearLog() }) {
                             Icon(Icons.AutoMirrored.Filled.List, contentDescription = stringResource(R.string.log_clear))
                         }
 
-                        Tab.SITES -> Unit
-                    }
-                },
-            )
+                            Screen.SITES, Screen.FILES -> Unit
+                        }
+                    },
+                )
+            }
         },
         floatingActionButton = {
-            if (tab == Tab.SITES) {
+            if (screen == Screen.SITES) {
                 FloatingActionButton(
                     onClick = { editingSite = model.newSite() },
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -353,45 +350,9 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                 }
             }
         },
-        bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            ) {
-                Tab.entries.forEach { candidate ->
-                    NavigationBarItem(
-                        selected = tab == candidate,
-                        onClick = { tab = candidate },
-                        icon = {
-                            Icon(
-                                painter = painterResource(iconFor(candidate)),
-                                contentDescription = null,
-                                // Unbounded, so the artwork keeps its own
-                                // colours instead of being flattened to one.
-                                tint = Color.Unspecified,
-                                modifier = Modifier.size(26.dp),
-                            )
-                        },
-                        label = { Text(stringResource(candidate.label)) },
-                        // Material shows labels on every item up to three and
-                        // only on the selected one from four up, which is
-                        // what this is. The label stays in the tree either
-                        // way, so a screen reader still announces it.
-                        alwaysShowLabel = false,
-                        // The selected tab's indicator is the same pale chip
-                        // the rows give these icons, for the same reason: on
-                        // the dark theme's indicator the artwork's deep blue
-                        // sat on deeper blue and the selected tab was the
-                        // hardest one to make out.
-                        colors = NavigationBarItemDefaults.colors(
-                            indicatorColor = FlatIconChip,
-                        ),
-                    )
-                }
-            }
-        },
     ) { padding ->
-        when (tab) {
-            Tab.SITES -> SitesScreen(
+        when (screen) {
+            Screen.SITES -> SitesScreen(
                 sites = sites,
                 editing = editingSite,
                 onEdit = { site -> editingSite = site?.let(model::draftOf) },
@@ -399,13 +360,18 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                 onDelete = model::deleteSite,
                 onConnect = { site ->
                     model.connect(site)
-                    tab = Tab.BROWSE
+                    screen = Screen.FILES
                 },
                 onMove = model::moveSite,
                 modifier = Modifier.padding(padding),
             )
 
-            Tab.BROWSE -> FilePanes(
+            // Not padded by the Scaffold: with no bar above it or below
+            // it, the files screen runs from the status bar to the
+            // gesture bar and takes those insets itself -- the tab strip
+            // at the top, the list at the bottom. There is nothing left
+            // for the Scaffold to inset it from.
+            Screen.FILES -> FilePanes(
                 model = model,
                 options = model.options,
                 downloadFolderName = model.downloadFolderName,
@@ -415,9 +381,10 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                     uploadPicker.launch(arrayOf("*/*"))
                 },
                 onChooseFolder = { folderPicker.launch(null) },
-                onOpenLog = { tab = Tab.LOG },
+                onOpenScreen = { screen = it },
+                onOpenLog = { screen = Screen.LOG },
                 onGrant = ::requestStorageAccess,
-                onPickSite = { tab = Tab.SITES },
+                onPickSite = { screen = Screen.SITES },
                 onDownload = ::startDownload,
                 onRequestNotifications = ::requestNotifications,
                 onOpenLocalFile = { path ->
@@ -448,7 +415,7 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                 modifier = Modifier.padding(padding),
             )
 
-            Tab.QUEUE -> QueueScreen(
+            Screen.QUEUE -> QueueScreen(
                 transfers = transfers,
                 active = active,
                 onPause = model::pause,
@@ -468,7 +435,7 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                 modifier = Modifier.padding(padding),
             )
 
-            Tab.LOG -> LogScreen(lines = logLines, modifier = Modifier.padding(padding))
+            Screen.LOG -> LogScreen(lines = logLines, modifier = Modifier.padding(padding))
         }
     }
 
@@ -576,29 +543,12 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
 }
 
 @Composable
-private fun titleFor(tab: Tab, model: MainViewModel): String = when (tab) {
-    Tab.SITES -> stringResource(R.string.title_sites)
-    // The connected server's own name, when there is one: on this screen it
-    // says more than the word "Files" does.
-    Tab.BROWSE -> model.browse.site?.name?.ifBlank { model.browse.site?.host.orEmpty() }
-        ?: stringResource(R.string.title_browse)
-    Tab.QUEUE -> stringResource(R.string.title_queue)
-    Tab.LOG -> stringResource(R.string.title_log)
+private fun titleFor(screen: Screen): String = when (screen) {
+    Screen.SITES -> stringResource(R.string.title_sites)
+    Screen.QUEUE -> stringResource(R.string.title_queue)
+    Screen.LOG -> stringResource(R.string.title_log)
+    // Never asked for: the files screen carries no bar. Named rather than
+    // left to an else, so adding a screen is a compile error here.
+    Screen.FILES -> ""
 }
 
-/**
- * The tab icons, which are the app's own artwork rather than Material glyphs.
- *
- * These are identity, not controls: they say what each place is, and they are
- * the same four shapes wherever those places appear. Being multi-coloured they
- * do not tint with selection, so the bar's own indicator is what marks the
- * selected tab -- which is how it reads anyway, the colour being a repeat of
- * something the shape already said.
- */
-@DrawableRes
-private fun iconFor(tab: Tab): Int = when (tab) {
-    Tab.SITES -> R.drawable.ic_flat_server
-    Tab.BROWSE -> R.drawable.ic_flat_folder
-    Tab.QUEUE -> R.drawable.ic_flat_transfers
-    Tab.LOG -> R.drawable.ic_flat_log
-}

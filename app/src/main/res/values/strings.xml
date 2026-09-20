@@ -17,14 +17,9 @@
     <string name="action_stop">Stop</string>
 
     <!-- Tabs -->
-    <string name="tab_sites">Servers</string>
-    <string name="tab_browse">Files</string>
-    <string name="tab_queue">Transfers</string>
-    <string name="tab_log">Log</string>
 
     <!-- Titles -->
     <string name="title_sites">Servers</string>
-    <string name="title_browse">Files</string>
     <string name="title_queue">Transfers</string>
     <string name="title_log">Message log</string>
 
@@ -246,6 +241,9 @@
     <string name="paste_go_somewhere_cut">%1$d cut. Open where they should go.</string>
     <string name="open_no_app">No app on this phone opens that file</string>
     <string name="exit_confirm">Press back again to leave</string>
+    <string name="action_back">Back</string>
+    <string name="transfers_running">%1$d transferring</string>
+    <string name="transfers_percent">%1$d%%</string>
     <string name="pane_storage">Storage and servers</string>
     <string name="storage_section">Storage</string>
     <string name="storage_servers_section">Servers</string>
@@ -254,4 +252,5 @@
     <string name="browse_open">Open %1$s</string>
     <string name="storage_free_of">%1$s free of %2$s</string>
     <string name="storage_clear_pane">Leave this pane empty</string>
+    <string name="storage_manage_servers">Add or edit servers</string>
 </resources>

@@ -6,7 +6,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
@@ -31,6 +34,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -69,6 +73,7 @@ fun FilePanes(
     onNewDirectory: () -> Unit,
     onUpload: () -> Unit,
     onChooseFolder: () -> Unit,
+    onOpenScreen: (Screen) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val pager = rememberPagerState(initialPage = pageOf(model.activePane)) { PaneId.entries.size }
@@ -103,7 +108,19 @@ fun FilePanes(
     var renaming by remember { mutableStateOf(false) }
     var confirmingDelete by remember { mutableStateOf(false) }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    // The queue's own line along the foot, and only while it has something
+    // to say; see [summariseTransfers].
+    val transfers by model.transfers.collectAsStateWithLifecycle()
+    val queue = remember(transfers) { summariseTransfers(transfers) }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            // Taken here rather than by the Scaffold, which has no bars left
+            // above or below this screen to inset it from. Without it the tab
+            // strip sits under the clock.
+            .windowInsetsPadding(WindowInsets.systemBars),
+    ) {
         Column(modifier = Modifier.fillMaxSize()) {
             if (!bothPanes) {
                 PaneTabs(
@@ -153,6 +170,7 @@ fun FilePanes(
                                 onNewDirectory = onNewDirectory,
                                 onUpload = onUpload,
                                 onChooseFolder = onChooseFolder,
+                                onOpenScreen = onOpenScreen,
                             )
                         }
                     }
@@ -173,6 +191,7 @@ fun FilePanes(
                         onNewDirectory = onNewDirectory,
                         onUpload = onUpload,
                         onChooseFolder = onChooseFolder,
+                        onOpenScreen = onOpenScreen,
                     )
                 }
             }
@@ -218,6 +237,10 @@ fun FilePanes(
                         onCancel = model::clearClipboard,
                     )
                 }
+            }
+
+            queue?.let { summary ->
+                TransferStrip(summary = summary, onOpen = { onOpenScreen(Screen.QUEUE) })
             }
         }
 
@@ -358,6 +381,7 @@ private fun PaneBody(
     onNewDirectory: () -> Unit,
     onUpload: () -> Unit,
     onChooseFolder: () -> Unit,
+    onOpenScreen: (Screen) -> Unit,
 ) {
     val state = model.pane(id)
 
@@ -381,6 +405,7 @@ private fun PaneBody(
             onUpload = onUpload,
             onChooseFolder = onChooseFolder,
             onGrant = onGrant,
+            onOpenScreen = onOpenScreen,
         )
         if (state.loading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
 

@@ -15,7 +15,7 @@ class BackActionTest {
     fun `back climbs one folder rather than leaving`() {
         assertEquals(
             BackAction.GO_UP,
-            backActionFor(Tab.BROWSE, selecting = false, canGoUp = true, exitArmed = false),
+            backActionFor(Screen.FILES, selecting = false, canGoUp = true, exitArmed = false),
         )
     }
 
@@ -23,27 +23,27 @@ class BackActionTest {
     fun `a selection is dropped before anything moves`() {
         assertEquals(
             BackAction.CLEAR_SELECTION,
-            backActionFor(Tab.BROWSE, selecting = true, canGoUp = true, exitArmed = false),
+            backActionFor(Screen.FILES, selecting = true, canGoUp = true, exitArmed = false),
         )
     }
 
     /** A selection is held across tabs, so back on another tab must not eat it. */
     @Test
-    fun `a selection held from another tab is left alone`() {
+    fun `a selection held from another screen is left alone`() {
         assertEquals(
-            BackAction.SHOW_FIRST_TAB,
-            backActionFor(Tab.QUEUE, selecting = true, canGoUp = true, exitArmed = false),
+            BackAction.CLOSE_SCREEN,
+            backActionFor(Screen.QUEUE, selecting = true, canGoUp = true, exitArmed = false),
         )
     }
 
+    /** Every screen that opens over the files screen closes on back. */
     @Test
-    fun `back returns to the first tab from any other`() {
-        for (tab in Tab.entries.filter { it != FIRST_TAB }) {
-            val expected = if (tab == Tab.BROWSE) BackAction.GO_UP else BackAction.SHOW_FIRST_TAB
+    fun `back closes whatever opened over the files screen`() {
+        for (screen in Screen.entries.filter { it != HOME }) {
             assertEquals(
-                "back from $tab",
-                expected,
-                backActionFor(tab, selecting = false, canGoUp = true, exitArmed = false),
+                "back from $screen",
+                BackAction.CLOSE_SCREEN,
+                backActionFor(screen, selecting = false, canGoUp = true, exitArmed = false),
             )
         }
     }
@@ -53,7 +53,7 @@ class BackActionTest {
     fun `leaving is asked about before it happens`() {
         assertEquals(
             BackAction.CONFIRM_EXIT,
-            backActionFor(FIRST_TAB, selecting = false, canGoUp = false, exitArmed = false),
+            backActionFor(HOME, selecting = false, canGoUp = false, exitArmed = false),
         )
     }
 
@@ -61,7 +61,7 @@ class BackActionTest {
     fun `a second press while the question stands leaves`() {
         assertEquals(
             BackAction.EXIT,
-            backActionFor(FIRST_TAB, selecting = false, canGoUp = false, exitArmed = true),
+            backActionFor(HOME, selecting = false, canGoUp = false, exitArmed = true),
         )
     }
 
@@ -73,16 +73,16 @@ class BackActionTest {
     fun `an armed exit does not override navigation`() {
         assertEquals(
             BackAction.GO_UP,
-            backActionFor(Tab.BROWSE, selecting = false, canGoUp = true, exitArmed = true),
+            backActionFor(Screen.FILES, selecting = false, canGoUp = true, exitArmed = true),
         )
     }
 
     /** At the top of a volume there is nowhere to climb, so back moves on. */
     @Test
-    fun `the top of a volume falls through to the first tab`() {
+    fun `the top of a volume asks about leaving`() {
         assertEquals(
-            BackAction.SHOW_FIRST_TAB,
-            backActionFor(Tab.BROWSE, selecting = false, canGoUp = false, exitArmed = false),
+            BackAction.CONFIRM_EXIT,
+            backActionFor(Screen.FILES, selecting = false, canGoUp = false, exitArmed = false),
         )
     }
 }

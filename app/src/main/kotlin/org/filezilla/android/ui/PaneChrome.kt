@@ -58,6 +58,7 @@ fun PaneHeader(
     onUpload: () -> Unit,
     onChooseFolder: () -> Unit,
     onGrant: () -> Unit,
+    onOpenScreen: (Screen) -> Unit,
 ) {
     val state = model.pane(id)
     var storageOpen by remember { mutableStateOf(false) }
@@ -147,6 +148,7 @@ fun PaneHeader(
             id = id,
             model = model,
             onGrant = onGrant,
+            onOpenScreen = onOpenScreen,
             onDismiss = { storageOpen = false },
         )
     }
