@@ -8,6 +8,10 @@ the app's palette, rounded ends, no strokes, no gradients.
 
 Kept as code rather than as hand-written XML so the geometry is stated once
 and the whole set can be re-rendered when the palette moves.
+
+Needs shapely: the launcher's pieces are cut out of a folder with real
+polygon arithmetic, so that the drawable carries plain paths rather than
+clip-paths, which Android does not antialias.
 """
 from __future__ import annotations
 
@@ -113,22 +117,137 @@ def vector(paths: list[tuple[str, str]], size: int = 24) -> str:
 
 # The launcher, on Android's adaptive canvas.
 #
-# Two tapered arrows crossing on a diagonal: one leaving, one arriving. The
-# app moves things between two places, and this is that with the panes taken
-# away -- the panes were accurate and inert, a pair of rectangles that said
-# "some app with two lists in it" and could have been anything.
+# A folder coming apart: the body intact and readable on the left, the far
+# corner torn away into strips that fly up and to the right.
 #
-# Diagonal, because a mark set square sits still. Tapered, because a shaft of
-# even width is a diagram of an arrow and a shaft that swells towards its head
-# is an arrow that is going somewhere. The two are offset across the axis
-# rather than sharing it, so the eye reads two lanes of traffic instead of one
-# double-headed arrow -- which is the difference between "exchange" and
-# "resize".
+# The brief was a file explorer that takes the eye, drawn with the swing of
+# weight a brush gives a stroke rather than the even width a vector does.
+# The swing here is in the pieces: a wide body, then a strip, then a thinner
+# one, then a sliver -- four weights along one tear instead of four shapes of
+# the same thickness.
 #
-# Everything is inside the circle an adaptive mask may cut to: radius 156 from
-# the middle of a 512 canvas.
-TRAVEL = -35.0          # up and to the right
-LANES = 52.0            # how far each lane sits off the axis
+# The folder had to survive it. Earlier attempts put the energy outside the
+# form -- rays spraying from an open folder, strips bowing away like wheat,
+# a radial burst -- and each one read as weather happening near a folder
+# rather than to it. Tearing the folder itself keeps the silhouette, which is
+# the only part anybody identifies at 48px, and spends the drama on what
+# happens to it.
+#
+# Discarded, all of which sounded right as sentences: circulating arcs (the
+# refresh symbol, and a ring at small sizes), tapered darts (petals), a
+# radial burst of tapered spindles -- that one is Anthropic's mark, and not
+# ours to wear on somebody's home screen.
+TRAVEL = -34.0                          # the line the tear runs along
+CUTS = (52.0, 92.0, 114.0, 126.0)       # where along it the folder gives way
+PUSHES = (0.0, 14.0, 30.0, 48.0, 70.0)  # how far each piece has got
+DRIFTS = (0.0, 7.0, -5.0, 9.0, -13.0)   # and how far it has wandered across
+SPINS = (0.0, 4.0, -5.0, 8.0, -11.0)    # each piece turning as it goes
+RAGGED = (9.0, -7.0, 11.0, -5.0, 8.0, -10.0, 6.0)   # the zigzag of a tear
+REACH = 152.0                           # the adaptive circle is 156
+
+
+def _folder_outline(x, y, w, h, tab_w, tab_h, r, steps=14):
+    """The folder as a closed polyline, corners sampled rather than arced.
+
+    Flattened because the pieces are cut out with real polygon arithmetic
+    below, and because a VectorDrawable clip-path -- the other way to do
+    this -- is not antialiased on a good many Android versions, which would
+    have put a staircase along every torn edge.
+    """
+    pts: list[tuple[float, float]] = []
+
+    def corner(cx, cy, a0, a1):
+        for i in range(steps + 1):
+            a = math.radians(a0 + (a1 - a0) * i / steps)
+            pts.append((cx + r * math.cos(a), cy + r * math.sin(a)))
+
+    corner(x + r, y + tab_h + r, 180, 270)          # top of the tab
+    pts.append((x + tab_w - 16, y + tab_h))
+    pts.append((x + tab_w + 6, y))                  # the slanted shoulder
+    corner(x + w - r, y + r, 270, 360)
+    corner(x + w - r, y + h - r, 0, 90)
+    corner(x + r, y + h - r, 90, 180)
+    return pts
+
+
+def _band(travel, d0, d1, ragged=None, reach=900.0):
+    """The slab of the plane between d0 and d1, measured along `travel`.
+
+    Its leading edge zigzags when `ragged` is given, which is the difference
+    between a shape that was torn and a shape that was guillotined.
+    """
+    a = math.radians(travel)
+    ux, uy = math.cos(a), math.sin(a)
+    nx, ny = -uy, ux
+
+    def at(d, s):
+        return (256.0 + ux * d + nx * s, 256.0 + uy * d + ny * s)
+
+    lead = []
+    if ragged:
+        n = len(ragged)
+        lead.append(at(d0 + ragged[0], -reach))
+        for i, jog in enumerate(ragged):
+            lead.append(at(d0 + jog, -reach + 2 * reach * (i + 0.5) / n))
+        lead.append(at(d0 + ragged[-1], reach))
+    else:
+        lead = [at(d0, -reach), at(d0, reach)]
+    return lead + [at(d1, reach), at(d1, -reach)]
+
+
+def _placed(poly, spin, pivot, shift):
+    """One piece, turned about where it tore away and moved along its travel."""
+    out = []
+    c, s = math.cos(math.radians(spin)), math.sin(math.radians(spin))
+    px, py = pivot
+    for x, y in poly:
+        rx, ry = x - px, y - py
+        out.append((px + rx * c - ry * s + shift[0], py + rx * s + ry * c + shift[1]))
+    return out
+
+
+def torn_folder() -> list[list[tuple[float, float]]]:
+    """The mark, as a list of polygons already in their final positions."""
+    from shapely.geometry import Polygon
+    from shapely.ops import unary_union
+
+    whole = Polygon(_folder_outline(96, 148, 320, 216, 164, 58, 22))
+    a = math.radians(TRAVEL)
+    edges = (-400.0,) + CUTS + (400.0,)
+
+    pieces = []
+    for i in range(len(edges) - 1):
+        slab = Polygon(_band(TRAVEL, edges[i], edges[i + 1],
+                             ragged=None if i == 0 else RAGGED))
+        cut = whole.intersection(slab)
+        if cut.is_empty:
+            continue
+        pivot = (256.0 + edges[i] * math.cos(a), 256.0 + edges[i] * math.sin(a))
+        shift = (PUSHES[i] * math.cos(a) - DRIFTS[i] * math.sin(a),
+                 PUSHES[i] * math.sin(a) + DRIFTS[i] * math.cos(a))
+        parts = cut.geoms if cut.geom_type == "MultiPolygon" else [cut]
+        for part in parts:
+            ring = list(part.exterior.coords)[:-1]
+            if len(ring) > 2:
+                pieces.append(_placed(ring, SPINS[i], pivot, shift))
+
+    # Centred and sized from what is actually drawn: the pieces fly by
+    # different amounts and the envelope is nothing the numbers above state.
+    bounds = unary_union([Polygon(p) for p in pieces]).bounds
+    cx, cy = (bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2
+    half = math.hypot(bounds[2] - bounds[0], bounds[3] - bounds[1]) / 2
+    k = REACH / half
+    return [[(256.0 + (x - cx) * k, 256.0 + (y - cy) * k) for x, y in p] for p in pieces]
+
+
+def _as_path(poly) -> str:
+    return "M" + " L".join(f"{x:.1f},{y:.1f}" for x, y in poly) + " Z"
+
+
+# The transfers mark: two lanes on a diagonal, one leaving and one arriving.
+# Its own geometry, unrelated to the launcher's tear below.
+LANE_TRAVEL = -35.0     # up and to the right
+LANE_OFFSET = 52.0      # how far each lane sits off the axis
 
 
 def lane(offset: float, heading: float, scale: float = 1.0) -> str:
@@ -138,7 +257,7 @@ def lane(offset: float, heading: float, scale: float = 1.0) -> str:
     is not brought to nothing: at 48px a tail that tapers to a hair vanishes
     and the arrow turns into a floating chevron.
     """
-    across = math.radians(TRAVEL + 90.0)
+    across = math.radians(LANE_TRAVEL + 90.0)
     cx = 256.0 + offset * scale * math.cos(across)
     cy = 256.0 + offset * scale * math.sin(across)
     a = math.radians(heading)
@@ -163,17 +282,14 @@ def lane(offset: float, heading: float, scale: float = 1.0) -> str:
 
 
 ICONS = {
-    # Transfers: the launcher's two lanes, in the palette rather than in
-    # white. It was an up arrow and a down arrow standing vertically, which
-    # was a perfectly good symbol and a different one from the mark on the
-    # home screen -- so the app and its icon were drawn by two hands. The
-    # leaving lane carries the accent.
+    # Transfers: two lanes on a diagonal, one leaving and one arriving.
+    # Drawn here rather than taken from the pack, which has no icon for a
+    # queue. The leaving lane carries the accent.
     # 1.5 puts the tips 196 from the middle, which is the ~56px margin the
-    # rest of the set is drawn to; the launcher's own copy is smaller because
-    # an adaptive icon may be cut to a circle.
+    # rest of the set is drawn to.
     "ic_flat_transfers": [
-        (CLAY, lane(-LANES, TRAVEL, scale=1.5)),
-        (CLAY_SOFT, lane(LANES, TRAVEL + 180.0, scale=1.5)),
+        (CLAY, lane(-LANE_OFFSET, LANE_TRAVEL, scale=1.5)),
+        (CLAY_SOFT, lane(LANE_OFFSET, LANE_TRAVEL + 180.0, scale=1.5)),
     ],
 
     # Log: lines on a panel, the newest picked out. The last line is short,
@@ -196,22 +312,18 @@ ICONS = {
 # solid block.
 TILES = {
     "ic_tile_transfers": [
-        (WHITE, lane(-LANES, TRAVEL, scale=1.5)),
-        (GHOST_WHITE, lane(LANES, TRAVEL + 180.0, scale=1.5)),
+        (WHITE, lane(-LANE_OFFSET, LANE_TRAVEL, scale=1.5)),
+        (GHOST_WHITE, lane(LANE_OFFSET, LANE_TRAVEL + 180.0, scale=1.5)),
     ],
 }
 
 LAUNCHER_BACKGROUND = [(f"{CLAY_LIT}:{CLAY}", rounded_rect(0, 0, 512, 512, 0))]
-LAUNCHER_FOREGROUND = [
-    (WHITE, lane(-LANES, TRAVEL)),
-    (WHITE, lane(LANES, TRAVEL + 180.0)),
-]
-# The themed-icon layer, which the system fills with one colour of its own --
-# so it is the same two shapes and no ground.
-LAUNCHER_MONOCHROME = [
-    (WHITE, lane(-LANES, TRAVEL)),
-    (WHITE, lane(LANES, TRAVEL + 180.0)),
-]
+
+
+def launcher_layers() -> tuple[list, list]:
+    """The foreground and the themed-icon layer, which are the same shapes."""
+    shapes = [(WHITE, _as_path(p)) for p in torn_folder()]
+    return shapes, list(shapes)
 
 
 def main() -> None:
@@ -222,10 +334,11 @@ def main() -> None:
     for name, paths in TILES.items():
         (OUT / f"{name}.xml").write_text(vector(paths))
         print(f"{name}.xml")
+    foreground, monochrome = launcher_layers()
     for name, paths in (
         ("ic_launcher_background", LAUNCHER_BACKGROUND),
-        ("ic_launcher_foreground", LAUNCHER_FOREGROUND),
-        ("ic_launcher_monochrome", LAUNCHER_MONOCHROME),
+        ("ic_launcher_foreground", foreground),
+        ("ic_launcher_monochrome", monochrome),
     ):
         (OUT / f"{name}.xml").write_text(vector(paths, size=108))
         print(f"{name}.xml")
