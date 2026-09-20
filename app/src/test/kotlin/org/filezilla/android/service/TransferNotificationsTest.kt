@@ -2,13 +2,21 @@ package org.filezilla.android.service
 
 import android.app.Notification
 import androidx.test.core.app.ApplicationProvider
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Intent
+import org.filezilla.android.R
+import org.filezilla.android.ui.OpenAt
+import org.filezilla.android.ui.Screen
 import org.filezilla.android.transfer.ActiveProgress
 import org.filezilla.ftp.journal.TransferDirection
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 
 @RunWith(RobolectricTestRunner::class)
 class TransferNotificationsTest {
@@ -81,6 +89,48 @@ class TransferNotificationsTest {
 
         assertTrue("invented a speed: \"$text\"", !text.contains("/s"))
         assertTrue("size missing from \"$text\"", text.contains("2.0 GB"))
+    }
+
+    /** What a pending intent will actually launch. */
+    private fun PendingIntent.opens(): Screen? = OpenAt.screenFor(shadowOf(this).savedIntent)
+
+    /**
+     * Where the notification sends you.
+     *
+     * Both of these said "tap to see the transfer list" and carried a bare
+     * intent for the activity, which only brings the app forward on whatever
+     * screen it was last on. The test reaches into the pending intent and
+     * asks what it opens, because the wording and the destination are written
+     * in different places and only the wording was ever checked.
+     */
+    @Test
+    fun `the progress notification opens the transfer list`() {
+        val notification = notifications.build(progress(), queued = 0)
+
+        assertEquals(Screen.QUEUE, notification.contentIntent.opens())
+    }
+
+    @Test
+    fun `the finished notification opens the transfer list`() {
+        notifications.announce(QueueNotice(R.string.done_all, listOf(3)))
+
+        val manager: NotificationManager =
+            ApplicationProvider.getApplicationContext<android.content.Context>()
+                .getSystemService(NotificationManager::class.java)
+        val posted = shadowOf(manager).allNotifications.single()
+
+        assertEquals(Screen.QUEUE, posted.contentIntent.opens())
+    }
+
+    /** The stop action is the one that must not open anything. */
+    @Test
+    fun `stopping is still a service action, not a screen`() {
+        val stop = notifications.build(progress(), queued = 0).actions.single().actionIntent
+
+        assertEquals(
+            TransferService.ACTION_STOP,
+            shadowOf(stop).savedIntent.action,
+        )
     }
 
     @Test

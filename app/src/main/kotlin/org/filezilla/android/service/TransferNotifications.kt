@@ -9,7 +9,8 @@ import android.content.Intent
 import androidx.core.app.NotificationCompat
 import org.filezilla.android.R
 import org.filezilla.android.transfer.ActiveProgress
-import org.filezilla.android.ui.MainActivity
+import org.filezilla.android.ui.OpenAt
+import org.filezilla.android.ui.Screen
 import org.filezilla.android.ui.formatSize
 import org.filezilla.android.transfer.secondsRemaining
 import org.filezilla.android.ui.formatSpeed
@@ -59,8 +60,8 @@ class TransferNotifications(private val context: Context) {
         val open = PendingIntent.getActivity(
             context,
             2,
-            Intent(context, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            // The transfer list, because that is what the notice offers.
+            OpenAt.intentTo(context, Screen.QUEUE),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
@@ -81,8 +82,9 @@ class TransferNotifications(private val context: Context) {
         val open = PendingIntent.getActivity(
             context,
             0,
-            Intent(context, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            // The transfer list too: a notification about a running transfer
+            // is a way into the queue, not a way into the app.
+            OpenAt.intentTo(context, Screen.QUEUE),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 

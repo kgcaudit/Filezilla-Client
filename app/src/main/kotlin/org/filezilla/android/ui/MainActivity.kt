@@ -41,6 +41,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import android.content.Intent
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -52,8 +54,26 @@ import org.filezilla.android.storage.ConflictChoice
 import org.filezilla.android.ui.theme.OloTheme
 
 class MainActivity : ComponentActivity() {
+
+    /**
+     * The screen something outside the app asked for, until it is honoured.
+     *
+     * State rather than a plain read of `intent`, because the app is usually
+     * already running when a notification is tapped: the activity comes
+     * forward through onNewIntent, not onCreate, and nothing composed would
+     * ever see a new intent that only sat in a field.
+     */
+    private val openAt = androidx.compose.runtime.mutableStateOf<Screen?>(null)
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        openAt.value = OpenAt.screenFor(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        openAt.value = OpenAt.screenFor(intent)
         // The app bar runs under the status bar, so the status bar itself is
         // transparent and takes the app bar's colour. Which way its icons
         // should face depends on the theme, so OloTheme decides that.
@@ -62,7 +82,7 @@ class MainActivity : ComponentActivity() {
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         setContent {
             OloTheme {
-                AppScreen()
+                AppScreen(openAt = openAt)
             }
         }
     }
@@ -70,12 +90,26 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AppScreen(model: MainViewModel = viewModel()) {
+private fun AppScreen(
+    model: MainViewModel = viewModel(),
+    /** See [MainActivity.openAt]; null once it has been honoured. */
+    openAt: androidx.compose.runtime.MutableState<Screen?> =
+        androidx.compose.runtime.mutableStateOf(null),
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbars = remember { SnackbarHostState() }
 
     var screen by remember { mutableStateOf(HOME) }
+
+    // Cleared as it is honoured, so pressing back off the transfer list does
+    // not land straight back on it.
+    LaunchedEffect(openAt.value) {
+        openAt.value?.let {
+            screen = it
+            openAt.value = null
+        }
+    }
     var queueMenuOpen by remember { mutableStateOf(false) }
     var editingSite by remember { mutableStateOf<SiteDraft?>(null) }
     var creatingDirectory by remember { mutableStateOf(false) }
