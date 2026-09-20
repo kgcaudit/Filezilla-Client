@@ -73,16 +73,12 @@ fun SiteEditor(
     var trustAll by remember { mutableStateOf(initial.trustAllCertificates) }
     var initialPath by remember { mutableStateOf(initial.initialPath.orEmpty()) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                stringResource(
-                    if (initial.host.isBlank()) R.string.sites_new_title else R.string.sites_edit_title,
-                ),
-            )
-        },
-        text = {
+    OloDialog(
+        title = stringResource(
+            if (initial.host.isBlank()) R.string.sites_new_title else R.string.sites_edit_title,
+        ),
+        onDismiss = onDismiss,
+        content = {
             // Scrollable, and bounded. The form is taller than a phone screen
             // once encryption, connection mode and encoding are all on it, and
             // an AlertDialog does not scroll its content by itself -- it just
@@ -203,7 +199,7 @@ fun SiteEditor(
                 }
             }
         },
-        confirmButton = {
+        action = {
             TextButton(
                 enabled = host.isNotBlank() && port.isNotBlank(),
                 onClick = {
@@ -223,9 +219,6 @@ fun SiteEditor(
                     )
                 },
             ) { Text(stringResource(R.string.action_save)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         },
     )
 }

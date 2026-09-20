@@ -158,10 +158,10 @@ fun ViewOptionsDialog(
     onDismiss: () -> Unit,
     onApply: (BrowseOptions) -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.menu_view_options)) },
-        text = {
+    OloInfoDialog(
+        title = stringResource(R.string.menu_view_options),
+        onDismiss = onDismiss,
+        content = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Label(R.string.view_mode)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -200,7 +200,6 @@ fun ViewOptionsDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } },
     )
 }
 
@@ -265,11 +264,10 @@ private fun Toggle(labelRes: Int, checked: Boolean, onChange: (Boolean) -> Unit)
 @Composable
 fun PropertiesDialog(entry: DirectoryEntry, path: String, onDismiss: () -> Unit) {
     val unknown = stringResource(R.string.props_unknown)
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Filled.Info, contentDescription = null) },
-        title = { Text(stringResource(R.string.props_title)) },
-        text = {
+    OloInfoDialog(
+        title = stringResource(R.string.props_title),
+        onDismiss = onDismiss,
+        content = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Field(R.string.props_name, entry.name)
                 Field(
@@ -291,7 +289,6 @@ fun PropertiesDialog(entry: DirectoryEntry, path: String, onDismiss: () -> Unit)
                 Field(R.string.props_path, remotePathOf(path, entry.name))
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } },
     )
 }
 

@@ -32,18 +32,10 @@ fun ConflictDialog(
     onChoose: (ConflictChoice) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                pluralStringResource(
-                    R.plurals.conflict_title,
-                    conflicts.size,
-                    conflicts.size,
-                ),
-            )
-        },
-        text = {
+    OloDialog(
+        title = pluralStringResource(R.plurals.conflict_title, conflicts.size, conflicts.size),
+        onDismiss = onDismiss,
+        content = {
             Column(
                 // Capped so a long list scrolls inside the dialog instead of
                 // pushing the buttons off the screen.
@@ -77,7 +69,7 @@ fun ConflictDialog(
                 }
             }
         },
-        confirmButton = {
+        action = {
             // Three choices do not fit across a dialog in Korean, so they
             // stack. Keep-both is first because it is the only one that
             // cannot lose a file.
@@ -91,11 +83,6 @@ fun ConflictDialog(
                 TextButton(onClick = { onChoose(ConflictChoice.SKIP) }) {
                     Text(stringResource(R.string.conflict_skip))
                 }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.action_cancel))
             }
         },
     )

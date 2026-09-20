@@ -280,7 +280,7 @@ class LayoutShotTest {
                         // of its cancel: the two used to be drawn the same
                         // here and on screen, which is the whole reason the
                         // error colour moved.
-                        DangerButton("삭제") {}
+                        DangerButton("삭제", onClick = {})
                     }
                 }
             }

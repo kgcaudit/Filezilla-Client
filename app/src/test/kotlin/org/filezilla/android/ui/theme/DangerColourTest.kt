@@ -86,7 +86,7 @@ class DangerColourTest {
      * colour it should be, and the default happened to be the brand's.
      */
     @Test
-    fun `every delete confirmation uses the danger button`() {
+    fun `every delete confirmation goes through the danger button`() {
         val asking = uiDir.walkTopDown()
             .filter { it.extension == "kt" }
             .filter { "R.string.confirm_delete" in it.readText() }
@@ -96,15 +96,24 @@ class DangerColourTest {
 
         // Not "at most": zero would mean the app had stopped asking before it
         // deletes, or that this stopped looking.
-        assertEquals(listOf("BrowseScreen.kt", "FilePanes.kt", "MainActivity.kt"), asking)
+        assertEquals(listOf("BrowseScreen.kt", "FilePanes.kt"), asking)
 
-        val plain = uiDir.walkTopDown()
+        // They reach the colour through OloConfirmDialog now rather than
+        // naming the button themselves -- which is the point of there being
+        // one confirmation instead of three. So the route is what is checked:
+        // a screen that builds its own is a screen that can forget.
+        val offRoute = uiDir.walkTopDown()
             .filter { it.name in asking }
-            .filterNot { "DangerButton(" in it.readText() }
+            .filterNot { "OloConfirmDialog(" in it.readText() }
             .map { it.name }
             .sorted()
             .toList()
 
-        assertEquals(emptyList<String>(), plain)
+        assertEquals(emptyList<String>(), offRoute)
+
+        // And that route really does wear it.
+        val shell = File(uiDir, "Dialogs.kt").readText()
+        val confirm = shell.substring(shell.indexOf("fun OloConfirmDialog("))
+        assertTrue("OloConfirmDialog stopped using DangerButton", "DangerButton(" in confirm)
     }
 }

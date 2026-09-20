@@ -34,7 +34,7 @@
     <string name="sites_new_title">New server</string>
     <string name="sites_edit_title">Edit server</string>
     <string name="field_name">Name</string>
-    <string name="name_hint">Optional — the host is used if left blank</string>
+    <string name="name_hint">The address is used if left blank</string>
     <string name="field_host">Host</string>
     <string name="field_port">Port</string>
     <string name="field_encryption">Encryption</string>
@@ -49,7 +49,7 @@
     <string name="encoding_auto">Automatic (UTF-8)</string>
     <string name="encoding_note">Change this only if filenames come out garbled. Many Korean NAS boxes store them as EUC-KR.</string>
     <string name="password_hint">Leave blank for anonymous</string>
-    <string name="field_initial_path">Start directory (optional)</string>
+    <string name="field_initial_path">Starting folder (optional)</string>
     <string name="password_unreadable">The saved password could not be read back and needs entering again.</string>
     <string name="trust_all_title">Accept any certificate</string>
     <string name="trust_all_detail">Turns off certificate checking for this server. Only for a server whose certificate you already know.</string>
@@ -66,7 +66,7 @@
     <string name="browse_refresh">Refresh listing</string>
     <string name="browse_download">Download %1$s</string>
     <string name="browse_more">More actions for %1$s</string>
-    <string name="browse_new_directory">New directory</string>
+    <string name="browse_new_directory">New folder</string>
     <string name="browse_upload">Upload a file</string>
     <string name="menu_select">Select</string>
     <string name="menu_select_all">Select all</string>
@@ -89,7 +89,7 @@
     <string name="option_show_hidden">Show hidden files</string>
     <string name="option_folders_first">Folders first</string>
     <string name="filter_hint">Filter by name</string>
-    <string name="filter_clear">Clear the filter</string>
+    <string name="filter_clear">Clear filter</string>
     <string name="filter_none">Nothing matches "%1$s"</string>
     <string name="props_title">Properties</string>
     <string name="props_name">Name</string>
@@ -106,7 +106,6 @@
     <string name="action_close">Close</string>
     <string name="action_download_selected">Download</string>
     <string name="action_delete_selected">Delete</string>
-    <string name="confirm_delete_title">Delete %1$d item(s)?</string>
     <string name="queued_many">%1$d queued</string>
     <string name="queued_none">Nothing to download in what you selected</string>
     <string name="conflict_many_detail">These files are already in the chosen folder:</string>
@@ -130,6 +129,10 @@
     <string name="action_delete">Delete</string>
     <string name="prompt_rename_title">Rename %1$s</string>
     <string name="prompt_new_name">New name</string>
+    <string name="new_folder_detail">The folder is created in the folder you are looking at.</string>
+    <string name="new_file_detail">An empty file is created in the folder you are looking at.</string>
+    <string name="rename_detail">Only the name changes. The contents are left alone.</string>
+    <string name="confirm_delete_selected">Delete %1$d items?</string>
     <string name="prompt_name">Name</string>
 
     <!-- Queue -->
@@ -139,8 +142,8 @@
     <string name="queue_resume">Resume</string>
     <string name="queue_retry_now">Try again now</string>
     <string name="queue_still_waiting_wifi">Still on mobile data; it will continue when Wi‑Fi is back</string>
-    <string name="queue_remove">Remove from the list</string>
-    <string name="queue_clear_finished">Clear finished transfers</string>
+    <string name="queue_remove">Remove from list</string>
+    <string name="queue_clear_finished">Remove finished</string>
     <string name="queue_start">Start the queue</string>
     <string name="queue_settings">Transfer settings</string>
     <string name="setting_wifi_only">Wi‑Fi only</string>
@@ -172,7 +175,7 @@
     <string name="fail_login">Login rejected</string>
     <string name="fail_login_advice">The server refused these credentials. Check the user name and password.</string>
     <string name="fail_denied">Not available</string>
-    <string name="fail_denied_advice">The server would not give you that file or directory. It may not exist, or this account may not be allowed to see it.</string>
+    <string name="fail_denied_advice">The server would not hand over that file or folder. It may not exist, or this account may not have permission.</string>
     <string name="fail_busy">Server temporarily unavailable</string>
     <string name="fail_busy_advice">The server says it cannot handle this right now, which usually clears on its own. Try again shortly.</string>
     <string name="fail_refused_command">Server refused the request</string>
@@ -194,7 +197,7 @@
     <!-- Log -->
     <string name="log_empty_title">Nothing logged yet</string>
     <string name="log_empty_detail">Every command sent and every reply received shows up here once you connect.</string>
-    <string name="log_clear">Clear the log</string>
+    <string name="log_clear">Clear log</string>
     <plurals name="conflict_title">
         <item quantity="one">A file of this name is already there</item>
         <item quantity="other">%d files of these names are already there</item>
@@ -235,7 +238,7 @@
     <string name="download_point_other_pane">Use my files</string>
     <string name="download_needs_storage">This app cannot read storage yet</string>
     <string name="storage_grant_short">Allow</string>
-    <string name="fail_too_much_to_delete">Too much to delete at once</string>
+    <string name="fail_too_much_to_delete">Too many to delete at once</string>
     <string name="fail_too_much_to_delete_advice">Nothing was removed. Open the folder and delete it in parts.</string>
     <string name="paste_between_servers">Copying between two servers is not possible over FTP</string>
     <string name="paste_upload_here">Send %1$d to this server</string>

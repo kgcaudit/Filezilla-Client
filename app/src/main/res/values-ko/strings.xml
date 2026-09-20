@@ -33,7 +33,7 @@
     <string name="sites_new_title">새 서버</string>
     <string name="sites_edit_title">서버 편집</string>
     <string name="field_name">이름</string>
-    <string name="name_hint">선택 — 비우면 호스트가 이름이 됩니다</string>
+    <string name="name_hint">비워 두면 주소가 이름이 됩니다</string>
     <string name="field_host">호스트</string>
     <string name="field_port">포트</string>
     <string name="field_encryption">암호화</string>
@@ -48,7 +48,7 @@
     <string name="encoding_auto">자동 (UTF-8)</string>
     <string name="encoding_note">파일명이 깨질 때만 변경하세요. 국내 NAS는 EUC-KR로 저장하는 경우가 많습니다.</string>
     <string name="password_hint">비워두면 익명 접속</string>
-    <string name="field_initial_path">시작 디렉터리 (선택)</string>
+    <string name="field_initial_path">시작 폴더 (선택)</string>
     <string name="password_unreadable">저장된 비밀번호를 읽지 못했습니다. 다시 입력해 주세요.</string>
     <string name="trust_all_title">모든 인증서 허용</string>
     <string name="trust_all_detail">이 서버의 인증서 검증을 끕니다. 인증서를 이미 알고 있는 서버에만 사용하세요.</string>
@@ -65,7 +65,7 @@
     <string name="browse_refresh">목록 새로고침</string>
     <string name="browse_download">%1$s 다운로드</string>
     <string name="browse_more">%1$s 추가 작업</string>
-    <string name="browse_new_directory">새 디렉터리</string>
+    <string name="browse_new_directory">새 폴더</string>
     <string name="browse_upload">파일 업로드</string>
     <string name="menu_select">선택</string>
     <string name="menu_select_all">모두 선택</string>
@@ -88,7 +88,7 @@
     <string name="option_show_hidden">숨김 파일 보기</string>
     <string name="option_folders_first">폴더 먼저</string>
     <string name="filter_hint">이름으로 거르기</string>
-    <string name="filter_clear">필터 지우기</string>
+    <string name="filter_clear">필터 해제</string>
     <string name="filter_none">"%1$s"과(와) 일치하는 항목이 없습니다</string>
     <string name="props_title">속성</string>
     <string name="props_name">이름</string>
@@ -105,7 +105,6 @@
     <string name="action_close">닫기</string>
     <string name="action_download_selected">다운로드</string>
     <string name="action_delete_selected">삭제</string>
-    <string name="confirm_delete_title">%1$d개 항목을 삭제할까요?</string>
     <string name="queued_many">%1$d개 대기열에 추가됨</string>
     <string name="queued_none">선택한 항목에 내려받을 파일이 없습니다</string>
     <string name="conflict_many_detail">아래 파일이 이미 저장 폴더에 있습니다:</string>
@@ -123,12 +122,16 @@
     <string name="queue_speed_remaining">%1$s · %2$s 남음</string>
     <string name="queued_skipped_links">%1$d개 대기열에 추가됨, 바로가기 %2$d개 건너뜀</string>
     <string name="queued_truncated">%1$d개 대기열에 추가됨. 폴더가 너무 커서 전부 담지 못했습니다</string>
-    <string name="browse_download_folder">이 폴더 내려받기</string>
+    <string name="browse_download_folder">이 폴더 다운로드</string>
     <string name="browse_select">%1$s 선택</string>
     <string name="action_rename">이름 변경</string>
     <string name="action_delete">삭제</string>
     <string name="prompt_rename_title">%1$s 이름 변경</string>
     <string name="prompt_new_name">새 이름</string>
+    <string name="new_folder_detail">지금 보고 있는 폴더 안에 만들어집니다.</string>
+    <string name="new_file_detail">지금 보고 있는 폴더 안에 빈 파일로 만들어집니다.</string>
+    <string name="rename_detail">이름만 바뀌고 내용은 그대로 둡니다.</string>
+    <string name="confirm_delete_selected">%1$d개 항목을 삭제할까요?</string>
     <string name="prompt_name">이름</string>
 
     <!-- 전송 -->
@@ -138,8 +141,8 @@
     <string name="queue_resume">이어받기</string>
     <string name="queue_retry_now">지금 다시 시도</string>
     <string name="queue_still_waiting_wifi">아직 모바일 데이터입니다. 와이파이가 돌아오면 이어서 받습니다</string>
-    <string name="queue_remove">목록에서 제거</string>
-    <string name="queue_clear_finished">완료된 항목 지우기</string>
+    <string name="queue_remove">목록에서 삭제</string>
+    <string name="queue_clear_finished">완료된 항목 삭제</string>
     <string name="queue_start">전송 시작</string>
     <string name="queue_settings">전송 설정</string>
     <string name="setting_wifi_only">와이파이에서만 전송</string>
@@ -171,7 +174,7 @@
     <string name="fail_login">로그인이 거부되었습니다</string>
     <string name="fail_login_advice">서버가 이 계정을 받아들이지 않았습니다. 사용자 이름과 비밀번호를 확인하세요.</string>
     <string name="fail_denied">사용할 수 없습니다</string>
-    <string name="fail_denied_advice">서버가 해당 파일이나 디렉터리를 내주지 않았습니다. 존재하지 않거나, 이 계정에 권한이 없을 수 있습니다.</string>
+    <string name="fail_denied_advice">서버가 해당 파일이나 폴더를 내주지 않았습니다. 존재하지 않거나, 이 계정에 권한이 없을 수 있습니다.</string>
     <string name="fail_busy">서버가 일시적으로 처리할 수 없습니다</string>
     <string name="fail_busy_advice">서버가 지금은 처리할 수 없다고 응답했습니다. 대개 저절로 해소되니 잠시 후 다시 시도하세요.</string>
     <string name="fail_refused_command">서버가 요청을 거부했습니다</string>
@@ -193,7 +196,7 @@
     <!-- 로그 -->
     <string name="log_empty_title">아직 기록이 없습니다</string>
     <string name="log_empty_detail">접속하면 주고받은 모든 명령과 응답이 여기에 그대로 표시됩니다.</string>
-    <string name="log_clear">로그 지우기</string>
+    <string name="log_clear">로그 삭제</string>
     <plurals name="conflict_title">
         <item quantity="other">같은 이름의 파일이 %d개 있습니다</item>
     </plurals>
@@ -233,7 +236,7 @@
     <string name="download_point_other_pane">내 파일로</string>
     <string name="download_needs_storage">아직 저장소를 읽을 수 없습니다</string>
     <string name="storage_grant_short">허용</string>
-    <string name="fail_too_much_to_delete">한 번에 지우기엔 너무 많습니다</string>
+    <string name="fail_too_much_to_delete">한 번에 삭제하기엔 너무 많습니다</string>
     <string name="fail_too_much_to_delete_advice">아무것도 삭제되지 않았습니다. 폴더를 열어 나누어 삭제하세요.</string>
     <string name="paste_between_servers">FTP에서는 서버끼리 복사할 수 없습니다</string>
     <string name="paste_upload_here">이 서버로 %1$d개 보내기</string>

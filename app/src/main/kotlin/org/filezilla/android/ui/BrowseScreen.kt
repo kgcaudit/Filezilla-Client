@@ -165,36 +165,24 @@ fun BrowseScreen(
     // a folder now takes everything inside it, one tap there could remove a
     // tree. There is no undo on a server.
     deleting?.let { entry ->
-        AlertDialog(
-            onDismissRequest = { deleting = null },
-            icon = {
-                Icon(
-                    painter = painterResource(R.drawable.ic_flat_warning),
-                    contentDescription = null,
-                    tint = Color.Unspecified,
-                    modifier = Modifier.size(28.dp),
-                )
-            },
-            title = { Text(stringResource(R.string.confirm_delete_one, entry.name)) },
-            text = { Text(stringResource(R.string.confirm_delete_detail)) },
-            confirmButton = {
-                DangerButton(stringResource(R.string.action_delete)) {
-                    actions.onDelete(entry)
-                    deleting = null
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { deleting = null }) {
-                    Text(stringResource(R.string.action_cancel))
-                }
+        OloConfirmDialog(
+            title = stringResource(R.string.confirm_delete_one, entry.name),
+            detail = stringResource(R.string.confirm_delete_detail),
+            confirmLabel = stringResource(R.string.action_delete),
+            onDismiss = { deleting = null },
+            onConfirm = {
+                actions.onDelete(entry)
+                deleting = null
             },
         )
     }
 
     renaming?.let { entry ->
-        TextPromptDialog(
-            title = stringResource(R.string.prompt_rename_title, entry.name),
-            label = stringResource(R.string.prompt_new_name),
+        OloPromptDialog(
+            title = R.string.prompt_rename_title,
+            titleArg = entry.name,
+            detail = R.string.rename_detail,
+            label = R.string.prompt_new_name,
             initial = entry.name,
             onDismiss = { renaming = null },
             onConfirm = { newName ->
@@ -436,39 +424,4 @@ private fun GridTile(
     }
 }
 
-@Composable
-fun TextPromptDialog(
-    title: String,
-    label: String,
-    initial: String = "",
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit,
-) {
-    var text by remember { mutableStateOf(initial) }
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    label = { Text(label) },
-                    singleLine = true,
-                )
-            }
-        },
-        confirmButton = {
-            androidx.compose.material3.TextButton(
-                enabled = text.isNotBlank(),
-                onClick = { onConfirm(text.trim()) },
-            ) { Text(stringResource(R.string.action_ok)) }
-        },
-        dismissButton = {
-            androidx.compose.material3.TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.action_cancel))
-            }
-        },
-    )
-}
 

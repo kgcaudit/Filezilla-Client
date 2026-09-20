@@ -253,13 +253,16 @@ fun FilePanes(
     }
 
     naming?.let { thing ->
-        NameDialog(
-            title = if (thing == NewThing.FOLDER) R.string.new_folder_title else R.string.new_file_title,
+        val folder = thing == NewThing.FOLDER
+        OloPromptDialog(
+            title = if (folder) R.string.new_folder_title else R.string.new_file_title,
+            detail = if (folder) R.string.new_folder_detail else R.string.new_file_detail,
+            label = R.string.prompt_name,
             onDismiss = { naming = null },
             onConfirm = { name ->
                 // Through the pane, not through the phone: the dial can be
                 // opened on one pane and confirmed after a swipe to the other.
-                if (thing == NewThing.FOLDER) model.createFolderIn(active, name)
+                if (folder) model.createFolderIn(active, name)
                 else model.createFileIn(active, name)
                 naming = null
             },
@@ -271,8 +274,14 @@ fun FilePanes(
         if (entry == null) {
             renaming = false
         } else {
-            NameDialog(
-                title = R.string.action_rename_selected,
+            OloPromptDialog(
+                // Names the thing being renamed. It used to carry the menu
+                // item's own label, so a dialog asking about one file was
+                // titled with the button that had opened it.
+                title = R.string.prompt_rename_title,
+                titleArg = entry.name,
+                detail = R.string.rename_detail,
+                label = R.string.prompt_new_name,
                 initial = entry.name,
                 onDismiss = { renaming = false },
                 onConfirm = { name ->
@@ -299,18 +308,12 @@ fun FilePanes(
 /** Deleting takes folders with everything in them, so it is asked about first. */
 @Composable
 private fun ConfirmDelete(count: Int, onDismiss: () -> Unit, onConfirm: () -> Unit) {
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.confirm_delete_title, count)) },
-        text = { Text(stringResource(R.string.confirm_delete_detail)) },
-        confirmButton = {
-            DangerButton(stringResource(R.string.action_delete_selected), onConfirm)
-        },
-        dismissButton = {
-            androidx.compose.material3.TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.action_cancel))
-            }
-        },
+    OloConfirmDialog(
+        title = stringResource(R.string.confirm_delete_selected, count),
+        detail = stringResource(R.string.confirm_delete_detail),
+        confirmLabel = stringResource(R.string.action_delete),
+        onDismiss = onDismiss,
+        onConfirm = onConfirm,
     )
 }
 

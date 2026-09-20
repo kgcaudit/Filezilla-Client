@@ -85,7 +85,6 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
     var queueMenuOpen by remember { mutableStateOf(false) }
     var editingSite by remember { mutableStateOf<SiteDraft?>(null) }
     var creatingDirectory by remember { mutableStateOf(false) }
-    var confirmingDelete by remember { mutableStateOf(false) }
 
     val sites by model.sites.collectAsState()
     val transfers by model.transfers.collectAsState()
@@ -462,34 +461,12 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
         )
     }
 
-    if (confirmingDelete) {
-        val count = model.browse.selection.size
-        AlertDialog(
-            onDismissRequest = { confirmingDelete = false },
-            title = { Text(stringResource(R.string.confirm_delete_title, count)) },
-            // The same sentence the row's own delete shows, because it is
-            // the same promise: a folder goes with everything in it. The
-            // wording it replaces said directories had to be empty, which is
-            // what RMD forces and no longer what the app does.
-            text = { Text(stringResource(R.string.confirm_delete_detail)) },
-            confirmButton = {
-                DangerButton(stringResource(R.string.action_delete)) {
-                    confirmingDelete = false
-                    model.deleteSelected()
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmingDelete = false }) {
-                    Text(stringResource(R.string.action_cancel))
-                }
-            },
-        )
-    }
 
     if (creatingDirectory) {
-        TextPromptDialog(
-            title = stringResource(R.string.browse_new_directory),
-            label = stringResource(R.string.prompt_name),
+        OloPromptDialog(
+            title = R.string.new_folder_title,
+            detail = R.string.new_folder_detail,
+            label = R.string.prompt_name,
             onDismiss = { creatingDirectory = false },
             onConfirm = { name ->
                 model.createDirectory(name)
