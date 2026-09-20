@@ -38,6 +38,46 @@ class FtpFileOperations(private val control: FtpControlConnection) {
         }
     }
 
+    /** `CWD`, as a question rather than an order. */
+    fun directoryExists(path: String): Boolean = control.send("CWD $path").isSuccess
+
+    /**
+     * Makes whatever is missing above [file], so a `STOR` into it can land.
+     *
+     * FTP will not make a folder's parents for you, and a `STOR` into a
+     * folder that is not there is refused with a 550 that names the whole
+     * path and says only "No such file or directory". So the folders are
+     * made first, and only the ones that are actually missing -- see
+     * [RemoteDirectories].
+     *
+     * A folder that appears between the question and the answer is not an
+     * error: two files from the same upload can reach this at once, and the
+     * loser of that race wants the folder, not an exception. So a failed
+     * `MKD` is only failure if the folder is still not there afterwards.
+     *
+     * The working directory is left where it was found. Transfers address
+     * files absolutely and would not notice, but a caller between transfers
+     * would, and moving somebody's connection out from under them to answer
+     * a question is not this function's business.
+     */
+    fun ensureParentsOf(file: String) {
+        // Asked before anything else, because the question itself moves the
+        // connection: the only portable way to ask whether a folder is there
+        // is to try to go into it. Reading the answer afterwards would read
+        // the place the probe had already arrived at.
+        val wasAt = runCatching { currentDirectory() }.getOrNull()
+        try {
+            for (path in RemoteDirectories.plan(file) { directoryExists(it) }) {
+                val made = control.send("MKD $path")
+                if (!made.isSuccess && !directoryExists(path)) {
+                    throw FtpCommandException(made, "could not create $path: ${made.raw}")
+                }
+            }
+        } finally {
+            if (wasAt != null) runCatching { changeDirectory(wasAt) }
+        }
+    }
+
     /** `RMD`. The directory must already be empty, as FTP has no recursive form. */
     fun removeDirectory(path: String) {
         val reply = control.send("RMD $path")

@@ -662,9 +662,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             graph.transfers.enqueueUpload(
                 site = site,
-                // The folders a file sat in are recreated on the server, so
-                // uploading a folder gives a folder rather than its contents
-                // strewn across the one it landed in.
+                // The folders a file sat in, spliced back in, so uploading a
+                // folder gives a folder rather than its contents strewn
+                // across the one it landed in. Making them on the server is
+                // the transfer's job, not the queue's -- see
+                // FtpFileOperations.ensureParentsOf. This comment used to
+                // say they were recreated, which nothing was doing.
                 remotePath = FilePath.child(
                     remoteDirectory,
                     (file.subPath + name).joinToString(FilePath.SEPARATOR.toString()),

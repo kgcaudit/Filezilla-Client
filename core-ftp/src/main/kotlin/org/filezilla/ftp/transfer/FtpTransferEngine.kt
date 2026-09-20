@@ -193,6 +193,18 @@ class FtpTransferEngine(
         progress: TransferProgressListener?,
     ): TransferOutcome {
         logger.log(LogLevel.STATUS, "Starting upload of $remoteFile")
+
+        // Before anything else, because the server will not make them and
+        // will not say which one was missing. Uploading a folder puts the
+        // folders a file sat in back into its remote path, and nothing was
+        // creating them -- so every file below the top level was refused
+        // with a 550 that named the whole path.
+        //
+        // Here rather than at the point the transfer was queued: a queue is
+        // built while the phone may be offline, and a reconnect between
+        // attempts can land on a session that has never seen these folders.
+        org.filezilla.ftp.protocol.FtpFileOperations(control).ensureParentsOf(remoteFile)
+
         control.setTransferType(binary)
 
         val localSize = reader.size
