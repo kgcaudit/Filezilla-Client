@@ -164,6 +164,30 @@ class LayoutShotTest {
         }
     }
 
+    /**
+     * The whole app as it actually stacks up, so the chrome can be measured
+     * rather than guessed at.
+     */
+    @Test
+    fun `the whole screen`() {
+        val controller = Robolectric.buildActivity(
+            org.filezilla.android.ui.MainActivity::class.java,
+        ).setup()
+        shadowOf(Looper.getMainLooper()).idle()
+        val root = controller.get().window.decorView
+        root.measure(
+            View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(2340, View.MeasureSpec.EXACTLY),
+        )
+        root.layout(0, 0, root.measuredWidth, root.measuredHeight)
+        shadowOf(Looper.getMainLooper()).idle()
+        val bitmap = Bitmap.createBitmap(1080, 2340, Bitmap.Config.ARGB_8888)
+        root.draw(Canvas(bitmap))
+        val out = File("build/shots").apply { mkdirs() }.resolve("whole-screen.png")
+        out.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        controller.close()
+    }
+
     /** The sites list, where a server says how it is reached before it is tapped. */
     @Test
     fun `the sites list`() {
