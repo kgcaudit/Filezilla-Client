@@ -249,7 +249,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** One pane's rows as the screen shows them, through the shared ordering. */
     fun visibleEntries(id: PaneId): List<DirectoryEntry> =
-        pane(id).let { BrowseListing.arrange(it.entries, options, it.filter) }
+        pane(id).let { BrowseListing.arrange(it.entries, optionsFor(id), it.filter) }
 
     /** Whether transfers wait for Wi-Fi rather than using mobile data. */
     var wifiOnly by mutableStateOf(graph.preferences.wifiOnly)
@@ -1463,6 +1463,64 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Folders that have been given settings of their own, by key.
+     *
+     * Mirrored in memory as well as in preferences so that changing one
+     * redraws the pane: preferences are not state Compose watches.
+     */
+    private var folderOptions by mutableStateOf<Map<String, BrowseOptions>>(emptyMap())
+
+    /**
+     * What identifies a folder across runs: which side, and where.
+     *
+     * The site's id rather than its name, so renaming a server does not
+     * lose every folder's arrangement -- and "local", not an empty string,
+     * so a path on the phone cannot collide with one on a server that has
+     * no id.
+     */
+    private fun folderKeyFor(state: BrowseState): String? {
+        if (state.path.isEmpty()) return null
+        val side = (state.source as? PaneSource.Remote)?.site?.id ?: "local"
+        return "$side:" + FilePath.normalize(state.path)
+    }
+
+    /** The settings [id] is arranged by: its own if it has any, else the shared ones. */
+    fun optionsFor(id: PaneId): BrowseOptions {
+        val key = folderKeyFor(pane(id)) ?: return options
+        return folderOptions[key] ?: graph.preferences.optionsForFolder(key) ?: options
+    }
+
+    /** True when this folder is arranged by settings of its own. */
+    fun hasOwnOptions(id: PaneId): Boolean {
+        val key = folderKeyFor(pane(id)) ?: return false
+        return folderOptions.containsKey(key) || graph.preferences.optionsForFolder(key) != null
+    }
+
+    /**
+     * Applies [next] to [id], to this folder alone or to everything.
+     *
+     * [onlyHere] off does not merely stop writing the folder's own
+     * settings: it takes them away. Leaving them behind would mean turning
+     * "이 폴더만" off and watching the folder go on being arranged by the
+     * settings it is no longer supposed to have.
+     */
+    fun applyOptions(id: PaneId, next: BrowseOptions, onlyHere: Boolean) {
+        val key = folderKeyFor(pane(id))
+        if (onlyHere && key != null) {
+            folderOptions = folderOptions + (key to next)
+            graph.preferences.setOptionsForFolder(key, next)
+            return
+        }
+        if (key != null) {
+            folderOptions = folderOptions - key
+            graph.preferences.setOptionsForFolder(key, null)
+        }
+        options = next
+        graph.preferences.browseOptions = next
+    }
+
+    /** The shared settings, for the screens that have no pane behind them. */
     fun applyOptions(next: BrowseOptions) {
         options = next
         graph.preferences.browseOptions = next

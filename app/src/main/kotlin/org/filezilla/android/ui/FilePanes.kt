@@ -412,7 +412,9 @@ private fun PaneBody(
         PaneHeader(
             id = id,
             model = model,
-            options = options,
+            // This pane's settings, which are the shared ones unless the
+            // folder it is in has been given some of its own.
+            options = model.optionsFor(id),
             onNewDirectory = onNewDirectory,
             onUpload = onUpload,
             onGrant = onGrant,
@@ -437,7 +439,7 @@ private fun PaneBody(
             else -> BrowseScreen(
                 state = state,
                 rows = rows,
-                options = options,
+                options = model.optionsFor(id),
                 onRefresh = { model.open(id) },
                 onOpenLog = onOpenLog,
                 onFilterChange = model::setFilter,

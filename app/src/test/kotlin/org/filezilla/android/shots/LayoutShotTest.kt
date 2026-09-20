@@ -28,6 +28,7 @@ import org.filezilla.android.ui.ViewOptionsDialog
 import org.filezilla.android.ui.SiteEditor
 import org.filezilla.android.storage.DownloadConflict
 import org.filezilla.android.ui.BrowseOptions
+import org.filezilla.android.ui.SortKey
 import org.filezilla.android.ui.SiteDraft
 import org.filezilla.android.ui.EmptyState
 import org.filezilla.android.ui.QueueSettings
@@ -423,7 +424,13 @@ class LayoutShotTest {
     @Test
     fun `the view options dialog`() {
         shootDialog("dialog-view-options", height = 1200) {
-            ViewOptionsDialog(options = BrowseOptions(), onDismiss = {}, onApply = {})
+            ViewOptionsDialog(
+                options = BrowseOptions(sortKey = SortKey.DATE, ascending = false),
+                onlyHere = true,
+                onOnlyHere = {},
+                onDismiss = {},
+                onApply = {},
+            )
         }
     }
 

@@ -169,10 +169,22 @@ fun PaneHeader(
     }
 
     if (viewOptionsOpen) {
+        // The pane's own settings, which are the shared ones unless this
+        // folder has been given some of its own.
+        val onlyHere = model.hasOwnOptions(id)
         ViewOptionsDialog(
-            options = options,
+            options = model.optionsFor(id),
+            onlyHere = onlyHere,
+            // Hidden where there is no folder to pin to: a pane that has
+            // not been anywhere yet has no path to remember settings
+            // against, and a box that cannot be honoured is worse than none.
+            onOnlyHere = if (state.path.isEmpty()) {
+                null
+            } else {
+                { only -> model.applyOptions(id, model.optionsFor(id), only) }
+            },
             onDismiss = { viewOptionsOpen = false },
-            onApply = model::applyOptions,
+            onApply = { next -> model.applyOptions(id, next, onlyHere) },
         )
     }
 }

@@ -1,6 +1,7 @@
 package org.filezilla.android.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -87,6 +88,74 @@ fun ChoiceChip(
                     modifier = Modifier.padding(start = 6.dp).size(16.dp),
                 )
             }
+        }
+    }
+}
+
+
+/**
+ * One option in a row of them, drawn as a picture over its name.
+ *
+ * Chips in a wrapping row were what this replaced, and they had two
+ * problems the reference design does not. Four sort keys wrapped to two
+ * lines of two, so the group lost the shape that said "these four are one
+ * question". And all four carried the same sort glyph -- the same picture
+ * four times, which tells the reader nothing the word beside it had not
+ * already said, and is exactly what was wrong with the overflow menu.
+ *
+ * One picture each, in one row, with the name under it. The chosen one
+ * keeps the treatment the rest of the app uses -- filled with the brand
+ * colour, bold, and a mark -- because the reference's thin underline is
+ * subtle enough that the user had to look twice, and that is the complaint
+ * this whole design came out of.
+ */
+@Composable
+fun OptionTile(
+    label: String,
+    icon: ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** Shown under the name when chosen: which way this sort runs. */
+    footnote: String? = null,
+) {
+    val colors = MaterialTheme.colorScheme
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+            .padding(vertical = 6.dp),
+    ) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = if (selected) colors.primary else colors.surface,
+            contentColor = if (selected) colors.onPrimary else colors.onSurfaceVariant,
+            border = if (selected) null else BorderStroke(1.dp, colors.outlineVariant),
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                modifier = Modifier.padding(10.dp).size(22.dp),
+            )
+        }
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = if (selected) colors.primary else colors.onSurfaceVariant,
+            maxLines = 1,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        // Only under the chosen one, because it is a property of that
+        // choice rather than a choice of its own. It had a row to itself,
+        // which made "ascending" look like a fifth thing to sort by.
+        if (selected && footnote != null) {
+            Text(
+                footnote,
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.primary,
+                maxLines = 1,
+            )
         }
     }
 }

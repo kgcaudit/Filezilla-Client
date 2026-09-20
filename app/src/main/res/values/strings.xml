@@ -83,8 +83,6 @@
     <string name="sort_size">Size</string>
     <string name="sort_date">Date</string>
     <string name="sort_type">Type</string>
-    <string name="sort_ascending">Ascending</string>
-    <string name="sort_descending">Descending</string>
     <string name="option_show_hidden">Show hidden files</string>
     <string name="option_folders_first">Folders first</string>
     <string name="filter_hint">Filter by name</string>
@@ -295,4 +293,9 @@
     </plurals>
     <string name="folder_empty">Empty</string>
     <string name="folder_summary">%1$d folders · %2$d files</string>
+
+    <string name="sort_ascending_short">↑ Ascending</string>
+    <string name="sort_descending_short">↓ Descending</string>
+    <string name="option_only_here">This folder only</string>
+    <string name="option_only_here_detail">Keeps these settings for this folder. Every other folder goes on using the shared ones.</string>
 </resources>

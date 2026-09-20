@@ -1,6 +1,8 @@
 package org.filezilla.android.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,8 +12,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.SortByAlpha
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.DoneAll
@@ -148,15 +152,25 @@ private fun Item(labelRes: Int, icon: androidx.compose.ui.graphics.vector.ImageV
 }
 
 /**
- * View and sort, laid out as a panel rather than a list of menu entries.
+ * View and sort, as two rows of pictures rather than a wrapping list.
  *
- * Sorting has two parts -- what to sort by and which way round -- and a flat
- * menu hides that: the user picks "size" and cannot see that it is still
- * descending from last time. Shown together, the current state is one glance.
+ * What it replaced: six chips that wrapped to four lines, all four sort
+ * keys carrying the same sort glyph, and "ascending / descending" spending
+ * a whole row of its own as though it were a fifth thing to sort by. So
+ * the panel said less than it could in more space than it needed, and the
+ * one picture repeated four times said nothing at all.
+ *
+ * Now: one row per question, one picture per answer, and the direction
+ * tucked under whichever key is chosen -- because it belongs to that key.
+ * Tapping the chosen key again turns it round.
  */
 @Composable
 fun ViewOptionsDialog(
     options: BrowseOptions,
+    /** True when this folder is already arranged by settings of its own. */
+    onlyHere: Boolean,
+    /** Null when there is no folder to pin settings to, and the box is hidden. */
+    onOnlyHere: ((Boolean) -> Unit)?,
     onDismiss: () -> Unit,
     onApply: (BrowseOptions) -> Unit,
 ) {
@@ -164,33 +178,38 @@ fun ViewOptionsDialog(
         title = stringResource(R.string.menu_view_options),
         onDismiss = onDismiss,
         content = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Label(R.string.view_mode)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Choice(R.string.view_list, Icons.AutoMirrored.Filled.ViewList, options.viewMode == ViewMode.LIST) {
-                        onApply(options.copy(viewMode = ViewMode.LIST))
-                    }
-                    Choice(R.string.view_grid, Icons.Filled.GridView, options.viewMode == ViewMode.GRID) {
-                        onApply(options.copy(viewMode = ViewMode.GRID))
-                    }
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    OptionTile(
+                        label = stringResource(R.string.view_list),
+                        icon = Icons.AutoMirrored.Filled.ViewList,
+                        selected = options.viewMode == ViewMode.LIST,
+                        onClick = { onApply(options.copy(viewMode = ViewMode.LIST)) },
+                        modifier = Modifier.weight(1f),
+                    )
+                    OptionTile(
+                        label = stringResource(R.string.view_grid),
+                        icon = Icons.Filled.GridView,
+                        selected = options.viewMode == ViewMode.GRID,
+                        onClick = { onApply(options.copy(viewMode = ViewMode.GRID)) },
+                        modifier = Modifier.weight(1f),
+                    )
+                    // Two answers, four columns' worth of row: spacers so
+                    // the pictures sit under the ones above rather than
+                    // spreading to fill a row they do not need.
+                    Spacer(modifier = Modifier.weight(2f))
                 }
 
                 Label(R.string.sort_mode)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SortChoice(R.string.sort_name, SortKey.NAME, options, onApply)
-                    SortChoice(R.string.sort_date, SortKey.DATE, options, onApply)
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SortChoice(R.string.sort_size, SortKey.SIZE, options, onApply)
-                    SortChoice(R.string.sort_type, SortKey.TYPE, options, onApply)
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Choice(R.string.sort_ascending, Icons.Filled.ArrowUpward, options.ascending) {
-                        onApply(options.copy(ascending = true))
-                    }
-                    Choice(R.string.sort_descending, Icons.Filled.ArrowDownward, !options.ascending) {
-                        onApply(options.copy(ascending = false))
-                    }
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    // A different picture for each, which is the whole
+                    // point: an A-to-Z, a calendar, a set of bars and a
+                    // page say what four identical sort glyphs did not.
+                    SortTile(R.string.sort_name, Icons.Filled.SortByAlpha, SortKey.NAME, options, onApply)
+                    SortTile(R.string.sort_date, Icons.Filled.CalendarMonth, SortKey.DATE, options, onApply)
+                    SortTile(R.string.sort_size, Icons.Filled.BarChart, SortKey.SIZE, options, onApply)
+                    SortTile(R.string.sort_type, Icons.Filled.Description, SortKey.TYPE, options, onApply)
                 }
 
                 Label(R.string.menu_folder_options)
@@ -199,6 +218,19 @@ fun ViewOptionsDialog(
                 }
                 Toggle(R.string.option_show_hidden, options.showHidden) {
                     onApply(options.copy(showHidden = it))
+                }
+                // Last, and only where there is a folder to pin to. One
+                // setting for the whole app means changing it on the way
+                // into a folder of photos and changing it back on the way
+                // out; this lets a folder keep its own and leaves every
+                // other folder on the shared one.
+                onOnlyHere?.let { set ->
+                    Toggle(
+                        labelRes = R.string.option_only_here,
+                        checked = onlyHere,
+                        detailRes = R.string.option_only_here_detail,
+                        onChange = set,
+                    )
                 }
             }
         },
@@ -212,51 +244,72 @@ private fun Label(res: Int) {
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.primary,
         fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(top = 8.dp),
+        modifier = Modifier.padding(top = 10.dp, bottom = 2.dp),
     )
 }
 
+/**
+ * One sort key, with its direction under it when it is the one in force.
+ *
+ * Pressing the key that is already chosen turns the sort round, which is
+ * how every list on a phone behaves and is why the direction no longer
+ * needs a row of its own.
+ */
 @Composable
-private fun Choice(
+private fun RowScope.SortTile(
     labelRes: Int,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    ChoiceChip(
-        label = stringResource(labelRes),
-        selected = selected,
-        onClick = onClick,
-        icon = icon,
-    )
-}
-
-@Composable
-private fun SortChoice(
-    labelRes: Int,
     key: SortKey,
     options: BrowseOptions,
     onApply: (BrowseOptions) -> Unit,
 ) {
-    ChoiceChip(
+    val chosen = options.sortKey == key
+    OptionTile(
         label = stringResource(labelRes),
-        selected = options.sortKey == key,
-        onClick = { onApply(options.copy(sortKey = key)) },
-        icon = Icons.AutoMirrored.Filled.Sort,
+        icon = icon,
+        selected = chosen,
+        onClick = {
+            onApply(
+                if (chosen) {
+                    options.copy(ascending = !options.ascending)
+                } else {
+                    options.copy(sortKey = key)
+                },
+            )
+        },
+        footnote = stringResource(
+            if (options.ascending) R.string.sort_ascending_short else R.string.sort_descending_short,
+        ),
+        modifier = Modifier.weight(1f),
     )
 }
 
 @Composable
-private fun Toggle(labelRes: Int, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun Toggle(
+    labelRes: Int,
+    checked: Boolean,
+    /** A line under the name, for a setting whose effect is not obvious. */
+    detailRes: Int? = null,
+    onChange: (Boolean) -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .selectable(selected = checked, onClick = { onChange(!checked) })
-            .padding(vertical = 4.dp),
+            .padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Checkbox(checked = checked, onCheckedChange = { onChange(it) })
-        Text(stringResource(labelRes), modifier = Modifier.padding(start = 4.dp))
+        Column(modifier = Modifier.padding(start = 4.dp)) {
+            Text(stringResource(labelRes))
+            if (detailRes != null) {
+                Text(
+                    stringResource(detailRes),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 

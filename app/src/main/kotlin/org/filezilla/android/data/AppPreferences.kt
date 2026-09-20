@@ -110,6 +110,77 @@ class AppPreferences(context: Context) {
         }
 
     /**
+     * The view options one folder was given of its own, or null.
+     *
+     * A photo folder wants a grid sorted by date and a folder of subtitles
+     * wants a list sorted by name, and one setting for the whole app makes
+     * the user change it on the way in and change it back on the way out.
+     * So a folder may keep its own, and everything else goes on using the
+     * one setting.
+     *
+     * Kept apart from [browseOptions] rather than replacing it: with no
+     * override the global one still applies, which is what "이 폴더만" off
+     * has to mean.
+     */
+    fun optionsForFolder(key: String): BrowseOptions? {
+        val stored = prefs.getString(folderOptionsKey(key), null) ?: return null
+        return decodeOptions(stored)
+    }
+
+    /** Null forgets the folder's own settings and lets the global ones apply. */
+    fun setOptionsForFolder(key: String, options: BrowseOptions?) {
+        val edit = prefs.edit()
+        // Oldest first, and a list rather than a set because that is the
+        // whole point: a set has no order, so "drop the oldest" would drop
+        // whichever one the hash happened to put first. Written as one
+        // delimited string for the same reason -- putStringSet gives the
+        // order back scrambled.
+        val keys = (folderOptionKeys() - key).toMutableList()
+        if (options == null) {
+            edit.remove(folderOptionsKey(key))
+        } else {
+            keys += key
+            // A file manager visits thousands of folders, and a preferences
+            // file that grows by one entry per folder visited for ever is a
+            // leak with a slow fuse.
+            while (keys.size > MAX_REMEMBERED_FOLDERS) {
+                edit.remove(folderOptionsKey(keys.removeAt(0)))
+            }
+            edit.putString(folderOptionsKey(key), encodeOptions(options))
+        }
+        edit.putString(KEY_FOLDER_OPTION_KEYS, keys.joinToString(KEY_SEPARATOR))
+        edit.apply()
+    }
+
+    private fun folderOptionKeys(): List<String> =
+        prefs.getString(KEY_FOLDER_OPTION_KEYS, null)
+            ?.split(KEY_SEPARATOR)
+            ?.filter { it.isNotEmpty() }
+            .orEmpty()
+
+    private fun folderOptionsKey(key: String) = "$KEY_FOLDER_OPTIONS$key"
+
+    private fun encodeOptions(options: BrowseOptions): String = listOf(
+        options.sortKey.name,
+        options.ascending.toString(),
+        options.foldersFirst.toString(),
+        options.showHidden.toString(),
+        options.viewMode.name,
+    ).joinToString("|")
+
+    private fun decodeOptions(stored: String): BrowseOptions? {
+        val parts = stored.split("|")
+        if (parts.size != 5) return null
+        return BrowseOptions(
+            sortKey = enumOrDefault(parts[0], SortKey.NAME),
+            ascending = parts[1].toBooleanStrictOrNull() ?: true,
+            foldersFirst = parts[2].toBooleanStrictOrNull() ?: true,
+            showHidden = parts[3].toBooleanStrictOrNull() ?: false,
+            viewMode = enumOrDefault(parts[4], ViewMode.LIST),
+        )
+    }
+
+    /**
      * Folders a move has still to clear away, once its queue has drained.
      *
      * Written when the paste is made and read when the queue finishes, which
@@ -135,7 +206,7 @@ class AppPreferences(context: Context) {
     private inline fun <reified T : Enum<T>> enumOrDefault(name: String?, fallback: T): T =
         name?.let { runCatching { enumValueOf<T>(it) }.getOrNull() } ?: fallback
 
-    private companion object {
+    internal companion object {
         const val KEY_DOWNLOAD_FOLDER = "download_folder"
         const val KEY_PANE_PATH = "pane_path_"
         const val KEY_PANE_SITE = "pane_site_"
@@ -147,5 +218,22 @@ class AppPreferences(context: Context) {
         const val KEY_VIEW = "browse_view"
         const val KEY_WIFI_ONLY = "wifi_only"
         const val KEY_MOVE_CLEANUP = "move_cleanup"
+        const val KEY_FOLDER_OPTIONS = "folder_options_"
+        const val KEY_FOLDER_OPTION_KEYS = "folder_options_keys"
+
+        /** A newline, which no path and no site id contains. */
+        const val KEY_SEPARATOR = "\n"
+
+        /**
+         * How many folders may keep their own settings.
+         *
+         * Enough that the folders somebody actually arranges all keep
+         * theirs, and small enough that walking a disk does not fill the
+         * preferences file. The oldest goes when the limit is reached.
+         *
+         * Internal rather than private so the test can fill the budget
+         * without writing the number down a second time.
+         */
+        internal const val MAX_REMEMBERED_FOLDERS = 200
     }
 }
