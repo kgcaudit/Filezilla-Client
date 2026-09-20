@@ -111,14 +111,15 @@ fun BrowseScreen(
 
         HorizontalDivider()
 
+        // Counted rather than flagged: see [refreshIndicatorShown]. The
+        // indicator's whole lifecycle hangs off this going up.
+        var pulls by remember { mutableLongStateOf(0L) }
         PullToRefreshBox(
-            // Held briefly; see [heldTrue]. Listing a folder on the phone is
-            // a readdir and is over in well under a frame, so the indicator
-            // was told to hide before it had finished being shown -- and the
-            // hide ran first, leaving it parked over the rows, not spinning,
-            // for the rest of the session.
-            isRefreshing = heldTrue(state.loading, REFRESH_SHOWN_FOR),
-            onRefresh = onRefresh,
+            isRefreshing = refreshIndicatorShown(pulls, state.loading),
+            onRefresh = {
+                pulls++
+                onRefresh()
+            },
             modifier = Modifier.fillMaxSize(),
         ) {
             when {
@@ -471,37 +472,3 @@ fun TextPromptDialog(
     )
 }
 
-/**
- * How long the refresh indicator stays up once something has asked for one.
- *
- * Long enough for its own appear-and-settle to finish, short enough that a
- * fast listing does not feel padded.
- */
-private const val REFRESH_SHOWN_FOR = 450L
-
-/**
- * [value], but true for at least [atLeastMillis] once it has been true.
- *
- * Not decoration. The pull-to-refresh indicator animates itself in when told
- * a refresh is running and out when told it has stopped, and it runs those
- * two as separate jobs. A refresh that starts and finishes inside one frame
- * gets both orders at once, they land in the wrong order, and the indicator
- * is left sitting on the list.
- */
-@Composable
-private fun heldTrue(value: Boolean, atLeastMillis: Long): Boolean {
-    var shown by remember { mutableStateOf(value) }
-    var shownSince by remember { mutableLongStateOf(0L) }
-
-    LaunchedEffect(value) {
-        if (value) {
-            shownSince = System.currentTimeMillis()
-            shown = true
-        } else if (shown) {
-            val left = atLeastMillis - (System.currentTimeMillis() - shownSince)
-            if (left > 0) delay(left)
-            shown = false
-        }
-    }
-    return shown
-}
