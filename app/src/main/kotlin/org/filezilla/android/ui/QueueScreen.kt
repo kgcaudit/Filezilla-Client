@@ -14,7 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -230,7 +230,15 @@ private fun TransferCard(
                         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     ),
                 ) {
-                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.queue_remove))
+                    // A circled cross, not the bare one. The bare ✕ is
+                    // "close this" everywhere else in the app -- a
+                    // selection, a paste, a panel -- and every one of those
+                    // can be done again. This takes a transfer out of the
+                    // queue and cannot.
+                    Icon(
+                        Icons.Filled.Cancel,
+                        contentDescription = stringResource(R.string.queue_remove),
+                    )
                 }
             }
 

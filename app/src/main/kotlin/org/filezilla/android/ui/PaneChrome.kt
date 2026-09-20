@@ -12,8 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -29,6 +28,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -77,12 +78,36 @@ fun PaneHeader(
             modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // What this pane is pointed at, not a hamburger. A hamburger
+            // means the app's own navigation drawer, and this opens neither
+            // the app nor a drawer: it chooses whether the pane shows the
+            // phone or a server. Drawn as whichever it is showing, so the
+            // button says the current state and what pressing it changes at
+            // the same time -- and the little chevron says it is a choice
+            // rather than a label.
             IconButton(onClick = here { storageOpen = true }) {
-                Icon(
-                    Icons.Filled.Menu,
-                    contentDescription = stringResource(R.string.pane_storage),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        painter = painterResource(
+                            when (state.source) {
+                                is PaneSource.Remote -> R.drawable.ic_tile_server
+                                is PaneSource.Local -> R.drawable.ic_tile_phone
+                                PaneSource.Empty -> R.drawable.ic_tile_folder
+                            },
+                        ),
+                        contentDescription = stringResource(R.string.pane_storage),
+                        // Unspecified, or Material flattens the artwork to
+                        // one colour and the two-tone tiles stop reading.
+                        tint = Color.Unspecified,
+                        modifier = Modifier.size(22.dp),
+                    )
+                    Icon(
+                        Icons.Filled.ArrowDropDown,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
             }
 
             if (state.path.isEmpty()) {
@@ -190,11 +215,15 @@ private fun BreadcrumbBar(
     ) {
         for ((index, crumb) in crumbs.withIndex()) {
             if (index > 0) {
-                Icon(
-                    Icons.Filled.ChevronRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp),
+                // Punctuation, not a control. The same chevron is the
+                // transfer strip's "open this", and a glyph that is a
+                // button in one place should not be furniture in another.
+                // Lighter and smaller, so the crumbs read as the path and
+                // this reads as the gap between them.
+                Text(
+                    "/",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.outlineVariant,
                 )
             }
             val last = index == crumbs.lastIndex

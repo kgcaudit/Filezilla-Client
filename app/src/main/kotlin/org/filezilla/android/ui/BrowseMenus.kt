@@ -12,7 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.CheckCircleOutline
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.FilterList
@@ -94,7 +94,7 @@ fun BrowseOverflow(
             // and the folder options below them were the same eye twice --
             // so the column of icons told the reader nothing that the words
             // beside it had not already said, and read as decoration.
-            Item(R.string.menu_select, Icons.Filled.CheckCircleOutline) {
+            Item(R.string.menu_select, Icons.Filled.CheckCircle) {
                 open = false
                 onSelectMode()
             }

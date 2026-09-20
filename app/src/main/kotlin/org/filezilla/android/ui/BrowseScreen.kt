@@ -21,7 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Checkbox
@@ -289,7 +289,7 @@ private fun FilterBar(filter: String, onChange: (String) -> Unit, onClose: () ->
         placeholder = stringResource(R.string.filter_hint),
         trailingIcon = {
             IconButton(onClick = onClose) {
-                Icon(Icons.Filled.Clear, contentDescription = stringResource(R.string.filter_clear))
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.filter_clear))
             }
         },
         // Headroom for the floating label, which rides the top border.

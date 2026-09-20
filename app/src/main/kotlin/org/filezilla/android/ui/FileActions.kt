@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
@@ -18,7 +19,6 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.automirrored.filled.NoteAdd
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -67,7 +67,12 @@ fun NewThingFab(
                     onExpandedChange(false)
                     onPick(NewThing.FILE)
                 }
-                DialItem(Icons.Filled.Storage, R.string.fab_new_server) {
+                // The app's own server artwork, which is what a server
+                // looks like everywhere else here -- the empty state, the
+                // pane header, the storage sheet. Icons.Storage is a
+                // database cylinder, and it was the only place in the app
+                // where a server was drawn as one.
+                DialItem(R.drawable.ic_tile_server, R.string.fab_new_server) {
                     onExpandedChange(false)
                     onPick(NewThing.SERVER)
                 }
@@ -95,6 +100,30 @@ private fun DialItem(
         containerColor = MaterialTheme.colorScheme.secondaryContainer,
         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
         icon = { Icon(icon, contentDescription = null) },
+        text = { Text(stringResource(label)) },
+    )
+}
+
+/** The same item, for the entries drawn from the app's own artwork. */
+@Composable
+private fun DialItem(
+    @androidx.annotation.DrawableRes icon: Int,
+    label: Int,
+    onClick: () -> Unit,
+) {
+    ExtendedFloatingActionButton(
+        onClick = onClick,
+        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        icon = {
+            Icon(
+                painter = androidx.compose.ui.res.painterResource(icon),
+                contentDescription = null,
+                // Unspecified, or the two-tone tile flattens to one colour.
+                tint = androidx.compose.ui.graphics.Color.Unspecified,
+                modifier = Modifier.size(24.dp),
+            )
+        },
         text = { Text(stringResource(label)) },
     )
 }

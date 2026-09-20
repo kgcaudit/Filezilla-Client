@@ -13,10 +13,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -354,21 +354,49 @@ private fun AppScreen(
                     actions = {
                         when (screen) {
                             Screen.QUEUE -> {
+                            // A broom, not a list. This removes the
+                            // finished rows, and a plain list icon read as
+                            // "show the list" -- on a screen that is
+                            // already the list -- for something that
+                            // cannot be undone.
                             IconButton(onClick = { model.clearCompleted() }) {
-                                Icon(Icons.AutoMirrored.Filled.List, contentDescription = stringResource(R.string.queue_clear_finished))
+                                Icon(
+                                    Icons.Filled.DeleteSweep,
+                                    contentDescription = stringResource(R.string.queue_clear_finished),
+                                )
                             }
+                            // The same arrow as a card's "resume", because
+                            // it is the same idea: make the transfers go.
+                            // It was SwapVert, which is Material's glyph for
+                            // sorting and has nothing to do with starting.
                             IconButton(onClick = { TransferService.start(context) }) {
-                                Icon(Icons.Filled.SwapVert, contentDescription = stringResource(R.string.queue_start))
+                                Icon(
+                                    Icons.Filled.PlayArrow,
+                                    contentDescription = stringResource(R.string.queue_start),
+                                )
                             }
+                            // A gear, because this opens the settings
+                            // sheet and nothing else. A ⋮ promises a menu
+                            // of choices, and pressing it produced a panel
+                            // with one switch in it -- so the button was
+                            // the third on this bar whose picture and job
+                            // did not match.
                             IconButton(onClick = { queueMenuOpen = true }) {
                                 Icon(
-                                    Icons.Filled.MoreVert,
+                                    Icons.Filled.Settings,
                                     contentDescription = stringResource(R.string.queue_settings),
                                 )
                             }
                         }
+                        // The same broom as above: one glyph for one verb,
+                        // wherever it is. These were both the list icon,
+                        // which meant the same picture stood for two
+                        // different things that were not lists.
                         Screen.LOG -> IconButton(onClick = { model.clearLog() }) {
-                            Icon(Icons.AutoMirrored.Filled.List, contentDescription = stringResource(R.string.log_clear))
+                            Icon(
+                                Icons.Filled.DeleteSweep,
+                                contentDescription = stringResource(R.string.log_clear),
+                            )
                         }
 
                             Screen.SITES, Screen.FILES -> Unit
