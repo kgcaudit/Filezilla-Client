@@ -9,7 +9,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -18,8 +17,6 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.SwapVert
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -30,7 +27,6 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -314,30 +310,6 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                                     contentDescription = stringResource(R.string.queue_settings),
                                 )
                             }
-                            DropdownMenu(
-                                expanded = queueMenuOpen,
-                                onDismissRequest = { queueMenuOpen = false },
-                            ) {
-                                DropdownMenuItem(
-                                    text = {
-                                        Column {
-                                            Text(stringResource(R.string.setting_wifi_only))
-                                            Text(
-                                                stringResource(R.string.setting_wifi_only_detail),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
-                                    },
-                                    trailingIcon = {
-                                        Switch(
-                                            checked = model.wifiOnly,
-                                            onCheckedChange = { model.applyWifiOnly(it) },
-                                        )
-                                    },
-                                    onClick = { model.applyWifiOnly(!model.wifiOnly) },
-                                )
-                            }
                         }
                         Screen.LOG -> IconButton(onClick = { model.clearLog() }) {
                             Icon(Icons.AutoMirrored.Filled.List, contentDescription = stringResource(R.string.log_clear))
@@ -459,6 +431,14 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
         )
     }
 
+
+    if (queueMenuOpen) {
+        QueueSettingsSheet(
+            wifiOnly = model.wifiOnly,
+            onWifiOnly = model::applyWifiOnly,
+            onDismiss = { queueMenuOpen = false },
+        )
+    }
 
     if (creatingDirectory) {
         OloPromptDialog(

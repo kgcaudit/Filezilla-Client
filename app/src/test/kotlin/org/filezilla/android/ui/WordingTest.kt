@@ -113,6 +113,10 @@ class WordingTest {
         val allowed = listOf(
             "action_cancel", "action_delete", "confirm_delete_detail", "filter_clear",
             "menu_filter", "new_folder_detail", "new_folder_title", "pane_no_source",
+            // The button that opens the transfer settings and the heading of
+            // the sheet it opens: one name for one place, said twice on
+            // purpose so the sheet answers the button.
+            "queue_settings",
             "prompt_name", "prompt_new_name", "prompt_rename_title", "props_unknown",
             "queue_speed_remaining", "rename_detail", "side_local", "sites_empty_detail",
             "title_log", "title_queue",

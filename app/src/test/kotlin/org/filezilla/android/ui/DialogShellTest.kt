@@ -96,3 +96,48 @@ class DialogShellTest {
         assertTrue("nothing raises these: $dead", dead.isEmpty())
     }
 }
+
+/**
+ * That every box you type into is the app's box.
+ *
+ * Material's outlined field stands 56dp tall with sixteen points of air
+ * above and below the text, which is a lot of frame around one short word --
+ * the site editor paid it nine times over. [OloTextField] is the same field
+ * with the padding brought in, and the point of having it is that nothing
+ * reaches past it: a screen written later gets the height everything else
+ * has without anybody remembering to ask for it.
+ *
+ * The three pickers are why this is worth a test rather than a convention.
+ * They were converted one pass after the text boxes were, so for a while the
+ * site editor showed six fields at one height and three at another, on one
+ * form, and nothing said a word about it.
+ */
+class TextFieldShellTest {
+
+    private val uiDir = File("src/main/kotlin/org/filezilla/android/ui")
+
+    @Test
+    fun `only the shared field builds on Material's`() {
+        val raw = uiDir.walkTopDown()
+            .filter { it.extension == "kt" && it.name != "OloTextField.kt" }
+            .filter { Regex("""\b(Outlined)?TextField\(""").containsMatchIn(it.readText()) }
+            .map { it.name }
+            .sorted()
+            .toList()
+
+        assertEquals(emptyList<String>(), raw)
+    }
+
+    /** And it is what the screens use, rather than sitting there unused. */
+    @Test
+    fun `the screens type through the shared field`() {
+        val users = uiDir.walkTopDown()
+            .filter { it.extension == "kt" && it.name != "OloTextField.kt" }
+            .filter { "OloTextField(" in it.readText() }
+            .map { it.name }
+            .sorted()
+            .toList()
+
+        assertEquals(listOf("BrowseScreen.kt", "Dialogs.kt", "SiteEditor.kt"), users)
+    }
+}

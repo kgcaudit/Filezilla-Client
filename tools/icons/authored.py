@@ -321,9 +321,13 @@ TILES = {
         (WHITE, rounded_rect(218, 336, 76, 76, 38)),
     ],
 
+    # Both lanes solid, unlike the file tiles. The reduced alpha there marks
+    # the part of a shape that sits behind -- a document's page under its
+    # lines. Here the two lanes are the two directions, and dimming one made
+    # the mark read as one arrow with a shadow.
     "ic_tile_transfers": [
         (WHITE, lane(-LANE_OFFSET, LANE_TRAVEL, scale=1.5)),
-        (GHOST_WHITE, lane(LANE_OFFSET, LANE_TRAVEL + 180.0, scale=1.5)),
+        (WHITE, lane(LANE_OFFSET, LANE_TRAVEL + 180.0, scale=1.5)),
     ],
 }
 

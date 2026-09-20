@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import org.filezilla.android.R
+import org.filezilla.android.ui.theme.tiles
 import org.filezilla.android.transfer.ActiveProgress
 import org.filezilla.android.transfer.isStalled
 import org.filezilla.android.transfer.secondsRemaining
@@ -62,7 +63,8 @@ fun QueueScreen(
         EmptyState(
             title = stringResource(R.string.queue_empty_title),
             detail = stringResource(R.string.queue_empty_detail),
-            icon = R.drawable.ic_flat_transfers,
+            icon = R.drawable.ic_tile_transfers,
+            colour = MaterialTheme.tiles.code,
             modifier = modifier,
         )
         return

@@ -29,6 +29,8 @@ import org.filezilla.android.ui.SiteEditor
 import org.filezilla.android.storage.DownloadConflict
 import org.filezilla.android.ui.BrowseOptions
 import org.filezilla.android.ui.SiteDraft
+import org.filezilla.android.ui.EmptyState
+import org.filezilla.android.ui.QueueSettings
 import org.filezilla.android.ui.DangerButton
 import org.filezilla.android.ui.FileKind
 import org.filezilla.android.ui.FileTile
@@ -405,6 +407,33 @@ class LayoutShotTest {
                 onDismiss = {},
                 onSave = {},
             )
+        }
+    }
+
+    /**
+     * The transfer list with nothing in it, and the one setting it has.
+     *
+     * Neither had ever been drawn here. The setting was a one-item dropdown
+     * menu pinned under the button that opened it, and the empty screen was
+     * the last icon in the app still wearing a white chip -- both of which
+     * the user found before this did.
+     */
+    @Test
+    fun `the empty queue`() {
+        shoot("queue-empty", height = 1200) {
+            EmptyState(
+                title = stringResource(R.string.queue_empty_title),
+                detail = stringResource(R.string.queue_empty_detail),
+                icon = R.drawable.ic_tile_transfers,
+                colour = org.filezilla.android.ui.theme.LightTiles.code,
+            )
+        }
+    }
+
+    @Test
+    fun `the queue settings`() {
+        shoot("queue-settings", height = 300) {
+            QueueSettings(wifiOnly = true, onWifiOnly = {})
         }
     }
 

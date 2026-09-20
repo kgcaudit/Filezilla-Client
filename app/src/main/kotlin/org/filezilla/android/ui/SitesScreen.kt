@@ -50,7 +50,7 @@ fun SitesScreen(
         EmptyState(
             title = stringResource(R.string.sites_empty_title),
             detail = stringResource(R.string.sites_empty_detail),
-            icon = R.drawable.ic_flat_server,
+            icon = R.drawable.ic_tile_server,
             modifier = modifier,
         )
     } else {

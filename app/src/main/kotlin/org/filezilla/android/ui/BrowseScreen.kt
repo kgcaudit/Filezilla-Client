@@ -31,7 +31,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -84,7 +83,7 @@ fun BrowseScreen(
         EmptyState(
             title = stringResource(R.string.browse_not_connected_title),
             detail = stringResource(R.string.browse_not_connected_detail),
-            icon = R.drawable.ic_flat_server,
+            icon = R.drawable.ic_tile_server,
             modifier = modifier,
         )
         return
@@ -122,7 +121,7 @@ fun BrowseScreen(
                 rows.isEmpty() && state.filter.isNotBlank() -> EmptyState(
                     title = stringResource(R.string.filter_none, state.filter),
                     detail = stringResource(R.string.filter_hint),
-            icon = R.drawable.ic_flat_search,
+            icon = R.drawable.ic_tile_search,
                 )
 
                 options.viewMode == ViewMode.GRID -> LazyVerticalGrid(
@@ -188,18 +187,18 @@ fun BrowseScreen(
 
 @Composable
 private fun FilterBar(filter: String, onChange: (String) -> Unit, onClose: () -> Unit) {
-    OutlinedTextField(
+    OloTextField(
         value = filter,
         onValueChange = onChange,
-        label = { Text(stringResource(R.string.menu_filter)) },
-        placeholder = { Text(stringResource(R.string.filter_hint)) },
-        singleLine = true,
+        label = stringResource(R.string.menu_filter),
+        placeholder = stringResource(R.string.filter_hint),
         trailingIcon = {
             IconButton(onClick = onClose) {
                 Icon(Icons.Filled.Clear, contentDescription = stringResource(R.string.filter_clear))
             }
         },
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+        // Headroom for the floating label, which rides the top border.
+        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 4.dp),
     )
 }
 

@@ -1,5 +1,6 @@
 package org.filezilla.android.ui
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,7 +16,6 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -86,32 +86,33 @@ fun SiteEditor(
             Column(
                 modifier = Modifier
                     .heightIn(max = 460.dp)
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(rememberScrollState())
+                    // A floating label rides on the top border, so the first
+                    // field needs headroom or the scroll container cuts it in
+                    // half -- which is what it was doing to "Name".
+                    .padding(top = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                OutlinedTextField(
+                OloTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text(stringResource(R.string.field_name)) },
+                    label = stringResource(R.string.field_name),
                     // Its own hint. Falling back to the host field's *label*
                     // put the word "호스트" in the name box, which read as the
                     // name field asking for a host.
-                    placeholder = { Text(host.ifBlank { stringResource(R.string.name_hint) }) },
-                    singleLine = true,
+                    placeholder = host.ifBlank { stringResource(R.string.name_hint) },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedTextField(
+                OloTextField(
                     value = host,
                     onValueChange = { host = it },
-                    label = { Text(stringResource(R.string.field_host)) },
-                    singleLine = true,
+                    label = stringResource(R.string.field_host),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedTextField(
+                OloTextField(
                     value = port,
                     onValueChange = { candidate -> port = candidate.filter { it.isDigit() }.take(5) },
-                    label = { Text(stringResource(R.string.field_port)) },
-                    singleLine = true,
+                    label = stringResource(R.string.field_port),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -146,36 +147,33 @@ fun SiteEditor(
                     Hint(stringResource(R.string.encoding_note))
                 }
 
-                OutlinedTextField(
+                OloTextField(
                     value = user,
                     onValueChange = { user = it },
-                    label = { Text(stringResource(R.string.field_user)) },
+                    label = stringResource(R.string.field_user),
                     // A hint, so the field is empty and ready to type into,
                     // while still saying what happens if it is left alone.
-                    placeholder = { Text(SiteDraft.ANONYMOUS_USER) },
-                    singleLine = true,
+                    placeholder = SiteDraft.ANONYMOUS_USER,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedTextField(
+                OloTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text(stringResource(R.string.field_password)) },
-                    placeholder = { Text(stringResource(R.string.password_hint)) },
-                    singleLine = true,
+                    label = stringResource(R.string.field_password),
+                    placeholder = stringResource(R.string.password_hint),
                     visualTransformation = PasswordVisualTransformation(),
                     isError = initial.passwordUnreadable,
                     supportingText = if (initial.passwordUnreadable) {
-                        { Text(stringResource(R.string.password_unreadable)) }
+                        stringResource(R.string.password_unreadable)
                     } else {
                         null
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedTextField(
+                OloTextField(
                     value = initialPath,
                     onValueChange = { initialPath = it },
-                    label = { Text(stringResource(R.string.field_initial_path)) },
-                    singleLine = true,
+                    label = stringResource(R.string.field_initial_path),
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -232,13 +230,18 @@ private fun <T> Picker(
     onSelect: (T) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val interactions = remember { MutableInteractionSource() }
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-        OutlinedTextField(
+        // The same box as every other field. It was Material's own, so the
+        // three pickers stood eight points taller than the six boxes around
+        // them -- one form, two heights.
+        OloTextField(
             value = selected,
             onValueChange = {},
             readOnly = true,
-            label = { Text(label) },
+            label = label,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+            interactions = interactions,
             modifier = Modifier
                 .fillMaxWidth()
                 .menuAnchor(MenuAnchorType.PrimaryNotEditable),

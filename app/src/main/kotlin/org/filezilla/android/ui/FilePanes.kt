@@ -420,7 +420,7 @@ private fun PaneBody(
             state.source is PaneSource.Empty -> EmptyState(
                 title = stringResource(R.string.pane_pick_title),
                 detail = stringResource(R.string.pane_pick_detail),
-                icon = R.drawable.ic_flat_server,
+                icon = R.drawable.ic_tile_server,
                 modifier = Modifier.fillMaxWidth(),
             )
 

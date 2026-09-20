@@ -180,6 +180,8 @@ TILES = {
     "079.신형 스마트폰": "ic_tile_phone",
     "095.메모리카드": "ic_tile_sdcard",
     "070.잠금,숨김": "ic_tile_locked",
+    # For the empty screen a filter leaves behind.
+    "025.검색": "ic_tile_search",
 }
 
 # The drawings whose subject is cut *out* of a dark shape rather than drawn

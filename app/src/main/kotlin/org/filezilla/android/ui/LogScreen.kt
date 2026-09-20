@@ -13,6 +13,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import org.filezilla.android.R
+import org.filezilla.android.ui.theme.tiles
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -32,7 +33,8 @@ fun LogScreen(lines: List<LogLine>, modifier: Modifier = Modifier) {
         EmptyState(
             title = stringResource(R.string.log_empty_title),
             detail = stringResource(R.string.log_empty_detail),
-            icon = R.drawable.ic_flat_log,
+            icon = R.drawable.ic_tile_document,
+            colour = MaterialTheme.tiles.document,
             modifier = modifier,
         )
         return

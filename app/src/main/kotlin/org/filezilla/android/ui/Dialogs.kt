@@ -3,12 +3,12 @@ package org.filezilla.android.ui
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -133,11 +133,11 @@ fun OloPromptDialog(
         detail = detail?.let { stringResource(it) },
         onDismiss = onDismiss,
         content = {
-            OutlinedTextField(
+            OloTextField(
                 value = text,
                 onValueChange = { text = it },
-                label = { Text(stringResource(label)) },
-                singleLine = true,
+                label = stringResource(label),
+                modifier = Modifier.fillMaxWidth(),
                 // The keyboard's own key finishes the job. Without this it
                 // says "next" and moves to nothing, so the only way to
                 // confirm a name is to put the keyboard away first.
