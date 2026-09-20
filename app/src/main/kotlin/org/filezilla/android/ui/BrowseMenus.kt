@@ -1,6 +1,7 @@
 package org.filezilla.android.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,8 +12,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.CheckCircleOutline
 import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.MoreVert
@@ -20,11 +22,9 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.automirrored.filled.ViewList
-import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -54,14 +54,12 @@ import org.filezilla.ftp.listing.DirectoryEntry
  */
 @Composable
 fun BrowseOverflow(
-    options: BrowseOptions,
     filterOpen: Boolean,
     onSelectMode: () -> Unit,
     onSelectAll: () -> Unit,
     onToggleFilter: () -> Unit,
     onViewOptions: () -> Unit,
     onRefresh: () -> Unit,
-    onOptions: (BrowseOptions) -> Unit,
     /** Null on a pane showing the phone, which makes folders with its own button. */
     onNewDirectory: (() -> Unit)? = null,
     /** Null on a pane showing the phone: "up" from there is the other pane. */
@@ -69,55 +67,64 @@ fun BrowseOverflow(
 ) {
     var open by remember { mutableStateOf(false) }
 
-    IconButton(onClick = { open = true }) {
-        Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.menu_more))
-    }
-    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-        onNewDirectory?.let { action ->
-            Item(R.string.new_folder_title, Icons.Filled.CreateNewFolder) {
-                open = false
-                action()
+    // The Box is what makes the menu come out of the button. A DropdownMenu
+    // anchors to its own parent layout node, and these two were siblings in
+    // the header row -- so the anchor was the row, which spans the screen,
+    // and a menu opened from a button on the right came out at the far left
+    // of the phone, under nothing.
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.menu_more))
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            onNewDirectory?.let { action ->
+                Item(R.string.new_folder_title, Icons.Filled.CreateNewFolder) {
+                    open = false
+                    action()
+                }
             }
-        }
-        onUpload?.let { action ->
-            Item(R.string.browse_upload, Icons.Filled.Upload) {
-                open = false
-                action()
+            onUpload?.let { action ->
+                Item(R.string.browse_upload, Icons.Filled.Upload) {
+                    open = false
+                    action()
+                }
             }
-        }
-        if (onNewDirectory != null || onUpload != null) HorizontalDivider()
-        Item(R.string.menu_select, Icons.Filled.Checklist) {
-            open = false
-            onSelectMode()
-        }
-        Item(R.string.menu_select_all, Icons.Filled.Checklist) {
-            open = false
-            onSelectAll()
-        }
-        HorizontalDivider()
-        Item(
-            if (filterOpen) R.string.filter_clear else R.string.menu_filter,
-            Icons.Filled.FilterList,
-        ) {
-            open = false
-            onToggleFilter()
-        }
-        Item(R.string.menu_view_options, Icons.Filled.Tune) {
-            open = false
-            onViewOptions()
-        }
-        // The two folder options that get toggled often enough to deserve
-        // being one tap rather than two; the rest live in view options.
-        CheckItem(R.string.option_folders_first, options.foldersFirst) {
-            onOptions(options.copy(foldersFirst = it))
-        }
-        CheckItem(R.string.option_show_hidden, options.showHidden) {
-            onOptions(options.copy(showHidden = it))
-        }
-        HorizontalDivider()
-        Item(R.string.browse_refresh, Icons.Filled.Refresh) {
-            open = false
-            onRefresh()
+            if (onNewDirectory != null || onUpload != null) HorizontalDivider()
+            // One picture per entry. These two were the same checklist icon,
+            // and the folder options below them were the same eye twice --
+            // so the column of icons told the reader nothing that the words
+            // beside it had not already said, and read as decoration.
+            Item(R.string.menu_select, Icons.Filled.CheckCircleOutline) {
+                open = false
+                onSelectMode()
+            }
+            Item(R.string.menu_select_all, Icons.Filled.DoneAll) {
+                open = false
+                onSelectAll()
+            }
+            HorizontalDivider()
+            Item(
+                if (filterOpen) R.string.filter_clear else R.string.menu_filter,
+                Icons.Filled.FilterList,
+            ) {
+                open = false
+                onToggleFilter()
+            }
+            // "Folders first" and "show hidden" used to sit here as two
+            // checkboxes as well as in view options. A checkbox inside a
+            // menu is neither a menu entry nor a setting, and having the
+            // same two settings in two places meant they could be read in
+            // two places and believed in neither. They live in view options,
+            // which is the line directly above.
+            Item(R.string.menu_view_options, Icons.Filled.Tune) {
+                open = false
+                onViewOptions()
+            }
+            HorizontalDivider()
+            Item(R.string.browse_refresh, Icons.Filled.Refresh) {
+                open = false
+                onRefresh()
+            }
         }
     }
 }
@@ -126,18 +133,17 @@ fun BrowseOverflow(
 private fun Item(labelRes: Int, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
     DropdownMenuItem(
         text = { Text(stringResource(labelRes)) },
-        leadingIcon = { Icon(icon, contentDescription = null) },
+        leadingIcon = {
+            Icon(
+                icon,
+                contentDescription = null,
+                // Material's default is onSurfaceVariant already, but the
+                // size is not: at 24dp against 14sp labels the icons were
+                // the heaviest thing in the menu and the words the lightest.
+                modifier = Modifier.size(20.dp),
+            )
+        },
         onClick = onClick,
-    )
-}
-
-@Composable
-private fun CheckItem(labelRes: Int, checked: Boolean, onChange: (Boolean) -> Unit) {
-    DropdownMenuItem(
-        text = { Text(stringResource(labelRes)) },
-        leadingIcon = { Icon(Icons.Filled.Visibility, contentDescription = null) },
-        trailingIcon = { Checkbox(checked = checked, onCheckedChange = null) },
-        onClick = { onChange(!checked) },
     )
 }
 
@@ -217,11 +223,11 @@ private fun Choice(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    FilterChip(
+    ChoiceChip(
+        label = stringResource(labelRes),
         selected = selected,
         onClick = onClick,
-        label = { Text(stringResource(labelRes)) },
-        leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
+        icon = icon,
     )
 }
 
@@ -232,13 +238,11 @@ private fun SortChoice(
     options: BrowseOptions,
     onApply: (BrowseOptions) -> Unit,
 ) {
-    FilterChip(
+    ChoiceChip(
+        label = stringResource(labelRes),
         selected = options.sortKey == key,
         onClick = { onApply(options.copy(sortKey = key)) },
-        label = { Text(stringResource(labelRes)) },
-        leadingIcon = {
-            Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = null, modifier = Modifier.size(18.dp))
-        },
+        icon = Icons.AutoMirrored.Filled.Sort,
     )
 }
 

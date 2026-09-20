@@ -267,4 +267,7 @@
     <string name="storage_free_of">%2$s 중 %1$s 사용 가능</string>
     <string name="storage_clear_pane">이 창 비우기</string>
     <string name="storage_manage_servers">서버 추가·편집</string>
+    <string name="chosen">선택됨</string>
+    <string name="action_share_selected">공유</string>
+    <string name="share_no_app">이 파일을 받을 수 있는 앱이 없습니다</string>
 </resources>

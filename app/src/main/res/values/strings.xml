@@ -270,4 +270,8 @@
     <string name="storage_free_of">%1$s free of %2$s</string>
     <string name="storage_clear_pane">Leave this pane empty</string>
     <string name="storage_manage_servers">Add or edit servers</string>
+    <!-- Read out for the mark on the option in force. -->
+    <string name="chosen">Chosen</string>
+    <string name="action_share_selected">Share</string>
+    <string name="share_no_app">No app on this phone accepts these files</string>
 </resources>

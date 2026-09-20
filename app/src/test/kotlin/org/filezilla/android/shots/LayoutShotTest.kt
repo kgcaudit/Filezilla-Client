@@ -46,6 +46,7 @@ import org.filezilla.android.ui.MainViewModel
 import org.filezilla.android.ui.PaneHeader
 import org.filezilla.android.ui.PaneId
 import org.filezilla.android.ui.PaneSource
+import org.filezilla.android.ui.SelectionBar
 import org.filezilla.android.ui.TransferStrip
 import org.filezilla.android.ui.TransferSummary
 import org.filezilla.android.ui.StoragePlaces
@@ -388,6 +389,40 @@ class LayoutShotTest {
         }
     }
 
+    /** The bar the share button was added to, in both its shapes. */
+    @Test
+    fun `the selection bar on the phone`() {
+        shoot("bar-selection-local", height = 160) {
+            SelectionBar(
+                count = 2,
+                canRename = false,
+                onCut = {},
+                onCopy = {},
+                onDelete = {},
+                onRename = {},
+                onClear = {},
+                onShare = {},
+                canShare = true,
+            )
+        }
+    }
+
+    @Test
+    fun `the selection bar on a server`() {
+        shoot("bar-selection-remote", height = 160) {
+            SelectionBar(
+                count = 2,
+                canRename = false,
+                onCut = {},
+                onCopy = {},
+                onDelete = {},
+                onRename = {},
+                onClear = {},
+                onDownload = {},
+            )
+        }
+    }
+
     @Test
     fun `the site editor`() {
         shootDialog("dialog-site-editor", height = 1600) {
@@ -648,6 +683,7 @@ class LayoutShotTest {
                 onTransfersQueued = {},
                 onDownloadSelected = {},
                 onOpenLocalFile = {},
+                onShareLocal = {},
                 onNewDirectory = {},
                 onUpload = {},
                 onOpenScreen = {},

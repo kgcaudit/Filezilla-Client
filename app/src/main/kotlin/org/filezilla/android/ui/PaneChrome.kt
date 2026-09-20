@@ -117,14 +117,12 @@ fun PaneHeader(
                     )
                 }
                 BrowseOverflow(
-                    options = options,
                     filterOpen = state.filterOpen,
                     onSelectMode = here(model::toggleSelectionMode),
                     onSelectAll = here(model::selectAll),
                     onToggleFilter = here(model::toggleFilter),
                     onViewOptions = here { viewOptionsOpen = true },
                     onRefresh = here { model.open(id) },
-                    onOptions = model::applyOptions,
                     // Making a folder and sending a file up belong to the
                     // server pane alone: on the phone the round button
                     // makes folders, and "up" is what the other pane is.

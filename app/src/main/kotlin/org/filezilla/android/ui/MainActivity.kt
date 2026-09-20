@@ -49,6 +49,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import org.filezilla.android.R
 import org.filezilla.android.files.OpenFile
+import org.filezilla.android.files.ShareFiles
 import org.filezilla.android.service.TransferService
 import org.filezilla.android.storage.ConflictChoice
 import org.filezilla.android.ui.theme.OloTheme
@@ -431,6 +432,20 @@ private fun AppScreen(
                     // looks like the app ignoring it.
                     if (!opened) {
                         scope.launch { snackbars.showSnackbar(context.getString(R.string.open_no_app)) }
+                    }
+                },
+                onShareLocal = { paths ->
+                    val intent = ShareFiles.intentFor(context, paths.map { java.io.File(it) })
+                    val chooser = intent?.let {
+                        Intent.createChooser(it, context.getString(R.string.action_share_selected))
+                    }
+                    val shared = chooser != null && runCatching { context.startActivity(chooser) }
+                        .isSuccess
+                    // Same reason as opening a file: a phone with nothing
+                    // that accepts these is a fair state, and a button that
+                    // does nothing looks broken.
+                    if (!shared) {
+                        scope.launch { snackbars.showSnackbar(context.getString(R.string.share_no_app)) }
                     }
                 },
                 onDownloadSelected = {

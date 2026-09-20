@@ -39,7 +39,12 @@ import androidx.core.view.WindowCompat
  * cool grey looks like a mistake rather than a choice -- so the neutrals are
  * warm now too, an ivory rather than a blue-grey.
  */
-private val Clay = Color(0xFFC5613F)
+// Deep enough that white reads on it at WCAG AA. The first clay was
+// #C5613F, which puts white at 4.07:1 -- under the bar for the FAB's icon,
+// for the tab indicator's label, and for the chosen option chip that made
+// this worth measuring. A five percent darkening no eye will notice fixes
+// all three; ThemeContrastTest holds it there.
+private val Clay = Color(0xFFB95B3B)
 private val ClayLight = Color(0xFFE8A183)
 private val Stone = Color(0xFF6E5C50)
 private val StoneLight = Color(0xFFD6C3B4)

@@ -112,6 +112,14 @@ class WordingTest {
         // three questions the panes and the old browser both ask.
         val allowed = listOf(
             "action_cancel", "action_delete", "confirm_delete_detail", "filter_clear",
+            // The share button's name and the title of the sheet it opens:
+            // the sheet answers the button, same as queue_settings below.
+            "action_share_selected",
+            // The mark on whatever option is in force, read out wherever one
+            // is shown -- a chip in view options, a row in a picker's list.
+            // One word, one meaning, and it has to be the same word or the
+            // two controls would claim to mean different things.
+            "chosen",
             "menu_filter", "new_folder_detail", "new_folder_title", "pane_no_source",
             // The button that opens the transfer settings and the heading of
             // the sheet it opens: one name for one place, said twice on

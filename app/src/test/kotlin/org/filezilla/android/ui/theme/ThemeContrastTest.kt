@@ -53,6 +53,17 @@ class ThemeContrastTest {
         assertReadable("dark app bar icons", DarkColors.onSurfaceVariant, DarkColors.surface)
     }
 
+    /**
+     * The brand colour with white on it: the round button's icon, the tab
+     * indicator's label, and the chosen option chip. Never measured before,
+     * and it was failing -- 4.07:1 -- everywhere it was used.
+     */
+    @Test
+    fun `white on the brand colour reads`() {
+        assertReadable("light on-primary", LightColors.onPrimary, LightColors.primary)
+        assertReadable("dark on-primary", DarkColors.onPrimary, DarkColors.primary)
+    }
+
     @Test
     fun `the selection bar reads on its tint`() {
         assertReadable(

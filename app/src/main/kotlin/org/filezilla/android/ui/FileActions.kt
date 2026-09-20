@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.automirrored.filled.NoteAdd
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
@@ -117,6 +118,16 @@ fun SelectionBar(
     canRename: Boolean,
     /** On a server pane, fetching the picked rows straight to the phone. */
     onDownload: (() -> Unit)? = null,
+    /**
+     * On a phone pane, handing the picked files to another app.
+     *
+     * Null on a server pane: those files are not on this phone, and sharing
+     * one would mean downloading it first -- a transfer the user should
+     * start knowingly, not discover because a share sheet hung.
+     */
+    onShare: (() -> Unit)? = null,
+    /** Folders cannot be handed over, so a selection of only folders cannot. */
+    canShare: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -144,6 +155,14 @@ fun SelectionBar(
                     Icon(
                         Icons.Filled.Download,
                         contentDescription = stringResource(R.string.action_download_selected),
+                    )
+                }
+            }
+            onShare?.let { share ->
+                IconButton(onClick = share, enabled = canShare) {
+                    Icon(
+                        Icons.Filled.Share,
+                        contentDescription = stringResource(R.string.action_share_selected),
                     )
                 }
             }

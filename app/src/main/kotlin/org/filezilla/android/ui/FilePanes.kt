@@ -56,6 +56,8 @@ fun FilePanes(
     onTransfersQueued: (Int) -> Unit,
     onDownloadSelected: () -> Unit,
     onOpenLocalFile: (String) -> Unit,
+    /** Hands the given full paths, all on this phone, to another app. */
+    onShareLocal: (List<String>) -> Unit,
     onNewDirectory: () -> Unit,
     onUpload: () -> Unit,
     onOpenScreen: (Screen) -> Unit,
@@ -173,9 +175,20 @@ fun FilePanes(
             // is acted on where it was made, and swiping does not carry the
             // bar to a pane the selection is not in.
             if (state.selecting && state.selection.isNotEmpty()) {
+                // Folders are dropped: nothing can be handed a folder through
+                // a share sheet, so picking one alongside six photos shares
+                // the six rather than refusing the lot.
+                val sharable = state.entries
+                    .filter { it.name in state.selection && !it.isDirectory }
+                    .map { FilePath.child(state.path, it.name) }
                 SelectionBar(
                     count = state.selection.size,
                     canRename = state.selection.size == 1,
+                    // Only on the phone's side. The rows on a server pane are
+                    // not files on this device, and sharing one would mean
+                    // downloading it first.
+                    onShare = if (state.isLocal) ({ onShareLocal(sharable) }) else null,
+                    canShare = sharable.isNotEmpty(),
                     onCut = { model.cutSelection(active) },
                     onCopy = { model.copySelection(active) },
                     onDelete = { confirmingDelete = true },

@@ -331,46 +331,52 @@ private fun EntryRow(
                     )
                 }
             }
-            IconButton(onClick = { menuOpen = true }) {
-                Icon(
-                    Icons.Filled.MoreVert,
-                    contentDescription = stringResource(R.string.browse_more, entry.name),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                // A file has the download button beside it; a folder has
-                // nowhere else to be asked for on its own.
-                if (entry.isDirectory && !isLocal) {
+            // The Box is the anchor. Without it the menu hangs off the row
+            // that contains the button, which is the full width of the
+            // screen, and a menu opened from the right edge appears at the
+            // left one.
+            Box {
+                IconButton(onClick = { menuOpen = true }) {
+                    Icon(
+                        Icons.Filled.MoreVert,
+                        contentDescription = stringResource(R.string.browse_more, entry.name),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    // A file has the download button beside it; a folder has
+                    // nowhere else to be asked for on its own.
+                    if (entry.isDirectory && !isLocal) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.browse_download_folder)) },
+                            onClick = {
+                                menuOpen = false
+                                actions.onDownload(entry)
+                            },
+                        )
+                    }
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.browse_download_folder)) },
+                        text = { Text(stringResource(R.string.menu_properties)) },
                         onClick = {
                             menuOpen = false
-                            actions.onDownload(entry)
+                            actions.onProperties(entry)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.action_rename)) },
+                        onClick = {
+                            menuOpen = false
+                            onRename()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.action_delete)) },
+                        onClick = {
+                            menuOpen = false
+                            onDelete()
                         },
                     )
                 }
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.menu_properties)) },
-                    onClick = {
-                        menuOpen = false
-                        actions.onProperties(entry)
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.action_rename)) },
-                    onClick = {
-                        menuOpen = false
-                        onRename()
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.action_delete)) },
-                    onClick = {
-                        menuOpen = false
-                        onDelete()
-                    },
-                )
             }
         }
     }
