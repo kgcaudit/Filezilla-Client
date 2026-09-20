@@ -63,13 +63,10 @@
     <string name="browse_not_connected_title">연결되지 않음</string>
     <string name="browse_not_connected_detail">서버 탭에서 서버를 선택하면 파일을 볼 수 있습니다.</string>
     <string name="browse_refresh">목록 새로고침</string>
-    <string name="browse_destination">저장 위치: %1$s</string>
-    <string name="browse_no_destination">저장 폴더가 아직 지정되지 않았습니다</string>
     <string name="browse_download">%1$s 다운로드</string>
     <string name="browse_more">%1$s 추가 작업</string>
     <string name="browse_new_directory">새 디렉터리</string>
     <string name="browse_upload">파일 업로드</string>
-    <string name="browse_choose_folder">저장 폴더 선택</string>
     <string name="menu_select">선택</string>
     <string name="menu_select_all">모두 선택</string>
     <string name="menu_select_none">선택 해제</string>
@@ -233,6 +230,10 @@
     <string name="confirm_delete_one">\u0022%1$s\u0022을(를) 삭제할까요?</string>
     <string name="paste_no_server_copy">FTP는 같은 서버 안에서 복사할 수 없습니다. 잘라내거나, 내 파일로 붙여넣으세요.</string>
     <string name="paste_move_here">%1$d개를 여기로 옮기기</string>
+    <string name="download_needs_local_pane">다운로드는 반대쪽 창으로 갑니다. 그 창을 이 휴대폰의 폴더로 지정하세요.</string>
+    <string name="download_point_other_pane">내 파일로</string>
+    <string name="download_needs_storage">아직 저장소를 읽을 수 없습니다</string>
+    <string name="storage_grant_short">허용</string>
     <string name="fail_too_much_to_delete">한 번에 지우기엔 너무 많습니다</string>
     <string name="fail_too_much_to_delete_advice">아무것도 삭제되지 않았습니다. 폴더를 열어 나누어 삭제하세요.</string>
     <string name="paste_between_servers">FTP에서는 서버끼리 복사할 수 없습니다</string>

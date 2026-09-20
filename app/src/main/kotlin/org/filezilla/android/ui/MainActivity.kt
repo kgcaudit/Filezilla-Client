@@ -28,6 +28,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
@@ -90,11 +91,6 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
     val transfers by model.transfers.collectAsState()
     val logLines by model.log.collectAsState()
     val active by model.active.collectAsState()
-
-    // Remembers which file the user tapped while there was still no download
-    // folder, so choosing one finishes the job instead of making them tap the
-    // file again.
-    var pendingDownload by remember { mutableStateOf<org.filezilla.ftp.listing.DirectoryEntry?>(null) }
 
     // Back does the nearest thing first and leaves last; see [backActionFor].
     // It used to do only the last one, so back from six folders deep closed
@@ -199,23 +195,6 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
         ActivityResultContracts.RequestPermission(),
     ) { /* The transfer runs either way; without it the progress is just invisible. */ }
 
-    val folderPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocumentTree(),
-    ) { tree: Uri? ->
-        if (tree == null) return@rememberLauncherForActivityResult
-        model.chooseDownloadFolder(tree)
-        pendingDownload?.let { entry ->
-            pendingDownload = null
-            // The same two cases as startDownload, which cannot be called from
-            // here: it is declared below, because it is what launches this
-            // picker when there is no folder yet.
-            model.enqueueEntry(entry) { plan ->
-                if (plan.files.isNotEmpty()) TransferService.start(context)
-                scope.launch { snackbars.showSnackbar(queuedEntryMessage(entry, plan)) }
-            }
-        }
-    }
-
     val uploadPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { source: Uri? ->
@@ -234,21 +213,55 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
         }
     }
 
+    /**
+     * Says why a download cannot start, and offers the tap that fixes it.
+     *
+     * Refusing rather than quietly using Downloads is the decision this
+     * design rests on: a file that lands somewhere the user is not looking is
+     * how "where did it go" happens.
+     */
+    fun refuseDownload(why: Destination) {
+        val from = model.activePane
+        scope.launch {
+            val message = when (why) {
+                Destination.NoStorageAccess -> context.getString(R.string.download_needs_storage)
+                else -> context.getString(R.string.download_needs_local_pane)
+            }
+            val action = when (why) {
+                Destination.NoStorageAccess -> context.getString(R.string.storage_grant_short)
+                else -> context.getString(R.string.download_point_other_pane)
+            }
+            val pressed = snackbars.showSnackbar(
+                message = message,
+                actionLabel = action,
+                duration = SnackbarDuration.Long,
+            )
+            if (pressed == SnackbarResult.ActionPerformed) {
+                if (why == Destination.NoStorageAccess) {
+                    requestStorageAccess()
+                } else {
+                    // The pane the download would have gone to, pointed at
+                    // the phone. One tap, and where it goes is then on screen.
+                    model.showLocal(model.facing(from))
+                }
+            }
+        }
+    }
+
     fun startDownload(entry: org.filezilla.ftp.listing.DirectoryEntry) {
+        val destination = model.downloadDestination()
+        if (destination !is Destination.Folder) {
+            refuseDownload(destination)
+            return
+        }
         requestNotifications()
         // A file and a folder take the same path on purpose. A file used to
         // have one of its own, and it was the one that never looked in the
         // destination folder first -- so downloading the same file twice
         // asked nothing and quietly saved a second numbered copy.
-        val queued = model.enqueueEntry(entry) { plan ->
+        model.enqueueEntry(entry) { plan ->
             if (plan.files.isNotEmpty()) TransferService.start(context)
             scope.launch { snackbars.showSnackbar(queuedEntryMessage(entry, plan)) }
-        }
-        if (!queued) {
-            // Nowhere to put it yet: ask first, rather than spending the
-            // user's data on a file with no destination.
-            pendingDownload = entry
-            folderPicker.launch(null)
         }
     }
 
@@ -374,13 +387,11 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
             Screen.FILES -> FilePanes(
                 model = model,
                 options = model.options,
-                downloadFolderName = model.downloadFolderName,
                 onNewDirectory = { creatingDirectory = true },
                 onUpload = {
                     requestNotifications()
                     uploadPicker.launch(arrayOf("*/*"))
                 },
-                onChooseFolder = { folderPicker.launch(null) },
                 onOpenScreen = { screen = it },
                 onOpenLog = { screen = Screen.LOG },
                 onGrant = ::requestStorageAccess,
@@ -399,12 +410,16 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
                     }
                 },
                 onDownloadSelected = {
-                    requestNotifications()
-                    val queued = model.enqueueSelected { plan ->
-                        if (plan.files.isNotEmpty()) TransferService.start(context)
-                        scope.launch { snackbars.showSnackbar(queuedPlanMessage(plan)) }
+                    val destination = model.downloadDestination()
+                    if (destination !is Destination.Folder) {
+                        refuseDownload(destination)
+                    } else {
+                        requestNotifications()
+                        model.enqueueSelected { plan ->
+                            if (plan.files.isNotEmpty()) TransferService.start(context)
+                            scope.launch { snackbars.showSnackbar(queuedPlanMessage(plan)) }
+                        }
                     }
-                    if (!queued) folderPicker.launch(null)
                 },
                 onTransfersQueued = { count ->
                     TransferService.start(context)

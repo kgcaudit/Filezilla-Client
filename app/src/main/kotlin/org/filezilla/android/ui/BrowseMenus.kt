@@ -64,7 +64,6 @@ fun BrowseOverflow(
     onSelectAll: () -> Unit,
     onToggleFilter: () -> Unit,
     onViewOptions: () -> Unit,
-    onChooseFolder: () -> Unit,
     onRefresh: () -> Unit,
     onOptions: (BrowseOptions) -> Unit,
     /** Null on a pane showing the phone, which makes folders with its own button. */
@@ -120,10 +119,6 @@ fun BrowseOverflow(
             onOptions(options.copy(showHidden = it))
         }
         HorizontalDivider()
-        Item(R.string.browse_choose_folder, Icons.Filled.Folder) {
-            open = false
-            onChooseFolder()
-        }
         Item(R.string.browse_refresh, Icons.Filled.Refresh) {
             open = false
             onRefresh()

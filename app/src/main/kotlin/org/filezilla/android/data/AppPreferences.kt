@@ -1,7 +1,6 @@
 package org.filezilla.android.data
 
 import android.content.Context
-import android.net.Uri
 import org.filezilla.android.transfer.NetworkPolicy
 import org.filezilla.android.ui.BrowseOptions
 import org.filezilla.android.ui.SortKey
@@ -10,17 +9,13 @@ import org.filezilla.android.ui.ViewMode
 /**
  * The handful of settings that are not worth a database table.
  *
- * The download folder is the one that matters: it is a Storage Access
- * Framework grant, and it has to outlive the activity that asked for it or a
- * transfer finishing tomorrow would have nowhere to put its file.
+ * Nothing about where downloads land is here any more: that is the other
+ * pane, which says where it is itself. It was a Storage Access Framework
+ * grant remembered across runs, and a folder nobody could see.
  */
 class AppPreferences(context: Context) {
 
     private val prefs = context.getSharedPreferences("filezilla", Context.MODE_PRIVATE)
-
-    var downloadFolder: Uri?
-        get() = prefs.getString(KEY_DOWNLOAD_FOLDER, null)?.let(Uri::parse)
-        set(value) = prefs.edit().putString(KEY_DOWNLOAD_FOLDER, value?.toString()).apply()
 
     /**
      * Whether transfers are held back for an unmetered connection.

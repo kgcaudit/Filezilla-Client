@@ -53,10 +53,8 @@ fun PaneHeader(
     model: MainViewModel,
     options: BrowseOptions,
     rows: List<DirectoryEntry>,
-    downloadFolderName: String?,
     onNewDirectory: () -> Unit,
     onUpload: () -> Unit,
-    onChooseFolder: () -> Unit,
     onGrant: () -> Unit,
     onOpenScreen: (Screen) -> Unit,
 ) {
@@ -96,7 +94,7 @@ fun PaneHeader(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        paneSummary(rows, downloadFolderName, state.isLocal),
+                        paneSummary(rows),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -122,7 +120,6 @@ fun PaneHeader(
                         onSelectAll = here(model::selectAll),
                         onToggleFilter = here(model::toggleFilter),
                         onViewOptions = here { viewOptionsOpen = true },
-                        onChooseFolder = here(onChooseFolder),
                         onRefresh = here { model.open(id) },
                         onOptions = model::applyOptions,
                         // Making a folder and sending a file up belong to the
@@ -171,23 +168,19 @@ private fun paneTitle(source: PaneSource): String = when (source) {
 }
 
 /**
- * The line under the title: how much is in this folder, and for a local pane
- * where a download would land -- the two things worth knowing before touching
- * anything. The destination belongs to the phone's side only; saying it under
- * a server's name suggested the server was where downloads went.
+ * The line under the title: how much is in this folder.
+ *
+ * It used to carry where a download would land as well, from back when that
+ * was a folder chosen once and never seen again. A download goes to the other
+ * pane now, and the other pane says where it is itself -- in its own header,
+ * a swipe away -- so repeating it here was a second copy of something already
+ * on screen, and for most of this app's life it read "no folder chosen yet"
+ * while transfers were running.
  */
 @Composable
-private fun paneSummary(
-    rows: List<DirectoryEntry>,
-    downloadFolderName: String?,
-    isLocal: Boolean,
-): String {
+private fun paneSummary(rows: List<DirectoryEntry>): String {
     val folders = rows.count { it.isDirectory }
-    val counts = stringResource(R.string.listing_summary, folders, rows.size - folders)
-    if (!isLocal) return counts
-    val destination = downloadFolderName?.let { stringResource(R.string.browse_destination, it) }
-        ?: stringResource(R.string.browse_no_destination)
-    return "$counts  ·  $destination"
+    return stringResource(R.string.listing_summary, folders, rows.size - folders)
 }
 
 /**

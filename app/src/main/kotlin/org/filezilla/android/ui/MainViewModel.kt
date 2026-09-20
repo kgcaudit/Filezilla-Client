@@ -222,12 +222,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun transfersAllowedNow(): Boolean = graph.networkGate.currentlyAllowed()
 
-    /** Set once the user has picked a folder for downloads to land in. */
-    var downloadFolder by mutableStateOf(graph.preferences.downloadFolder)
-        private set
+    /**
+     * Where a download from [from] would land; see [destinationFor].
+     *
+     * The other pane, always. What this replaces was a folder chosen once
+     * through the system picker and then never seen again -- so a transfer
+     * could be running while the header said no folder had been chosen, and
+     * both were true.
+     */
+    fun downloadDestination(from: PaneId = activePane): Destination =
+        destinationFor(pane(facing(from)), storageGranted)
 
-    val downloadFolderName: String?
-        get() = downloadFolder?.let { graph.storage.displayNameOfTree(it) }
+    /** The pane that is not this one. There are two, and that is the point. */
+    fun facing(id: PaneId): PaneId = PaneId.entries.first { it != id }
 
     // ------------------------------------------------------- pane navigation
 
@@ -1289,7 +1296,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun enqueuePicks(picks: List<DirectoryEntry>, onQueued: (DownloadPlan) -> Unit): Boolean {
         val site = browse.site ?: return false
-        val folder = downloadFolder ?: return false
+        val destination = downloadDestination() as? Destination.Folder ?: return false
+        // A file:// tree, which is what a paste has always used. The storage
+        // layer reads both kinds, so a transfer queued before this change
+        // still finds the folder it was given.
+        val folder = Uri.fromFile(java.io.File(destination.path))
         if (picks.isEmpty()) {
             onQueued(DownloadPlan())
             return true
@@ -1519,12 +1530,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // -------------------------------------------------------------- transfers
-
-    fun chooseDownloadFolder(tree: Uri) {
-        graph.storage.persistTreePermission(tree)
-        graph.preferences.downloadFolder = tree
-        downloadFolder = tree
-    }
 
     /**
      * Sends a document the system picker returned.

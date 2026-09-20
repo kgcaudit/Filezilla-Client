@@ -61,7 +61,6 @@ import org.filezilla.android.files.FilePath
 fun FilePanes(
     model: MainViewModel,
     options: BrowseOptions,
-    downloadFolderName: String?,
     onOpenLog: () -> Unit,
     onGrant: () -> Unit,
     onPickSite: () -> Unit,
@@ -72,7 +71,6 @@ fun FilePanes(
     onOpenLocalFile: (String) -> Unit,
     onNewDirectory: () -> Unit,
     onUpload: () -> Unit,
-    onChooseFolder: () -> Unit,
     onOpenScreen: (Screen) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -161,15 +159,13 @@ fun FilePanes(
                                 id = id,
                                 model = model,
                                 options = options,
-                                downloadFolderName = downloadFolderName,
-                                onOpenLog = onOpenLog,
+                                                    onOpenLog = onOpenLog,
                                 onGrant = onGrant,
                                 onPickSite = onPickSite,
                                 onDownload = onDownload,
                                 onOpenLocalFile = onOpenLocalFile,
                                 onNewDirectory = onNewDirectory,
                                 onUpload = onUpload,
-                                onChooseFolder = onChooseFolder,
                                 onOpenScreen = onOpenScreen,
                             )
                         }
@@ -182,15 +178,13 @@ fun FilePanes(
                         id = id,
                         model = model,
                         options = options,
-                        downloadFolderName = downloadFolderName,
-                        onOpenLog = onOpenLog,
+                                    onOpenLog = onOpenLog,
                         onGrant = onGrant,
                         onPickSite = onPickSite,
                         onDownload = onDownload,
                         onOpenLocalFile = onOpenLocalFile,
                         onNewDirectory = onNewDirectory,
                         onUpload = onUpload,
-                        onChooseFolder = onChooseFolder,
                         onOpenScreen = onOpenScreen,
                     )
                 }
@@ -376,7 +370,6 @@ private fun PaneBody(
     id: PaneId,
     model: MainViewModel,
     options: BrowseOptions,
-    downloadFolderName: String?,
     onOpenLog: () -> Unit,
     onGrant: () -> Unit,
     onPickSite: () -> Unit,
@@ -384,7 +377,6 @@ private fun PaneBody(
     onOpenLocalFile: (String) -> Unit,
     onNewDirectory: () -> Unit,
     onUpload: () -> Unit,
-    onChooseFolder: () -> Unit,
     onOpenScreen: (Screen) -> Unit,
 ) {
     val state = model.pane(id)
@@ -404,10 +396,8 @@ private fun PaneBody(
             model = model,
             options = options,
             rows = rows,
-            downloadFolderName = downloadFolderName,
             onNewDirectory = onNewDirectory,
             onUpload = onUpload,
-            onChooseFolder = onChooseFolder,
             onGrant = onGrant,
             onOpenScreen = onOpenScreen,
         )

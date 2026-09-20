@@ -64,13 +64,10 @@
     <string name="browse_not_connected_title">Not connected</string>
     <string name="browse_not_connected_detail">Pick a server on the Servers tab to browse it.</string>
     <string name="browse_refresh">Refresh listing</string>
-    <string name="browse_destination">Saving to %1$s</string>
-    <string name="browse_no_destination">No download folder chosen yet</string>
     <string name="browse_download">Download %1$s</string>
     <string name="browse_more">More actions for %1$s</string>
     <string name="browse_new_directory">New directory</string>
     <string name="browse_upload">Upload a file</string>
-    <string name="browse_choose_folder">Choose the download folder</string>
     <string name="menu_select">Select</string>
     <string name="menu_select_all">Select all</string>
     <string name="menu_select_none">Clear selection</string>
@@ -235,6 +232,10 @@
     <string name="confirm_delete_one">Delete \u0022%1$s\u0022?</string>
     <string name="paste_no_server_copy">FTP cannot copy within one server. Cut instead, or paste into My files.</string>
     <string name="paste_move_here">Move %1$d item(s) here</string>
+    <string name="download_needs_local_pane">Downloads go to the other pane. Point it at a folder on this phone.</string>
+    <string name="download_point_other_pane">Use my files</string>
+    <string name="download_needs_storage">This app cannot read storage yet</string>
+    <string name="storage_grant_short">Allow</string>
     <string name="fail_too_much_to_delete">Too much to delete at once</string>
     <string name="fail_too_much_to_delete_advice">Nothing was removed. Open the folder and delete it in parts.</string>
     <string name="paste_between_servers">Copying between two servers is not possible over FTP</string>

@@ -115,10 +115,8 @@ class LayoutShotTest {
                 model = model,
                 options = model.options,
                 rows = emptyList(),
-                downloadFolderName = "Download",
                 onNewDirectory = {},
                 onUpload = {},
-                onChooseFolder = {},
                 onGrant = {},
                 onOpenScreen = {},
             )
@@ -142,10 +140,8 @@ class LayoutShotTest {
                 model = model,
                 options = model.options,
                 rows = rows,
-                downloadFolderName = "Download",
                 onNewDirectory = {},
                 onUpload = {},
-                onChooseFolder = {},
                 onGrant = {},
                 onOpenScreen = {},
             )
@@ -320,10 +316,8 @@ class LayoutShotTest {
                 model = model,
                 options = model.options,
                 rows = rows,
-                downloadFolderName = "Download",
                 onNewDirectory = {},
                 onUpload = {},
-                onChooseFolder = {},
                 onGrant = {},
                 onOpenScreen = {},
             )
@@ -359,7 +353,6 @@ class LayoutShotTest {
             FilePanes(
                 model = model,
                 options = model.options,
-                downloadFolderName = "Download",
                 onOpenLog = {},
                 onGrant = {},
                 onPickSite = {},
@@ -370,7 +363,6 @@ class LayoutShotTest {
                 onOpenLocalFile = {},
                 onNewDirectory = {},
                 onUpload = {},
-                onChooseFolder = {},
                 onOpenScreen = {},
             )
         }
