@@ -17,7 +17,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.filezilla.android.R
+import org.filezilla.android.ui.FileKind
+import org.filezilla.android.ui.FileTile
 import org.filezilla.android.ui.FlatIcon
+import org.filezilla.android.ui.colourFor
 import androidx.test.core.app.ApplicationProvider
 import org.filezilla.android.data.SiteEntity
 import org.filezilla.android.ui.BrowseScreen
@@ -128,10 +131,14 @@ class LayoutShotTest {
         val model = MainViewModel(application)
         val rows = listOf(
             entry("Camera", directory = true),
-            entry("Invoices", directory = true),
-            entry("holiday-2024.jpg", size = 3_400_000),
-            entry("meeting-notes.md", size = 4_120),
             entry("season-01.mkv", size = 1_930_000_000),
+            entry("season-01.srt", size = 84_200),
+            entry("holiday-2024.jpg", size = 3_400_000),
+            entry("icon-pack.zip", size = 2_900_000),
+            entry("olo-explorer.apk", size = 16_900_000),
+            entry("track01.flac", size = 31_000_000),
+            entry("MainViewModel.kt", size = 61_000),
+            entry("README", size = 900),
         )
         shoot("pane-of-files") {
             PaneHeader(
@@ -185,6 +192,94 @@ class LayoutShotTest {
         val out = File("build/shots").apply { mkdirs() }.resolve("whole-screen.png")
         out.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         controller.close()
+    }
+
+    /** Every tile, at the size a row shows it, so the set can be compared. */
+    @Test
+    fun `the file tiles`() {
+        shoot("tiles", height = 520) {
+            for (row in FileKind.entries.toList().chunked(5)) {
+                androidx.compose.foundation.layout.Row(modifier = Modifier.fillMaxWidth()) {
+                    for (kind in row) {
+                        androidx.compose.foundation.layout.Column(
+                            horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                            modifier = Modifier.weight(1f).padding(14.dp),
+                        ) {
+                            FileTile(
+                                kind = kind,
+                                colour = colourFor(kind),
+                                contentDescription = null,
+                                size = 56.dp,
+                                cornerRadius = 16.dp,
+                            )
+                            androidx.compose.material3.Text(
+                                kind.name.lowercase(),
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(top = 6.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * What a dialog is made of, drawn from the same three theme values a real
+     * one reads: the raised surface, the corner, and the type scale.
+     *
+     * A real AlertDialog draws in a window of its own, which nothing that
+     * renders this screen can capture -- so this is those three values in the
+     * shape Material puts them in. It was lavender, because the theme never
+     * set the surface a dialog sits on and Material filled it from its own
+     * baseline palette.
+     */
+    @Test
+    fun `a dialog`() {
+        shoot("dialog", height = 640) { DialogFace() }
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-night-xhdpi")
+    fun `a dialog at night`() {
+        shoot("dialog-night", height = 640) { DialogFace() }
+    }
+
+    @Composable
+    private fun DialogFace() {
+        val scheme = androidx.compose.material3.MaterialTheme.colorScheme
+        val type = androidx.compose.material3.MaterialTheme.typography
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier.fillMaxWidth().padding(24.dp),
+        ) {
+            androidx.compose.material3.Surface(
+                color = scheme.surfaceContainerHigh,
+                contentColor = scheme.onSurface,
+                shape = androidx.compose.material3.MaterialTheme.shapes.extraLarge,
+                tonalElevation = 6.dp,
+            ) {
+                androidx.compose.foundation.layout.Column(modifier = Modifier.padding(24.dp)) {
+                    androidx.compose.material3.Text("1개 항목을 삭제할까요?", style = type.headlineSmall)
+                    androidx.compose.material3.Text(
+                        "폴더는 안에 든 것까지 함께 삭제됩니다. 되돌릴 수 없습니다.",
+                        style = type.bodyMedium,
+                        color = scheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 16.dp),
+                    )
+                    androidx.compose.foundation.layout.Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End,
+                    ) {
+                        androidx.compose.material3.TextButton(onClick = {}) {
+                            androidx.compose.material3.Text("취소")
+                        }
+                        androidx.compose.material3.TextButton(onClick = {}) {
+                            androidx.compose.material3.Text("삭제")
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /** The strip the transfers tab was replaced by, at the foot of the screen. */
@@ -261,14 +356,10 @@ class LayoutShotTest {
     @Composable
     private fun IconSheet() {
         val icons = listOf(
-            "file" to R.drawable.ic_flat_file,
             "folder" to R.drawable.ic_flat_folder,
             "server" to R.drawable.ic_flat_server,
             "search" to R.drawable.ic_flat_search,
             "warning" to R.drawable.ic_flat_warning,
-            "phone" to R.drawable.ic_flat_phone,
-            "sdcard" to R.drawable.ic_flat_sdcard,
-            "locked" to R.drawable.ic_flat_locked,
             "secure" to R.drawable.ic_flat_secure,
             "transfers" to R.drawable.ic_flat_transfers,
             "log" to R.drawable.ic_flat_log,

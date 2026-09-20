@@ -104,19 +104,39 @@ ICONS = {
     ],
 }
 
-# The launcher, on Android's adaptive canvas. Everything that must survive the
-# system's mask stays inside the middle two thirds; the background is flat
-# Ocean so the mask can cut it to any shape without losing anything.
-MARK = 0.58
+# The launcher, on Android's adaptive canvas.
+#
+# Two panes with something crossing between them, because that is what the app
+# is. It was a pair of transfer arrows, from when the app was an FTP client and
+# nothing else -- a fair mark then, and now a description of one feature of a
+# file manager rather than of the thing itself.
+#
+# The arrow is drawn in the background colour over the white panes, so it
+# reads as cut out of them. That is the same knockout the row tiles use, which
+# is what makes the launcher and the app look like one piece of work.
+#
+# Everything is inside the circle an adaptive mask may cut to: radius 156 from
+# the middle of a 512 canvas. The far corner of a pane sits at 152.
+PANE_LEFT = rounded_rect(132, 168, 106, 176, 20)
+PANE_RIGHT = rounded_rect(274, 168, 106, 176, 20)
+ARROW_SHAFT = rounded_rect(196, 244, 120, 24, 12)
+ARROW_WEST = "M160,256 L206,224 L206,288 Z"
+ARROW_EAST = "M352,256 L306,224 L306,288 Z"
+
 LAUNCHER_BACKGROUND = [(OCEAN, rounded_rect(0, 0, 512, 512, 0))]
 LAUNCHER_FOREGROUND = [
-    (WHITE, scaled(ARROW_DOWN, MARK)),
-    (OCEAN_PALE, scaled(ARROW_UP, MARK)),
+    (WHITE, PANE_LEFT),
+    (WHITE, PANE_RIGHT),
+    (OCEAN, ARROW_SHAFT),
+    (OCEAN, ARROW_WEST),
+    (OCEAN, ARROW_EAST),
 ]
-# The monochrome layer is a mask: the system paints it, so it is one colour.
+# The monochrome layer is a mask: the system paints the whole of it in one
+# colour, so nothing inside it can be a different colour and the arrow cannot
+# be knocked out. The two panes and the gap between them carry it alone.
 LAUNCHER_MONOCHROME = [
-    (WHITE, scaled(ARROW_DOWN, MARK)),
-    (WHITE, scaled(ARROW_UP, MARK)),
+    (WHITE, PANE_LEFT),
+    (WHITE, PANE_RIGHT),
 ]
 
 

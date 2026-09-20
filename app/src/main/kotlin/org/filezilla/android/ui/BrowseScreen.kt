@@ -266,8 +266,12 @@ private fun EntryRow(
         // The icon is a second way into selection mode, and the quickest one:
         // picking a folder otherwise means finding "select" in the overflow
         // menu first. The checkbox beside it still shows the state.
-        FlatIcon(
-            icon = if (entry.isDirectory) R.drawable.ic_flat_folder else R.drawable.ic_flat_file,
+        val kind = remember(entry.name, entry.isDirectory) {
+            kindOf(entry.name, entry.isDirectory)
+        }
+        FileTile(
+            kind = kind,
+            colour = colourFor(kind),
             contentDescription = stringResource(R.string.browse_select, entry.name),
             modifier = Modifier.clickable { actions.onToggleSelected(entry) },
         )
@@ -367,11 +371,8 @@ private fun GridTile(
     selecting: Boolean,
     actions: EntryActions,
 ) {
-    val chip = if (entry.isDirectory) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.secondary
-    }
+    val kind = remember(entry.name, entry.isDirectory) { kindOf(entry.name, entry.isDirectory) }
+    val chip = colourFor(kind)
     Column(
         modifier = Modifier
             .padding(4.dp)
@@ -396,19 +397,26 @@ private fun GridTile(
             modifier = Modifier
                 .size(48.dp)
                 .clip(RoundedCornerShape(14.dp))
-                .background(if (selected) chip else chip.copy(alpha = 0.14f))
+                .background(chip)
                 .clickable { actions.onToggleSelected(entry) },
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                when {
-                    selected -> Icons.Filled.Check
-                    entry.isDirectory -> Icons.Filled.Folder
-                    else -> Icons.AutoMirrored.Filled.InsertDriveFile
-                },
-                contentDescription = stringResource(R.string.browse_select, entry.name),
-                tint = if (selected) MaterialTheme.colorScheme.onPrimary else chip,
-            )
+            if (selected) {
+                Icon(
+                    Icons.Filled.Check,
+                    contentDescription = stringResource(R.string.browse_select, entry.name),
+                    tint = Color.White,
+                )
+            } else {
+                Icon(
+                    painter = painterResource(kind.glyph),
+                    contentDescription = stringResource(R.string.browse_select, entry.name),
+                    // Already white, and part of it white at reduced alpha,
+                    // which is what keeps a page distinct from its lines.
+                    tint = Color.Unspecified,
+                    modifier = Modifier.size(26.dp),
+                )
+            }
         }
         Text(
             entry.name,

@@ -92,11 +92,12 @@ fun SitesScreen(
                         // A filled icon chip, the way a file manager marks a
                         // row: colour carries the "this is a server" before
                         // any text is read.
-                        FlatIcon(
-                            icon = R.drawable.ic_flat_server,
+                        TileIcon(
+                            glyph = R.drawable.ic_tile_server,
+                            colour = MaterialTheme.colorScheme.secondary,
                             contentDescription = null,
-                            chipSize = 44.dp,
-                            cornerRadius = 12.dp,
+                            size = 44.dp,
+                            cornerRadius = 13.dp,
                         )
                         Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
                             Text(

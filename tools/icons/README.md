@@ -29,6 +29,21 @@ into the script that produced them, or it is lost the next time anyone runs it.
 
 ## The decisions behind it
 
+**The tile is the icon.** A row's icon was a 24dp drawing on a 40dp pale
+chip -- a third of the tile, legible if you looked at it and not if you
+scanned past it, and the same drawing for every file whatever the file was. A
+tile is a solid colour with the shape cut out of it in white: the colour says
+what kind of thing the row is before the name is read. `build_from_svg.py`
+emits both sets from the same sources; `TILES` is the white one.
+
+**Figure and ground by lightness.** Colour cannot survive the trip to a
+white-on-colour tile, so each fill is read as subject or body by how light the
+designer drew it: dark strokes become solid white, pale fills become white at
+55%. That keeps a document's page distinct from the lines on it. Three of the
+drawings are knockouts -- a dark box with a white `</>` through it, a dark
+robot head with white eyes, a dark memory card with pale contacts -- and the
+rule reads those exactly backwards, so `INVERTED` turns it round for them.
+
 **White behind the artwork.** The pack is drawn for a white background, and
 `FlatIconChip` is white for that reason. It was a pale blue-grey at first,
 within a shade of the file icon's own page: the page vanished into the chip

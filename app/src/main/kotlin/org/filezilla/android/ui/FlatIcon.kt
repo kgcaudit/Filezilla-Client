@@ -13,6 +13,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import org.filezilla.android.ui.theme.tiles
 
 /**
  * The pale chip an artwork icon sits on.
@@ -62,5 +63,76 @@ fun FlatIcon(
             tint = Color.Unspecified,
             modifier = Modifier.size(chipSize * 0.6f),
         )
+    }
+}
+
+/**
+ * A row's icon: a filled tile with the shape cut out of it in white.
+ *
+ * What it replaces put a 24dp drawing on a 40dp pale chip -- a third of the
+ * tile, legible if you looked at it and not if you scanned past it, and the
+ * same drawing for every file whatever the file was. The tile is the icon
+ * now: the colour says what kind of thing this is before the name is read,
+ * and the glyph fills it.
+ */
+@Composable
+fun FileTile(
+    kind: FileKind,
+    colour: Color,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    size: Dp = 40.dp,
+    cornerRadius: Dp = 12.dp,
+) = TileIcon(kind.glyph, colour, contentDescription, modifier, size, cornerRadius)
+
+/**
+ * The same tile for the things that are not files -- a volume, a memory card,
+ * a server, a padlock.
+ *
+ * One shape for every icon that names a thing, so a row of storage and a row
+ * of files look like the same app rather than two.
+ */
+@Composable
+fun TileIcon(
+    @DrawableRes glyph: Int,
+    colour: Color,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    size: Dp = 40.dp,
+    cornerRadius: Dp = 12.dp,
+) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(RoundedCornerShape(cornerRadius))
+            .background(colour),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = androidx.compose.ui.res.painterResource(glyph),
+            contentDescription = contentDescription,
+            // Unspecified, because the glyph is already white -- and part of
+            // it is white at reduced alpha, which is what keeps a document's
+            // page distinct from the lines on it. A tint would flatten the
+            // two back together.
+            tint = Color.Unspecified,
+            modifier = Modifier.size(size * 0.58f),
+        )
+    }
+}
+
+/** The tile colour this kind is always drawn in. */
+@Composable
+fun colourFor(kind: FileKind): Color = with(androidx.compose.material3.MaterialTheme.tiles) {
+    when (kind) {
+        FileKind.FOLDER -> folder
+        FileKind.ARCHIVE -> archive
+        FileKind.IMAGE -> image
+        FileKind.VIDEO -> video
+        FileKind.AUDIO -> audio
+        FileKind.DOCUMENT -> document
+        FileKind.CODE -> code
+        FileKind.APP -> app
+        FileKind.OTHER -> other
     }
 }

@@ -26,6 +26,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.filezilla.android.R
+import org.filezilla.android.ui.theme.status
+import org.filezilla.android.ui.theme.tiles
 import org.filezilla.android.files.StorageRoot
 
 /**
@@ -92,7 +94,8 @@ fun StoragePlaces(
                 // storage and leaving it there is a dead end, and this list
                 // is exactly where someone has come looking for their files.
                 PlaceRow(
-                    artwork = R.drawable.ic_flat_locked,
+                    glyph = R.drawable.ic_tile_locked,
+                    colour = MaterialTheme.status.paused,
                     title = stringResource(R.string.storage_not_granted),
                     subtitle = stringResource(R.string.storage_grant_action),
                     onClick = {
@@ -108,10 +111,14 @@ fun StoragePlaces(
                 // sheet animates.
                 val capacity = remember(root.path) { model.capacityOf(root.path) }
                 PlaceRow(
-                    artwork = when (root.kind) {
-                        StorageRoot.Kind.INTERNAL -> R.drawable.ic_flat_phone
-                        StorageRoot.Kind.SD_CARD -> R.drawable.ic_flat_sdcard
-                        StorageRoot.Kind.SHORTCUT -> R.drawable.ic_flat_folder
+                    glyph = when (root.kind) {
+                        StorageRoot.Kind.INTERNAL -> R.drawable.ic_tile_phone
+                        StorageRoot.Kind.SD_CARD -> R.drawable.ic_tile_sdcard
+                        StorageRoot.Kind.SHORTCUT -> R.drawable.ic_tile_folder
+                    },
+                    colour = when (root.kind) {
+                        StorageRoot.Kind.SHORTCUT -> MaterialTheme.tiles.folder
+                        else -> MaterialTheme.colorScheme.primary
                     },
                     title = root.label,
                     // Not the path. It is long, it is the same for every row
@@ -153,7 +160,8 @@ fun StoragePlaces(
 
             for (site in sites) {
                 PlaceRow(
-                    artwork = R.drawable.ic_flat_server,
+                    glyph = R.drawable.ic_tile_server,
+                    colour = MaterialTheme.colorScheme.secondary,
                     title = site.name.ifBlank { site.host },
                     subtitle = "${site.user}@${site.host}",
                     onClick = {
@@ -164,7 +172,8 @@ fun StoragePlaces(
             }
 
             PlaceRow(
-                artwork = R.drawable.ic_flat_server,
+                glyph = R.drawable.ic_tile_server,
+                colour = MaterialTheme.colorScheme.secondary,
                 title = stringResource(R.string.storage_manage_servers),
                 subtitle = null,
                 onClick = {
@@ -179,7 +188,8 @@ fun StoragePlaces(
             // places you visit, not places you live, and a permanent seat for
             // each cost 80dp of every screen in the app.
             PlaceRow(
-                artwork = R.drawable.ic_flat_transfers,
+                glyph = R.drawable.ic_tile_folder,
+                colour = MaterialTheme.tiles.code,
                 title = stringResource(R.string.title_queue),
                 subtitle = null,
                 onClick = {
@@ -188,7 +198,8 @@ fun StoragePlaces(
                 },
             )
             PlaceRow(
-                artwork = R.drawable.ic_flat_log,
+                glyph = R.drawable.ic_tile_document,
+                colour = MaterialTheme.tiles.document,
                 title = stringResource(R.string.title_log),
                 subtitle = null,
                 onClick = {
@@ -221,7 +232,8 @@ private fun SectionLabel(text: String) {
 /** One place a pane can be sent to, with room underneath for what it is. */
 @Composable
 private fun PlaceRow(
-    @DrawableRes artwork: Int,
+    @DrawableRes glyph: Int,
+    colour: androidx.compose.ui.graphics.Color,
     title: String,
     subtitle: String?,
     onClick: () -> Unit,
@@ -234,7 +246,7 @@ private fun PlaceRow(
             .padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        FlatIcon(artwork, contentDescription = null, chipSize = 38.dp, cornerRadius = 11.dp)
+        TileIcon(glyph, colour, contentDescription = null, size = 38.dp, cornerRadius = 11.dp)
         Column(modifier = Modifier.weight(1f).padding(start = 14.dp)) {
             Text(
                 title,
