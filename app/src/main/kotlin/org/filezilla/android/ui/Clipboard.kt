@@ -44,12 +44,33 @@ enum class PasteRefusal {
      * operation. Named rather than hidden, so the bar can say why.
      */
     BETWEEN_SERVERS,
+
+    /**
+     * Copying within one server, which FTP also has no command for.
+     *
+     * Moving within one it does have -- `RNFR`/`RNTO` renames across
+     * directories -- so cut and paste works and copy and paste cannot. The
+     * distinction is the protocol's, not ours, and the bar says so rather
+     * than leaving a dead button.
+     */
+    NO_SERVER_COPY,
 }
 
 /** What a paste will actually do, once it is allowed. */
 enum class PasteKind {
-    /** Within one place: a file operation. */
+    /** Within the phone: a file operation. */
     FILE_OPERATION,
+
+    /**
+     * Within one server: a rename across directories.
+     *
+     * Its own kind because the thing that carries it out is completely
+     * different. This was reported as [FILE_OPERATION] -- "the same place, so
+     * a file operation" -- and a file operation is `java.io.File` work on the
+     * phone. So cut and paste on a server quietly tried to move a file at a
+     * path the phone does not have, failed, and left the listing unchanged.
+     */
+    REMOTE_MOVE,
 
     /** Phone to server: an upload. */
     UPLOAD,
@@ -86,6 +107,12 @@ object PasteRules {
             }
         }
 
+        // One server can move within itself and cannot copy within itself:
+        // RNFR/RNTO renames across directories, and there is no COPY at all.
+        if (clipboard.source is PaneSource.Remote && clipboard.mode == ClipboardMode.COPY) {
+            return PasteRefusal.NO_SERVER_COPY
+        }
+
         val target = FilePath.normalize(targetPath)
         // Copying into the same folder is a duplicate, which is a fair thing
         // to want. Moving into it is not: the items are already there.
@@ -108,9 +135,16 @@ object PasteRules {
 
     /** What an allowed paste would do. Null when it would not be allowed. */
     fun kind(clipboard: Clipboard?, targetSource: PaneSource): PasteKind? {
-        val from = clipboard?.source ?: return null
+        val held = clipboard ?: return null
+        val from = held.source
         return when {
-            from == targetSource -> PasteKind.FILE_OPERATION
+            from is PaneSource.Local && targetSource is PaneSource.Local -> PasteKind.FILE_OPERATION
+            // The same server. A move is a rename across directories; a copy
+            // has no command behind it, and is refused above rather than
+            // being given a kind it cannot carry out.
+            from == targetSource && from is PaneSource.Remote ->
+                PasteKind.REMOTE_MOVE.takeIf { held.mode == ClipboardMode.MOVE }
+
             from is PaneSource.Local && targetSource is PaneSource.Remote -> PasteKind.UPLOAD
             from is PaneSource.Remote && targetSource is PaneSource.Local -> PasteKind.DOWNLOAD
             else -> null

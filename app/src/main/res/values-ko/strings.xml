@@ -231,6 +231,8 @@
     <string name="new_file_title">새 파일</string>
     <string name="confirm_delete_detail">폴더는 안에 든 것까지 함께 삭제됩니다. 되돌릴 수 없습니다.</string>
     <string name="confirm_delete_one">\u0022%1$s\u0022을(를) 삭제할까요?</string>
+    <string name="paste_no_server_copy">FTP는 같은 서버 안에서 복사할 수 없습니다. 잘라내거나, 내 파일로 붙여넣으세요.</string>
+    <string name="paste_move_here">%1$d개를 여기로 옮기기</string>
     <string name="fail_too_much_to_delete">한 번에 지우기엔 너무 많습니다</string>
     <string name="fail_too_much_to_delete_advice">아무것도 삭제되지 않았습니다. 폴더를 열어 나누어 삭제하세요.</string>
     <string name="paste_between_servers">FTP에서는 서버끼리 복사할 수 없습니다</string>

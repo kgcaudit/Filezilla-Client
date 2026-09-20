@@ -702,12 +702,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** A local paste waiting on the user to say what to do about what is there. */
+    /** A paste waiting on the user to say what to do about what is there. */
     data class PendingPaste(
         val held: Clipboard,
         val pane: PaneId,
         val target: String,
         val conflicts: List<DownloadConflict>,
+        /** True for a move within one server, which is carried out differently. */
+        val remote: Boolean = false,
     )
 
     var pendingPasteConflicts by mutableStateOf<PendingPaste?>(null)
@@ -720,7 +722,139 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun resolvePasteConflicts(choice: ConflictChoice) {
         val pending = pendingPasteConflicts ?: return
         pendingPasteConflicts = null
-        runPaste(pending.held, pending.pane, pending.target, choice)
+        if (pending.remote) {
+            runRemoteMove(pending.held, pending.pane, pending.target, choice)
+        } else {
+            runPaste(pending.held, pending.pane, pending.target, choice)
+        }
+    }
+
+    /**
+     * Moves what is held to another folder on the same server.
+     *
+     * FTP has no copy and no move, but `RNFR`/`RNTO` renames across
+     * directories, which is a move. What this replaces reported a same-server
+     * paste as a plain file operation -- "the same place, so a file
+     * operation" -- and a file operation is `java.io.File` work on the phone.
+     * So cutting on a server and pasting quietly asked the phone to move a
+     * file at a path it does not have, and the listing came back unchanged.
+     */
+    fun moveOnServer(id: PaneId) {
+        val held = clipboard ?: return
+        if (pasteRefusal(id) != null) return
+        val site = pane(id).site ?: return
+        val target = pane(id).path
+        update(id) { it.copy(loading = true, error = null) }
+        viewModelScope.launch {
+            runCatching {
+                graph.transfers.browse(site) { session ->
+                    session.changeDirectory(target)
+                    val existing = session.list().map { it.name }.toSet()
+                    held.names.filter { it in existing }
+                }
+            }.onSuccess { clashing ->
+                if (clashing.isEmpty()) {
+                    runRemoteMove(held, id, target, ConflictChoice.DEFAULT)
+                } else {
+                    // Sizes are not offered: the two sides of this comparison
+                    // are both on the server, and a listing of one folder does
+                    // not describe the other. The names are the question.
+                    pendingPasteConflicts = PendingPaste(
+                        held = held,
+                        pane = id,
+                        target = target,
+                        conflicts = clashing.map {
+                            DownloadConflict(it, null, null, -1, 0)
+                        },
+                        remote = true,
+                    )
+                    update(id) { it.copy(loading = false) }
+                }
+            }.onFailure { error ->
+                update(id) {
+                    it.copy(loading = false, error = describeFailure(error, graph.networkGate.currentlyOnline()))
+                }
+            }
+        }
+    }
+
+    private fun runRemoteMove(
+        held: Clipboard,
+        id: PaneId,
+        target: String,
+        choice: ConflictChoice,
+    ) {
+        val site = pane(id).site ?: return
+        update(id) { it.copy(loading = true, error = null) }
+        viewModelScope.launch {
+            val failure = runCatching {
+                graph.transfers.browse(site) { session ->
+                    session.changeDirectory(target)
+                    val rows = session.list()
+                    val taken = rows.map { it.name }.toMutableSet()
+                    for (name in held.names) {
+                        var asName = name
+                        if (name in taken) {
+                            when (choice) {
+                                ConflictChoice.SKIP -> continue
+                                // Removed first, contents and all: RNTO onto
+                                // an existing name is refused by some servers
+                                // and silently overwrites on others, and
+                                // neither is a thing to leave to chance.
+                                ConflictChoice.OVERWRITE -> {
+                                    val row = rows.first { it.name == name }
+                                    val plan = RemoteDelete.plan(
+                                        lister = { path ->
+                                            session.changeDirectory(path)
+                                            session.list()
+                                        },
+                                        directory = target,
+                                        picks = listOf(row),
+                                    )
+                                    if (plan.truncated) throw TooMuchToDeleteException()
+                                    for (step in plan.steps) {
+                                        if (step.isDirectory) {
+                                            session.removeDirectory(step.path)
+                                        } else {
+                                            session.deleteFile(step.path)
+                                        }
+                                    }
+                                }
+
+                                ConflictChoice.KEEP_BOTH -> {
+                                    var n = 1
+                                    while (numberedName(name, n) in taken) n++
+                                    asName = numberedName(name, n)
+                                }
+                            }
+                        }
+                        taken += asName
+                        session.rename(
+                            FilePath.child(held.directory, name),
+                            FilePath.child(target, asName),
+                        )
+                    }
+                    // The walk an overwrite does leaves the connection deep in
+                    // the tree it removed, and the re-list starts from here.
+                    session.changeDirectory(target)
+                }
+            }.exceptionOrNull()
+
+            clipboard = null
+            // The folder the items left has to be redrawn too, or the other
+            // pane goes on showing things that are no longer there.
+            for (other in PaneId.entries) {
+                if (other != id && pane(other).path == held.directory && !pane(other).isLocal) {
+                    open(other)
+                }
+            }
+            open(id)
+            failure?.let { error ->
+                update(id) {
+                    it.copy(error = describeFailure(error, graph.networkGate.currentlyOnline()))
+                }
+            }
+        }
     }
 
     /**
@@ -793,7 +927,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     if (other != id && pane(other).path == held.directory) open(other)
                 }
             }
-            open(id)
+            listLocal(id, pane(id).path)
             failure?.let { error -> update(id) { it.copy(error = describeLocalFailure(error)) } }
         }
     }
@@ -835,7 +969,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         update(id) { it.copy(loading = true, error = null) }
         viewModelScope.launch {
             val failure = withContext(Dispatchers.IO) { runCatching(block).exceptionOrNull() }
-            open(id)
+            // Waited for, not launched alongside: the refresh clears the
+            // error field, so reporting the failure first meant the refresh
+            // erased it a moment later.
+            listLocal(id, pane(id).path)
             failure?.let { error -> update(id) { it.copy(error = describeLocalFailure(error)) } }
         }
     }
@@ -907,10 +1044,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun openLocal(id: PaneId, path: String) {
+        viewModelScope.launch { listLocal(id, path) }
+    }
+
+    /**
+     * The listing itself, as something a caller can wait for.
+     *
+     * [openLocal] fires and forgets, which is right for a tap. It is wrong
+     * for a write: a write re-lists and then reports what went wrong, and a
+     * re-list that has not finished yet clears the error on its way in and
+     * again when it lands. So a failed rename set an error, the refresh wiped
+     * it, and the pane came back looking exactly as it had -- which is what
+     * "it does nothing" looks like from outside.
+     */
+    private suspend fun listLocal(id: PaneId, path: String) {
         val target = FilePath.normalize(path)
         val cameFrom = pane(id).path
         update(id) { it.copy(path = target, loading = true, error = null) }
-        viewModelScope.launch {
+        run {
             val rows = withContext(Dispatchers.IO) {
                 runCatching { graph.localFiles.list(target) }
             }

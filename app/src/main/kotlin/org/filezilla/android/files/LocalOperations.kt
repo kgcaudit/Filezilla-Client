@@ -37,11 +37,29 @@ object LocalOperations {
         return target.absolutePath
     }
 
+    /**
+     * Gives [path] a new name, falling back to copying when the filesystem
+     * will not do it the cheap way.
+     *
+     * `renameTo` answers false rather than saying why, and on the emulated
+     * volume it answers false for cases that are perfectly legal -- a folder
+     * holding files the media store has indexed is the common one. Renaming a
+     * folder therefore looked like it simply did nothing. Falling back to a
+     * copy and a delete gets the user the result they asked for; it costs as
+     * long as the folder is big, which is still better than not happening.
+     */
     fun rename(path: String, newName: String): String {
         val source = File(FilePath.normalize(path))
         val target = File(source.parentFile, validName(newName))
+        if (!source.exists()) throw IOException("${source.name} is not there any more")
         if (target.exists()) throw IOException("${target.name} already exists")
-        if (!source.renameTo(target)) throw IOException("could not rename ${source.name}")
+        if (source.renameTo(target)) return target.absolutePath
+
+        copyInto(source, target)
+        // Only once the copy is whole. Removing the original first and then
+        // failing would lose it, and this path exists precisely because the
+        // filesystem is already refusing things here.
+        delete(source.absolutePath)
         return target.absolutePath
     }
 

@@ -235,6 +235,7 @@ fun PasteBar(
 private fun labelFor(kind: PasteKind?): Int = when (kind) {
     PasteKind.UPLOAD -> R.string.paste_upload_here
     PasteKind.DOWNLOAD -> R.string.paste_download_here
+    PasteKind.REMOTE_MOVE -> R.string.paste_move_here
     else -> R.string.paste_into
 }
 
@@ -262,6 +263,7 @@ private fun refusalText(refusal: PasteRefusal?, count: Int, cut: Boolean): Strin
 
         PasteRefusal.INTO_ITSELF -> stringResource(R.string.paste_into_itself)
         PasteRefusal.BETWEEN_SERVERS -> stringResource(R.string.paste_between_servers)
+        PasteRefusal.NO_SERVER_COPY -> stringResource(R.string.paste_no_server_copy)
     }
 
 /** Asks for a name, for a new folder or a new file. */

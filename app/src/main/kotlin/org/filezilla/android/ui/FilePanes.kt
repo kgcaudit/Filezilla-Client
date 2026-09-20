@@ -225,6 +225,10 @@ fun FilePanes(
                                 // what shows the progress and survives the
                                 // app being closed.
                                 PasteKind.FILE_OPERATION -> model.paste(active)
+                                // Within one server: a rename across
+                                // directories, which is instant and moves no
+                                // bytes, so it does not join the queue.
+                                PasteKind.REMOTE_MOVE -> model.moveOnServer(active)
                                 null -> Unit
                                 else -> {
                                     onRequestNotifications()

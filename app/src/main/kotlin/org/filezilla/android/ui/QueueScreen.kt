@@ -93,13 +93,16 @@ fun QueueScreen(
                 live != null && isStalled(live.updatedAtMillis, now)
             TransferCard(
                 record = record,
+                // One word for the whole retry loop; see [moodOf]. The queue
+                // walks through four states a second when a connection dies,
+                // and the card used to show every one of them.
+                mood = moodOf(record, stalled),
                 bytes = live?.bytes ?: record.bytesTransferred,
                 total = live?.totalBytes ?: record.totalBytes,
                 // Only a running transfer has a speed; a paused or waiting one
                 // showing a leftover figure would be a lie, and so would the
                 // last speed of one that has stopped receiving.
                 bytesPerSecond = live?.bytesPerSecond.takeUnless { stalled },
-                stalled = stalled,
                 onPause = { onPause(record.id) },
                 onResume = { onResume(record.id) },
                 onCancel = { onCancel(record.id) },
@@ -130,16 +133,16 @@ private fun tickWhile(running: Boolean): Long {
 @Composable
 private fun TransferCard(
     record: TransferRecord,
+    /** What the card says, which is steadier than what the queue is doing. */
+    mood: TransferMood,
     bytes: Long,
     total: Long?,
     bytesPerSecond: Long?,
-    /** Running, but no bytes for a while: reconnecting, or about to be. */
-    stalled: Boolean,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    val accent = if (stalled) MaterialTheme.status.paused else accentFor(record.state)
+    val accent = accentFor(mood)
     val percent = if (total != null && total > 0) {
         ((bytes.toDouble() / total) * 100).toInt().coerceIn(0, 100)
     } else {
@@ -177,13 +180,17 @@ private fun TransferCard(
                     )
                 }
 
-                when (record.state) {
-                    TransferState.RUNNING, TransferState.PENDING ->
+                // Keyed on the mood, not the state underneath it: a button
+                // that swapped between pause and play four times a second was
+                // half of what made the card unreadable, and the other half
+                // was that it could not be pressed while it was doing it.
+                when (mood) {
+                    TransferMood.RUNNING, TransferMood.QUEUED, TransferMood.RECONNECTING ->
                         FilledTonalIconButton(onClick = onPause) {
                             Icon(Icons.Filled.Pause, contentDescription = stringResource(R.string.queue_pause))
                         }
 
-                    TransferState.PAUSED, TransferState.INTERRUPTED, TransferState.FAILED ->
+                    TransferMood.PAUSED, TransferMood.FAILED ->
                         FilledTonalIconButton(onClick = onResume) {
                             Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.queue_resume))
                         }
@@ -191,7 +198,7 @@ private fun TransferCard(
                     // It does start again by itself, but "by itself" is no
                     // comfort to someone watching it not happen. The button is
                     // the way out when the automatic path has not fired.
-                    TransferState.WAITING_FOR_NETWORK ->
+                    TransferMood.WAITING_FOR_NETWORK ->
                         FilledTonalIconButton(onClick = onResume) {
                             Icon(
                                 Icons.Filled.Refresh,
@@ -199,7 +206,7 @@ private fun TransferCard(
                             )
                         }
 
-                    TransferState.COMPLETED -> Unit
+                    TransferMood.DONE -> Unit
                 }
                 IconButton(
                     onClick = onCancel,
@@ -211,7 +218,7 @@ private fun TransferCard(
                 }
             }
 
-            if (record.state != TransferState.COMPLETED) {
+            if (mood != TransferMood.DONE) {
                 Spacer8()
                 if (percent != null) {
                     LinearProgressIndicator(
@@ -224,7 +231,7 @@ private fun TransferCard(
                         strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                     )
-                } else if (record.state == TransferState.RUNNING) {
+                } else if (mood == TransferMood.RUNNING) {
                     LinearProgressIndicator(
                         color = accent,
                         trackColor = MaterialTheme.status.progressTrack,
@@ -236,7 +243,7 @@ private fun TransferCard(
             Spacer8()
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    if (stalled) stringResource(R.string.state_reconnecting) else stateLabel(record.state),
+                    moodLabel(mood),
                     style = MaterialTheme.typography.labelLarge,
                     color = accent,
                     fontWeight = FontWeight.Medium,
@@ -250,7 +257,11 @@ private fun TransferCard(
                 )
             }
 
-            speedLine(bytes, total, bytesPerSecond)?.let { line ->
+            // Hidden while the connection is not there. A speed and an
+            // estimate computed from bytes that stopped arriving are two more
+            // numbers changing on a card that is already changing too much,
+            // and both of them are wrong.
+            speedLine(bytes, total, bytesPerSecond).takeUnless { mood.isUnsettled }?.let { line ->
                 Text(
                     line,
                     style = MaterialTheme.typography.bodySmall,
@@ -260,7 +271,7 @@ private fun TransferCard(
                 )
             }
 
-            if (record.attempts > 1 && record.state != TransferState.COMPLETED) {
+            if (record.attempts > 1 && mood != TransferMood.DONE) {
                 Text(
                     stringResource(R.string.queue_attempt, record.attempts),
                     style = MaterialTheme.typography.bodySmall,
@@ -268,7 +279,11 @@ private fun TransferCard(
                 )
             }
 
-            record.lastError?.takeIf { record.state != TransferState.COMPLETED }?.let { error ->
+            // Only once it has stopped trying. While it is retrying this is
+            // the same sentence every few hundred milliseconds, appearing and
+            // vanishing with each pass -- and it says nothing the word
+            // "reconnecting" above it has not already said.
+            record.lastError?.takeIf { mood == TransferMood.FAILED }?.let { error ->
                 Text(
                     error,
                     style = MaterialTheme.typography.bodySmall,
@@ -284,15 +299,28 @@ private fun TransferCard(
 private fun Spacer8() = Box(modifier = Modifier.size(8.dp))
 
 @Composable
-private fun accentFor(state: TransferState): Color = when (state) {
-    TransferState.RUNNING -> MaterialTheme.status.running
-    TransferState.PENDING -> MaterialTheme.status.waiting
-    TransferState.PAUSED -> MaterialTheme.status.paused
-    TransferState.INTERRUPTED -> MaterialTheme.status.paused
-    TransferState.WAITING_FOR_NETWORK -> MaterialTheme.status.waiting
-    TransferState.COMPLETED -> MaterialTheme.status.done
-    TransferState.FAILED -> MaterialTheme.status.failed
+private fun accentFor(mood: TransferMood): Color = when (mood) {
+    TransferMood.RUNNING -> MaterialTheme.status.running
+    TransferMood.QUEUED -> MaterialTheme.status.waiting
+    TransferMood.RECONNECTING -> MaterialTheme.status.paused
+    TransferMood.WAITING_FOR_NETWORK -> MaterialTheme.status.waiting
+    TransferMood.PAUSED -> MaterialTheme.status.paused
+    TransferMood.DONE -> MaterialTheme.status.done
+    TransferMood.FAILED -> MaterialTheme.status.failed
 }
+
+@Composable
+private fun moodLabel(mood: TransferMood): String = stringResource(
+    when (mood) {
+        TransferMood.QUEUED -> R.string.state_pending
+        TransferMood.RUNNING -> R.string.state_running
+        TransferMood.RECONNECTING -> R.string.state_reconnecting
+        TransferMood.WAITING_FOR_NETWORK -> R.string.state_waiting_for_network
+        TransferMood.PAUSED -> R.string.state_paused
+        TransferMood.FAILED -> R.string.state_failed
+        TransferMood.DONE -> R.string.state_completed
+    },
+)
 
 @Composable
 private fun stateLabel(state: TransferState): String = stringResource(

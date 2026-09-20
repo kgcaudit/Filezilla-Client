@@ -167,11 +167,26 @@ class PasteRulesTest {
         )
     }
 
+    /**
+     * This said a paste within one server was allowed, whatever it was, and
+     * it was allowed because the paste was going to be "a file operation" --
+     * which is what the phone's own copy is. So the test agreed with the bug.
+     * Cutting is allowed there, because a rename across directories is a
+     * move; copying is not, because FTP has no command for it.
+     */
     @Test
-    fun `pasting within one server is a file operation`() {
+    fun `a cut within one server is allowed and a copy is not`() {
         assertNull(
             PasteRules.refusal(
-                held(source = PaneSource.Remote(site), directory = "/pub"),
+                held(mode = ClipboardMode.MOVE, source = PaneSource.Remote(site), directory = "/pub"),
+                PaneSource.Remote(site),
+                "/elsewhere",
+            ),
+        )
+        assertEquals(
+            PasteRefusal.NO_SERVER_COPY,
+            PasteRules.refusal(
+                held(mode = ClipboardMode.COPY, source = PaneSource.Remote(site), directory = "/pub"),
                 PaneSource.Remote(site),
                 "/elsewhere",
             ),
@@ -189,6 +204,107 @@ class PasteRulesTest {
         assertEquals(
             listOf("/storage/Movies/a.txt", "/storage/Movies/b.txt"),
             held(names = listOf("a.txt", "b.txt")).paths(),
+        )
+    }
+}
+
+/**
+ * What a paste on one server does, which is not what it used to say it did.
+ *
+ * The bug: "the same place, so a file operation" -- and a file operation is
+ * java.io.File work on the phone. Cutting on a server and pasting quietly
+ * asked the phone to move a file at a path it does not have, and the listing
+ * came back unchanged. FTP has no copy at all within one server, and the move
+ * it does have is a rename across directories.
+ */
+class ServerPasteRulesTest {
+
+    private val nas = SiteEntity(
+        id = "s1", name = "NAS", host = "h", port = 21, user = "u",
+        passwordCipher = "x", security = "PLAIN", transferMode = "DEFAULT",
+        trustAllCertificates = false, initialPath = null,
+    )
+    private val other = nas.copy(id = "s2", name = "Backup", host = "b")
+
+    private val server = PaneSource.Remote(nas)
+    private val elsewhere = PaneSource.Remote(other)
+
+    private fun held(mode: ClipboardMode, source: PaneSource, directory: String = "/pub") =
+        Clipboard(mode, source, directory, listOf("film.mkv"))
+
+    @Test
+    fun `a cut on one server is a move, not a file operation`() {
+        assertEquals(
+            PasteKind.REMOTE_MOVE,
+            PasteRules.kind(held(ClipboardMode.MOVE, server), server),
+        )
+    }
+
+    @Test
+    fun `a cut on one server is allowed into another of its folders`() {
+        assertNull(PasteRules.refusal(held(ClipboardMode.MOVE, server), server, "/archive"))
+    }
+
+    /** FTP has no COPY. Saying so beats a button that does nothing. */
+    @Test
+    fun `a copy within one server is refused with its own reason`() {
+        assertEquals(
+            PasteRefusal.NO_SERVER_COPY,
+            PasteRules.refusal(held(ClipboardMode.COPY, server), server, "/archive"),
+        )
+        assertNull(PasteRules.kind(held(ClipboardMode.COPY, server), server))
+    }
+
+    @Test
+    fun `the phone still copies within itself`() {
+        assertEquals(
+            PasteKind.FILE_OPERATION,
+            PasteRules.kind(
+                held(ClipboardMode.COPY, PaneSource.Local, "/storage/a"),
+                PaneSource.Local,
+            ),
+        )
+    }
+
+    /** Both directions across the two panes are still transfers. */
+    @Test
+    fun `the two sides still make transfers`() {
+        assertEquals(
+            PasteKind.UPLOAD,
+            PasteRules.kind(held(ClipboardMode.COPY, PaneSource.Local), server),
+        )
+        assertEquals(
+            PasteKind.DOWNLOAD,
+            PasteRules.kind(held(ClipboardMode.COPY, server), PaneSource.Local),
+        )
+    }
+
+    @Test
+    fun `two different servers are still refused`() {
+        assertEquals(
+            PasteRefusal.BETWEEN_SERVERS,
+            PasteRules.refusal(held(ClipboardMode.MOVE, server), elsewhere, "/in"),
+        )
+        assertNull(PasteRules.kind(held(ClipboardMode.MOVE, server), elsewhere))
+    }
+
+    /** A move into the folder it came from is still nothing to do. */
+    @Test
+    fun `a move into the same folder is still refused`() {
+        assertEquals(
+            PasteRefusal.ALREADY_THERE,
+            PasteRules.refusal(held(ClipboardMode.MOVE, server, "/pub"), server, "/pub"),
+        )
+    }
+
+    /** And a folder still cannot swallow itself, on a server as on the phone. */
+    @Test
+    fun `a folder cannot be moved inside itself on a server`() {
+        val folder = Clipboard(ClipboardMode.MOVE, server, "/pub", listOf("Vision"))
+
+        assertEquals(
+            PasteRefusal.INTO_ITSELF,
+            PasteRules.refusal(folder, server, "/pub/Vision/inner"),
         )
     }
 }

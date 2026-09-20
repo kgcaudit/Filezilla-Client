@@ -177,15 +177,19 @@ class DownloadEntryPointTest {
      * "550 Directory not empty" while deleting a file worked. Two call sites,
      * one missing walk, and nothing in a compile to say so.
      */
+    /**
+     * Two places, and the second one is why this guard is worth having: a
+     * move within one server that lands on a name already taken removes what
+     * it is replacing, and it has to do that through the same walk. RNTO onto
+     * an existing name is refused by some servers and silently overwrites on
+     * others, so neither is left to chance.
+     */
     @Test
-    fun `only one place removes anything from a server`() {
-        assertEquals(setOf("removeRemotely"), membersContaining("session.removeDirectory("))
-        assertEquals(setOf("removeRemotely"), membersContaining("session.deleteFile("))
-    }
-
-    @Test
-    fun `and it is the place that walked the folder first`() {
-        assertEquals(setOf("removeRemotely"), membersContaining("RemoteDelete.plan("))
+    fun `only the two places that walked the folder remove anything from a server`() {
+        val removers = setOf("removeRemotely", "runRemoteMove")
+        assertEquals(removers, membersContaining("session.removeDirectory("))
+        assertEquals(removers, membersContaining("session.deleteFile("))
+        assertEquals(removers, membersContaining("RemoteDelete.plan("))
     }
 
     @Test
