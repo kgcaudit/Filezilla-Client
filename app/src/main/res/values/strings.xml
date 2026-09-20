@@ -126,7 +126,6 @@
     <string name="queued_truncated">%1$d queued; the folder was too large to take all of it</string>
     <string name="browse_download_folder">Download this folder</string>
     <string name="browse_select">Select %1$s</string>
-    <string name="listing_summary">%1$d folders, %2$d files</string>
     <string name="action_rename">Rename</string>
     <string name="action_delete">Delete</string>
     <string name="prompt_rename_title">Rename %1$s</string>

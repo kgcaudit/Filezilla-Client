@@ -6,10 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
@@ -111,14 +108,10 @@ fun FilePanes(
     val transfers by model.transfers.collectAsStateWithLifecycle()
     val queue = remember(transfers) { summariseTransfers(transfers) }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            // Taken here rather than by the Scaffold, which has no bars left
-            // above or below this screen to inset it from. Without it the tab
-            // strip sits under the clock.
-            .windowInsetsPadding(WindowInsets.systemBars),
-    ) {
+    // No inset taken here. The Scaffold already applies its content window
+    // insets whether or not it has bars to apply them around, so taking them
+    // again put two status bars' worth of nothing above the tab strip.
+    Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             if (!bothPanes) {
                 PaneTabs(
@@ -344,7 +337,7 @@ private fun PaneTabs(current: Int, model: MainViewModel, onPick: (Int) -> Unit) 
                 onClick = { onPick(page) },
                 text = {
                     Text(
-                        paneLabel(model.pane(id).source),
+                        paneLabel(model.pane(id)),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = if (page == current) FontWeight.SemiBold else FontWeight.Normal,
                         maxLines = 1,
@@ -357,11 +350,25 @@ private fun PaneTabs(current: Int, model: MainViewModel, onPick: (Int) -> Unit) 
     }
 }
 
+/**
+ * What a tab says.
+ *
+ * A local pane is named by the folder it is in rather than by the words "my
+ * files", because both panes can be on the phone at once -- and then both
+ * tabs said "my files" and neither said which was which. A server keeps its
+ * own name: it is the server you are on that matters there, and the folder
+ * is in the crumb trail a line below.
+ */
 @Composable
-private fun paneLabel(source: PaneSource): String = when (source) {
-    PaneSource.Local -> stringResource(R.string.side_local)
+private fun paneLabel(state: BrowseState): String = when (state.source) {
     PaneSource.Empty -> stringResource(R.string.pane_no_source)
-    is PaneSource.Remote -> source.site.name.ifBlank { source.site.host }
+    PaneSource.Local -> state.path.takeIf { it.isNotEmpty() }
+        ?.let { FilePath.name(it) }
+        ?: stringResource(R.string.side_local)
+
+    is PaneSource.Remote -> (state.source as PaneSource.Remote).site.let {
+        it.name.ifBlank { it.host }
+    }
 }
 
 /** One pane: its header, then whichever body its source calls for. */
@@ -395,7 +402,6 @@ private fun PaneBody(
             id = id,
             model = model,
             options = options,
-            rows = rows,
             onNewDirectory = onNewDirectory,
             onUpload = onUpload,
             onGrant = onGrant,

@@ -52,7 +52,6 @@ fun PaneHeader(
     id: PaneId,
     model: MainViewModel,
     options: BrowseOptions,
-    rows: List<DirectoryEntry>,
     onNewDirectory: () -> Unit,
     onUpload: () -> Unit,
     onGrant: () -> Unit,
@@ -73,68 +72,67 @@ fun PaneHeader(
     }
 
     Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = here { storageOpen = true }) {
-                    Icon(
-                        Icons.Filled.Menu,
-                        contentDescription = stringResource(R.string.pane_storage),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        paneTitle(state.source),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        paneSummary(rows),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                if (state.source !is PaneSource.Empty) {
-                    IconButton(onClick = here(model::toggleFilter)) {
-                        Icon(
-                            Icons.Filled.Search,
-                            contentDescription = stringResource(R.string.menu_filter),
-                            tint = if (state.filterOpen) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        )
-                    }
-                    BrowseOverflow(
-                        options = options,
-                        filterOpen = state.filterOpen,
-                        onSelectMode = here(model::toggleSelectionMode),
-                        onSelectAll = here(model::selectAll),
-                        onToggleFilter = here(model::toggleFilter),
-                        onViewOptions = here { viewOptionsOpen = true },
-                        onRefresh = here { model.open(id) },
-                        onOptions = model::applyOptions,
-                        // Making a folder and sending a file up belong to the
-                        // server pane alone: on the phone the round button
-                        // makes folders, and "up" is what the other pane is.
-                        onNewDirectory = if (state.site != null) here(onNewDirectory) else null,
-                        onUpload = if (state.site != null) here(onUpload) else null,
-                    )
-                }
+        // One row, not two. It was a title line above a path line, and the
+        // title was the third copy of a word already on the tab above it and
+        // in the first crumb of the path below it -- so the pane spent a
+        // whole line of the screen repeating itself.
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = here { storageOpen = true }) {
+                Icon(
+                    Icons.Filled.Menu,
+                    contentDescription = stringResource(R.string.pane_storage),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
-            if (state.path.isNotEmpty()) {
+            if (state.path.isEmpty()) {
+                // Nowhere yet, so there is no path to show and the pane has
+                // to say what it is some other way.
+                Text(
+                    paneTitle(state.source),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).padding(start = 8.dp),
+                )
+            } else {
                 BreadcrumbBar(
                     crumbs = model.breadcrumbsFor(id),
                     onOpen = { path -> model.focusPane(id); model.openPath(id, path) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            if (state.source !is PaneSource.Empty) {
+                IconButton(onClick = here(model::toggleFilter)) {
+                    Icon(
+                        Icons.Filled.Search,
+                        contentDescription = stringResource(R.string.menu_filter),
+                        tint = if (state.filterOpen) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+                BrowseOverflow(
+                    options = options,
+                    filterOpen = state.filterOpen,
+                    onSelectMode = here(model::toggleSelectionMode),
+                    onSelectAll = here(model::selectAll),
+                    onToggleFilter = here(model::toggleFilter),
+                    onViewOptions = here { viewOptionsOpen = true },
+                    onRefresh = here { model.open(id) },
+                    onOptions = model::applyOptions,
+                    // Making a folder and sending a file up belong to the
+                    // server pane alone: on the phone the round button
+                    // makes folders, and "up" is what the other pane is.
+                    onNewDirectory = if (state.site != null) here(onNewDirectory) else null,
+                    onUpload = if (state.site != null) here(onUpload) else null,
                 )
             }
         }
@@ -168,22 +166,6 @@ private fun paneTitle(source: PaneSource): String = when (source) {
 }
 
 /**
- * The line under the title: how much is in this folder.
- *
- * It used to carry where a download would land as well, from back when that
- * was a folder chosen once and never seen again. A download goes to the other
- * pane now, and the other pane says where it is itself -- in its own header,
- * a swipe away -- so repeating it here was a second copy of something already
- * on screen, and for most of this app's life it read "no folder chosen yet"
- * while transfers were running.
- */
-@Composable
-private fun paneSummary(rows: List<DirectoryEntry>): String {
-    val folders = rows.count { it.isDirectory }
-    return stringResource(R.string.listing_summary, folders, rows.size - folders)
-}
-
-/**
  * The path, as places rather than as a line of text.
  *
  * Scrolled to the end whenever the path changes: the folder you are in is the
@@ -191,12 +173,15 @@ private fun paneSummary(rows: List<DirectoryEntry>): String {
  * volume and hides everything after it.
  */
 @Composable
-private fun BreadcrumbBar(crumbs: List<Crumb>, onOpen: (String) -> Unit) {
+private fun BreadcrumbBar(
+    crumbs: List<Crumb>,
+    onOpen: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val scroll = rememberScrollState()
 
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
             // Reversed, so a trail too long to fit rests at its end rather
             // than its beginning: the folder you are in is the one you need
             // to see, and the volume it is on is the one you can guess.
@@ -204,7 +189,7 @@ private fun BreadcrumbBar(crumbs: List<Crumb>, onOpen: (String) -> Unit) {
             // fact, which depends on the row having been measured first and
             // so shows the wrong end of the first path drawn.
             .horizontalScroll(scroll, reverseScrolling = true)
-            .padding(start = 12.dp, end = 12.dp, bottom = 6.dp),
+            .padding(start = 4.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
