@@ -65,6 +65,20 @@ class AppGraph private constructor(context: Context) {
         passwords = passwords,
     )
 
+    /**
+     * Clears away the folders a finished move emptied.
+     *
+     * Built here rather than in the service so it reads the one preferences
+     * and the one journal: a second copy would sweep against a list the
+     * paste never wrote to.
+     */
+    val moveCleanup = org.filezilla.android.transfer.MoveCleanup(
+        preferences = preferences,
+        sites = database.sites(),
+        transfers = transfers,
+        log = { level, message -> log.log(level, message) },
+    )
+
     companion object {
         @Volatile
         private var instance: AppGraph? = null

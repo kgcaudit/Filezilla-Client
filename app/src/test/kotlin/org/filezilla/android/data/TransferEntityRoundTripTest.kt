@@ -49,6 +49,22 @@ class TransferEntityRoundTripTest {
         assertEquals(big, TransferEntity.from(big).toRecord())
     }
 
+    /**
+     * The flag that decides whether something gets deleted.
+     *
+     * Lost on the way through the database, a move would quietly become a
+     * copy again -- and read back as true where it was false, it would
+     * remove a file nobody asked it to. The round trip is the only thing
+     * standing between the column and both of those.
+     */
+    @Test
+    fun `being half of a move survives the round trip`() {
+        val move = record().copy(removeSourceWhenDone = true)
+
+        assertEquals(true, TransferEntity.from(move).toRecord().removeSourceWhenDone)
+        assertEquals(false, TransferEntity.from(record()).toRecord().removeSourceWhenDone)
+    }
+
     @Test
     fun `a record with no fingerprint stays without one`() {
         val none = record().copy(fingerprint = null)

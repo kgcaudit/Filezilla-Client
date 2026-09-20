@@ -206,11 +206,7 @@ class PasswordMigrationTest {
      */
     private fun readSite(host: String, port: Int, user: String): SiteEntity? {
         val database = Room.databaseBuilder(context, AppDatabase::class.java, DB)
-            .addMigrations(
-                AppDatabase.encryptPasswords(passwords),
-                AppDatabase.ADD_ENCODING,
-                AppDatabase.ADD_POSITION,
-            )
+            .addMigrations(*AppDatabase.migrations(passwords))
             .allowMainThreadQueries()
             .build()
         return try {
@@ -223,11 +219,7 @@ class PasswordMigrationTest {
     /** Every site, in the order the app shows them, after the migration. */
     private fun allSites(): List<SiteEntity> {
         val database = Room.databaseBuilder(context, AppDatabase::class.java, DB)
-            .addMigrations(
-                AppDatabase.encryptPasswords(passwords),
-                AppDatabase.ADD_ENCODING,
-                AppDatabase.ADD_POSITION,
-            )
+            .addMigrations(*AppDatabase.migrations(passwords))
             .allowMainThreadQueries()
             .build()
         return try {
@@ -251,7 +243,7 @@ class PasswordMigrationTest {
 
     private companion object {
         const val DB = "migration-test.db"
-        const val CURRENT_VERSION = 4
+        val CURRENT_VERSION = AppDatabase.VERSION
         const val V1_IDENTITY_HASH = "77835b154afacbde0754e799cc2b8a3d"
 
         const val V1_SITES =

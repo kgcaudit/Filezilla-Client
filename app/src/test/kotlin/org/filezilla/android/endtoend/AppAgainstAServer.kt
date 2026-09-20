@@ -142,7 +142,15 @@ abstract class AppAgainstAServer {
     protected fun runTheQueue(): org.filezilla.android.transfer.TransferManager.QueueOutcome =
         kotlinx.coroutines.runBlocking {
             kotlinx.coroutines.withTimeout(60_000) {
-                AppGraph.of(application).transfers.runQueue()
+                val graph = AppGraph.of(application)
+                val outcome = graph.transfers.runQueue()
+                // Exactly what TransferService does when the queue drains,
+                // and in the same order -- a move is only finished once the
+                // folders its files left are cleared. TransferServiceTest
+                // holds the service to this sequence; running only half of
+                // it here would be a test passing on half a move.
+                graph.moveCleanup.sweep()
+                outcome
             }
         }
 

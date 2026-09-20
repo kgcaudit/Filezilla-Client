@@ -180,6 +180,8 @@ class TransferManager(
         destinationTree: Uri,
         subPath: List<String> = emptyList(),
         onConflict: ConflictChoice = ConflictChoice.DEFAULT,
+        /** Half of a move: the file on the server goes once this has landed. */
+        removeSource: Boolean = false,
     ): String = withContext(io) {
         val id = UUID.randomUUID().toString()
         journal.put(
@@ -198,6 +200,7 @@ class TransferManager(
                 state = TransferState.PENDING,
                 totalBytes = totalBytes,
                 updatedAtMillis = System.currentTimeMillis(),
+                removeSourceWhenDone = removeSource,
             ),
         )
         id
@@ -216,6 +219,8 @@ class TransferManager(
          * before uploads could replace anything read back as false.
          */
         overwrite: Boolean = false,
+        /** Half of a move: the file on the phone goes once this has landed. */
+        removeSource: Boolean = false,
     ): String = withContext(io) {
         val id = UUID.randomUUID().toString()
         journal.put(
@@ -231,6 +236,7 @@ class TransferManager(
                 state = TransferState.PENDING,
                 totalBytes = totalBytes,
                 updatedAtMillis = System.currentTimeMillis(),
+                removeSourceWhenDone = removeSource,
             ),
         )
         id
@@ -531,7 +537,43 @@ class TransferManager(
             progress = progressListener(record),
         )
 
-        publish(finished, partial)
+        val delivered = publish(finished, partial)
+
+        // Only once the file is in the user's own folder. The partial lives
+        // in app-private storage, which they cannot reach, so removing the
+        // server's copy while the file was only there would be a move into
+        // nowhere -- and "keep the one I already have" is not delivery
+        // either: those bytes were dropped on purpose, and the server's copy
+        // is then the only one left.
+        if (MovedSource.mayRemoveRemote(finished, delivered)) {
+            removeRemoteSource(finished, connection)
+        }
+    }
+
+    /**
+     * Takes the server's copy away once the phone has it.
+     *
+     * On the worker's own connection, which is still in hand and already
+     * logged in. As with the upload, a refusal is reported and the queue
+     * carries on: the file has arrived, and a server that will not let go of
+     * it is not a reason to stop moving everything else.
+     */
+    private fun removeRemoteSource(record: TransferRecord, connection: WorkerConnection) {
+        val name = record.remotePath.substringAfterLast('/')
+        val removed = runCatching {
+            onWorkerConnection(connection) { control ->
+                org.filezilla.ftp.protocol.FtpFileOperations(control).deleteFile(record.remotePath)
+            }
+        }
+        if (removed.isSuccess) {
+            log.log(LogLevel.STATUS, "Moved $name from the server; removed the copy there")
+        } else {
+            log.log(
+                LogLevel.ERROR,
+                "Fetched $name but could not remove it from the server " +
+                    "(${removed.exceptionOrNull()?.message})",
+            )
+        }
     }
 
     /**
@@ -542,13 +584,13 @@ class TransferManager(
      * is kept, so the copy is retried on the next run rather than the file
      * being downloaded again.
      */
-    private fun publish(record: TransferRecord, partial: java.io.File) {
+    private fun publish(record: TransferRecord, partial: java.io.File): MovedSource.Delivery {
         val destination = record.destination?.let(DownloadDestination::decode)
         if (destination == null) {
             log.log(LogLevel.ERROR, "${record.remotePath} has no destination folder; keeping it on the device")
-            return
+            return MovedSource.Delivery.NOT_YET
         }
-        if (!partial.isFile) return
+        if (!partial.isFile) return MovedSource.Delivery.NOT_YET
 
         val name = record.remotePath.substringAfterLast('/').ifEmpty { record.id }
         try {
@@ -560,15 +602,17 @@ class TransferManager(
                 // will ever publish them, and they would sit in app storage
                 // until the app was uninstalled.
                 log.log(LogLevel.STATUS, "$name is already in the chosen folder; kept the existing file")
-            } else {
-                log.log(LogLevel.STATUS, "Saved $name to $saved")
+                return MovedSource.Delivery.KEPT_EXISTING
             }
+            log.log(LogLevel.STATUS, "Saved $name to $saved")
+            return MovedSource.Delivery.SAVED
         } catch (e: IOException) {
             log.log(
                 LogLevel.ERROR,
                 "Downloaded $name but could not save it to the chosen folder (${e.message}); " +
                     "it is kept on the device and will be saved on the next run",
             )
+            return MovedSource.Delivery.NOT_YET
         }
     }
 
@@ -633,6 +677,32 @@ class TransferManager(
             updatedAtMillis = System.currentTimeMillis(),
         )
         journal.put(running)
+
+        // After the record says COMPLETED and not before. If the process
+        // dies between the two, the file is still on the phone and the
+        // record still says it arrived, which is the harmless way round.
+        if (MovedSource.isDue(running)) removeLocalSource(running)
+    }
+
+    /**
+     * Takes the phone's copy away once the server has it.
+     *
+     * A failure here is logged and nothing more. The bytes are on the
+     * server, so the move has happened in the sense that matters; what is
+     * left is a file the user can delete, which is a great deal better than
+     * a queue that stops because one file was in use.
+     */
+    private fun removeLocalSource(record: TransferRecord) {
+        val file = MovedSource.localFileOf(record.localPath) ?: return
+        val gone = runCatching { file.delete() }.getOrDefault(false)
+        if (gone) {
+            log.log(LogLevel.STATUS, "Moved ${file.name} to the server; removed the copy here")
+        } else {
+            log.log(
+                LogLevel.ERROR,
+                "Sent ${file.name} to the server but could not remove it from this phone",
+            )
+        }
     }
 
     // ----------------------------------------------------------------- helpers

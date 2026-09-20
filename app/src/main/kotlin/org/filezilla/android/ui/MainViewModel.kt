@@ -499,6 +499,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val conflicts: List<DownloadConflict>,
         /** The names the server already has, so the choice is applied to those. */
         val clashing: Set<String>,
+        /**
+         * Cut rather than copied.
+         *
+         * Carried this far because the conflict dialog sits between the
+         * paste and the queue, and it is the queue that has to know: each
+         * upload removes its own file once the server has it.
+         */
+        val moving: Boolean = false,
+        /** The folders on the phone the move may have emptied. */
+        val sourceFolders: List<String> = emptyList(),
     )
 
     /** Set when the server already has files of the same name. */
@@ -522,6 +532,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     pending.remoteDirectory,
                     choice,
                     pending.clashing,
+                    pending.moving,
+                    pending.sourceFolders,
                 ),
             )
         }
@@ -542,6 +554,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         remoteDirectory: String,
         onQueued: (Int) -> Unit,
     ) {
+        val moving = held.mode == ClipboardMode.MOVE
         viewModelScope.launch {
             val picked = held.paths()
             val files = withContext(Dispatchers.IO) {
@@ -556,7 +569,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val folders = withContext(Dispatchers.IO) {
                 picked.flatMap { LocalWalk.foldersUnder(it) }.distinct()
             }
-            sendToServer(files, folders, site, remoteDirectory, onQueued)
+            // The folders that were cut, as paths on the phone, so the
+            // sweep after the queue drains knows where to look. Only the ones
+            // picked: a sweep is not licensed to wander up out of them.
+            val sourceFolders = if (moving) {
+                withContext(Dispatchers.IO) { picked.filter { java.io.File(it).isDirectory } }
+            } else {
+                emptyList()
+            }
+            sendToServer(files, folders, site, remoteDirectory, moving, sourceFolders, onQueued)
         }
     }
 
@@ -574,6 +595,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         folders: List<List<String>>,
         site: SiteEntity,
         remoteDirectory: String,
+        /** Cut rather than copied: each upload takes its own file away after. */
+        moving: Boolean = false,
+        /** The folders on the phone that the move may empty. */
+        sourceFolders: List<String> = emptyList(),
         onQueued: (Int) -> Unit,
     ) {
         viewModelScope.launch {
@@ -600,6 +625,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                 remoteDirectory,
                                 ConflictChoice.DEFAULT,
                                 emptySet(),
+                                moving,
+                                sourceFolders,
                             ),
                         )
                     } else {
@@ -610,6 +637,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             remoteDirectory,
                             conflicts,
                             conflicts.map { it.displayName }.toSet(),
+                            moving,
+                            sourceFolders,
                         )
                         onQueued(0)
                     }
@@ -684,6 +713,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         remoteDirectory: String,
         choice: ConflictChoice,
         clashing: Set<String>,
+        moving: Boolean = false,
+        sourceFolders: List<String> = emptyList(),
     ): Int {
         // Made here rather than left to the transfers, because a transfer
         // only ever makes the folders above the file it is carrying -- and
@@ -726,14 +757,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 source = file.source,
                 totalBytes = file.size,
                 overwrite = clashes && choice == ConflictChoice.OVERWRITE,
+                // A move: this upload takes its own file away once the
+                // server has it. Not before -- an upload that has only been
+                // queued has not moved anything.
+                removeSource = moving,
             )
             queued++
         }
-        // Not deleted here, for a move. A move whose upload has only been
-        // queued would remove the original before it had gone anywhere, and a
-        // failed transfer would then have lost the file.
+        // Not deleted here. A move whose upload has only been queued would
+        // remove the original before it had gone anywhere, and a failed
+        // transfer would then have lost the file. Each upload takes its own
+        // file away when it lands, and the folders left behind are cleared
+        // when the queue drains -- noted now, because that may be minutes
+        // later and may be after this process has been killed.
+        if (moving && queued > 0) noteFoldersToClear(null, sourceFolders)
         clipboard = null
         return queued
+    }
+
+    /**
+     * Writes down folders a move may empty, for the sweep after the queue.
+     *
+     * Added to rather than replacing: two moves can be in the queue at once,
+     * and the second one must not make the app forget the first one's
+     * folders.
+     */
+    private fun noteFoldersToClear(siteId: String?, paths: List<String>) {
+        if (paths.isEmpty()) return
+        val preferences = graph.preferences
+        preferences.foldersToClearAfterMove = preferences.foldersToClearAfterMove +
+            paths.map { org.filezilla.android.data.MovedFolder(siteId, it) }
     }
 
 
@@ -767,6 +820,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // a server was planned as if it were a file, and the download fetched
         // nothing.
         val rows = rowsHeldIn(held)
+        val moving = held.mode == ClipboardMode.MOVE
         viewModelScope.launch {
             val picks = held.names.map { name ->
                 rows.firstOrNull { it.name == name } ?: DirectoryEntry(name = name)
@@ -792,11 +846,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 // about files already in the folder and quietly saved a
                 // second numbered copy -- which is the bug the single-file
                 // download had, arriving again by a new route.
+                // The folders the move may empty: the ones cut, plus every
+                // one a fetched file sat in. Both, because a folder that had
+                // nothing in it produces no file to point at it, and a
+                // folder deep in the tree is not named by the pick above it.
+                val emptied = if (moving) {
+                    (
+                        picks.filter { it.isDirectory }
+                            .map { FilePath.child(held.directory, it.name) } +
+                            plan.files.mapNotNull { FilePath.parent(it.remotePath) }
+                        ).distinct()
+                } else {
+                    emptyList()
+                }
                 val conflicts = findConflicts(plan, folder)
                 if (conflicts.isEmpty()) {
-                    enqueuePlan(plan, site, folder, ConflictChoice.DEFAULT).files.size
+                    val queued = enqueuePlan(plan, site, folder, ConflictChoice.DEFAULT, moving)
+                    if (moving && queued.files.isNotEmpty()) noteFoldersToClear(site.id, emptied)
+                    queued.files.size
                 } else {
-                    pendingConflicts = PendingDownload(plan, site, folder, conflicts)
+                    pendingConflicts =
+                        PendingDownload(plan, site, folder, conflicts, moving, emptied)
                     0
                 }
             }.onSuccess { count ->
@@ -1506,6 +1576,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val site: SiteEntity,
         val folder: Uri,
         val conflicts: List<DownloadConflict>,
+        /** Cut rather than copied: each file goes from the server once it lands. */
+        val moving: Boolean = false,
+        /** The folders on the server the move may have emptied. */
+        val sourceFolders: List<String> = emptyList(),
     )
 
     /** Set when files of the same name are already in the chosen folder. */
@@ -1517,7 +1591,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val pending = pendingConflicts ?: return
         pendingConflicts = null
         viewModelScope.launch {
-            val queued = enqueuePlan(pending.plan, pending.site, pending.folder, choice)
+            val queued =
+                enqueuePlan(pending.plan, pending.site, pending.folder, choice, pending.moving)
+            if (pending.moving && queued.files.isNotEmpty()) {
+                noteFoldersToClear(pending.site.id, pending.sourceFolders)
+            }
             onQueued(queued)
         }
     }
@@ -1557,6 +1635,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         site: SiteEntity,
         folder: Uri,
         choice: ConflictChoice,
+        /** Cut rather than copied: each file goes from the server once it lands. */
+        moving: Boolean = false,
     ): DownloadPlan {
         val clashing = if (choice == ConflictChoice.SKIP) {
             findConflicts(plan, folder).map { it.displayName }.toSet()
@@ -1572,6 +1652,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 destinationTree = folder,
                 subPath = file.subPath,
                 onConflict = choice,
+                // Only once it is in the user's own folder, and never when
+                // they chose to keep the file already there -- those bytes
+                // are dropped, which would make the server's copy the last
+                // one. See TransferManager.publish.
+                removeSource = moving,
             )
         }
         return plan.copy(files = queued)
@@ -1703,7 +1788,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             emptyList(),
             site,
             browse.path,
-            onQueued,
+            onQueued = onQueued,
         )
     }
 

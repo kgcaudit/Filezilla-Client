@@ -94,6 +94,23 @@ data class TransferRecord(
     val attempts: Int = 0,
     val lastError: String? = null,
     val updatedAtMillis: Long = 0,
+
+    /**
+     * True when this transfer is half of a move, and the thing it was made
+     * from should go once it has arrived.
+     *
+     * Carried on the record rather than decided when the queue is built,
+     * because the two moments are minutes apart and the app may not be
+     * running for the second one. Cutting a folder on the phone and pasting
+     * it on a server queued the uploads and then did nothing else, so the
+     * originals stayed where they were and a move was a copy -- and the
+     * obvious fix, deleting them as the queue is built, would throw the
+     * file away before it had gone anywhere.
+     *
+     * Acted on only against a COMPLETED record. Nothing is removed on the
+     * strength of a transfer that has been started.
+     */
+    val removeSourceWhenDone: Boolean = false,
 ) {
     val isTerminal: Boolean get() = state == TransferState.COMPLETED || state == TransferState.FAILED
 }

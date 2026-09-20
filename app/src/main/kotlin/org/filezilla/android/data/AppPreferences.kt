@@ -13,6 +13,32 @@ import org.filezilla.android.ui.ViewMode
  * pane, which says where it is itself. It was a Storage Access Framework
  * grant remembered across runs, and a folder nobody could see.
  */
+/**
+ * One folder a finished move may have emptied.
+ *
+ * [siteId] is null for the phone. Kept as a site id rather than a whole site
+ * because this outlives the paste, the screen, and possibly the process, and
+ * a site that has been edited or deleted in between should be looked up
+ * afresh -- or found to be gone, which is itself an answer.
+ */
+data class MovedFolder(val siteId: String?, val path: String) {
+
+    fun encode(): String = "${siteId.orEmpty()}$SEPARATOR$path"
+
+    companion object {
+        /** A NUL, which no path on either side of a transfer can contain. */
+        private const val SEPARATOR = '\u0000'
+
+        fun decode(stored: String): MovedFolder? {
+            val cut = stored.indexOf(SEPARATOR)
+            if (cut < 0) return null
+            val path = stored.substring(cut + 1)
+            if (path.isEmpty()) return null
+            return MovedFolder(stored.take(cut).ifEmpty { null }, path)
+        }
+    }
+}
+
 class AppPreferences(context: Context) {
 
     private val prefs = context.getSharedPreferences("filezilla", Context.MODE_PRIVATE)
@@ -83,6 +109,26 @@ class AppPreferences(context: Context) {
                 .apply()
         }
 
+    /**
+     * Folders a move has still to clear away, once its queue has drained.
+     *
+     * Written when the paste is made and read when the queue finishes, which
+     * may be minutes later and may be after the app has been killed and
+     * restarted -- so it cannot be a field. Nothing in it can cost a file:
+     * the sweep it feeds removes only folders that are completely empty.
+     *
+     * Each entry is a site id and a path, joined by a character no path
+     * contains. An empty site id means the phone.
+     */
+    var foldersToClearAfterMove: Set<MovedFolder>
+        get() = prefs.getStringSet(KEY_MOVE_CLEANUP, emptySet())
+            .orEmpty()
+            .mapNotNull(MovedFolder::decode)
+            .toSet()
+        set(value) = prefs.edit()
+            .putStringSet(KEY_MOVE_CLEANUP, value.map { it.encode() }.toSet())
+            .apply()
+
     /** A stored name that no longer exists falls back rather than throwing. */
     private fun panePathKey(pane: String, source: String) = "$KEY_PANE_PATH$pane/$source"
 
@@ -100,5 +146,6 @@ class AppPreferences(context: Context) {
         const val KEY_SHOW_HIDDEN = "browse_show_hidden"
         const val KEY_VIEW = "browse_view"
         const val KEY_WIFI_ONLY = "wifi_only"
+        const val KEY_MOVE_CLEANUP = "move_cleanup"
     }
 }

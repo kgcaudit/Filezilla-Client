@@ -39,6 +39,8 @@ data class TransferEntity(
     val attempts: Int,
     @ColumnInfo(name = "last_error") val lastError: String?,
     @ColumnInfo(name = "updated_at") val updatedAtMillis: Long,
+    /** Half of a move: the source goes once this has arrived. */
+    @ColumnInfo(name = "remove_source", defaultValue = "0") val removeSourceWhenDone: Boolean = false,
 ) {
     fun toRecord(): TransferRecord = TransferRecord(
         id = id,
@@ -63,6 +65,7 @@ data class TransferEntity(
         attempts = attempts,
         lastError = lastError,
         updatedAtMillis = updatedAtMillis,
+        removeSourceWhenDone = removeSourceWhenDone,
     )
 
     companion object {
@@ -83,6 +86,7 @@ data class TransferEntity(
             attempts = record.attempts,
             lastError = record.lastError,
             updatedAtMillis = record.updatedAtMillis,
+            removeSourceWhenDone = record.removeSourceWhenDone,
         )
     }
 }

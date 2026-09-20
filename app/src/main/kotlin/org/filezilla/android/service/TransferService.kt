@@ -102,6 +102,11 @@ class TransferService : LifecycleService() {
         queueJob = lifecycleScope.launch {
             try {
                 val outcome = graph.transfers.runQueue()
+                // The second half of a move: each transfer took its own file
+                // away as it landed, and what is left is the folders they
+                // were in. Before the notice, so the ending is announced
+                // once everything the move was going to do is done.
+                graph.moveCleanup.sweep()
                 // After the call and not in the finally: the finally also
                 // runs when the user pressed stop, and announcing an ending
                 // to somebody who has just cancelled is the app arguing with

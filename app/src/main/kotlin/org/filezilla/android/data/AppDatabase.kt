@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [TransferEntity::class, SiteEntity::class],
-    version = 4,
+    version = AppDatabase.VERSION,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -19,18 +19,53 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun sites(): SiteDao
 
     companion object {
+
+        /**
+         * The schema version, named so the migration test can pin the same
+         * one the app ships. It was written out twice, and the copy in the
+         * test went stale the moment a column was added -- so every existing
+         * database looked unmigratable from a test that was only out of date.
+         */
+        const val VERSION = 5
+
+        /**
+         * Every migration, in one list.
+         *
+         * Also written out twice, with the same result: a migration added
+         * here and not there made the test fail as though the app could not
+         * open an old database.
+         */
+        fun migrations(passwords: PasswordCipher): Array<Migration> =
+            arrayOf(encryptPasswords(passwords), ADD_ENCODING, ADD_POSITION, ADD_REMOVE_SOURCE)
+
         fun open(context: Context, passwords: PasswordCipher): AppDatabase =
             Room.databaseBuilder(
                 context.applicationContext,
                 AppDatabase::class.java,
                 "filezilla.db",
             )
-                .addMigrations(encryptPasswords(passwords), ADD_ENCODING, ADD_POSITION)
+                .addMigrations(*migrations(passwords))
                 // No fallbackToDestructiveMigration: dropping this database
                 // throws away the offsets that make a resume safe, which
                 // would turn a schema change into silently re-downloading
                 // everything in the queue -- and now the saved passwords too.
                 .build()
+
+        /**
+         * Version 5 lets a queued transfer know it is half of a move.
+         *
+         * Defaulting to 0 is the whole migration: every transfer queued
+         * before this existed was a copy, and a copy leaves its source
+         * alone. Nothing already in the queue can start deleting things
+         * because the app was updated.
+         */
+        internal val ADD_REMOVE_SOURCE = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE `transfers` ADD COLUMN `remove_source` INTEGER NOT NULL DEFAULT 0",
+                )
+            }
+        }
 
         /**
          * Version 4 gives each site a place in an order the user arranges.
