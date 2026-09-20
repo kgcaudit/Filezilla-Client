@@ -14,16 +14,13 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -33,7 +30,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -78,7 +74,7 @@ fun BrowseOverflow(
     }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
         onNewDirectory?.let { action ->
-            Item(R.string.browse_new_directory, Icons.Filled.CreateNewFolder) {
+            Item(R.string.new_folder_title, Icons.Filled.CreateNewFolder) {
                 open = false
                 action()
             }

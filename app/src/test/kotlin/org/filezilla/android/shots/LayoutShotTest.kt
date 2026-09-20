@@ -19,6 +19,16 @@ import androidx.compose.ui.unit.dp
 import org.filezilla.android.R
 import org.filezilla.android.ui.ErrorPanel
 import org.filezilla.android.ui.describeFailure
+import org.filezilla.android.ui.OloPromptDialog
+import org.filezilla.android.ui.OloConfirmDialog
+import androidx.compose.ui.res.stringResource
+import org.filezilla.android.ui.ConflictDialog
+import org.filezilla.android.ui.PropertiesDialog
+import org.filezilla.android.ui.ViewOptionsDialog
+import org.filezilla.android.ui.SiteEditor
+import org.filezilla.android.storage.DownloadConflict
+import org.filezilla.android.ui.BrowseOptions
+import org.filezilla.android.ui.SiteDraft
 import org.filezilla.android.ui.DangerButton
 import org.filezilla.android.ui.FileKind
 import org.filezilla.android.ui.FileTile
@@ -228,89 +238,174 @@ class LayoutShotTest {
     }
 
     /**
-     * What a dialog is made of, drawn from the same three theme values a real
-     * one reads: the raised surface, the corner, and the type scale.
+     * A real dialog, drawn from the window it really opens in.
      *
-     * A real AlertDialog draws in a window of its own, which nothing that
-     * renders this screen can capture -- so this is those three values in the
-     * shape Material puts them in. It was lavender, because the theme never
-     * set the surface a dialog sits on and Material filled it from its own
-     * baseline palette.
+     * The facsimile below came first, because an AlertDialog puts itself in a
+     * window of its own and the activity's decorView knows nothing about it.
+     * It can be reached, though -- Robolectric keeps the last dialog shown --
+     * and it has to be, because the facsimile is a drawing of what somebody
+     * believed the dialog looked like. What actually shipped was a new-file
+     * box labelled with the site editor's hint, and no drawing of a dialog
+     * was ever going to show that.
      */
+    private fun shootDialog(name: String, width: Int = 1080, height: Int = 900, content: @Composable () -> Unit) {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+        controller.get().setContent { OloTheme { content() } }
+        shadowOf(Looper.getMainLooper()).idle()
+
+        val dialog = requireNotNull(org.robolectric.shadows.ShadowDialog.getLatestDialog()) {
+            "nothing opened a dialog"
+        }
+        val root = requireNotNull(dialog.window).decorView
+        // AT_MOST, so the card is the height it really is. EXACTLY stretches
+        // it down the window and the shot stops saying anything about how much
+        // room the dialog takes.
+        root.measure(
+            View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.AT_MOST),
+        )
+        root.layout(0, 0, root.measuredWidth, root.measuredHeight)
+        shadowOf(Looper.getMainLooper()).idle()
+
+        val bitmap = Bitmap.createBitmap(
+            root.measuredWidth.coerceAtLeast(1),
+            root.measuredHeight.coerceAtLeast(1),
+            Bitmap.Config.ARGB_8888,
+        )
+        bitmap.eraseColor(android.graphics.Color.WHITE)
+        root.draw(Canvas(bitmap))
+        File("build/shots").apply { mkdirs() }.resolve("$name.png").outputStream().use {
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+    }
+
+    /** Asking for a name: the dialog whose label was somebody else's. */
     @Test
-    fun `a dialog`() {
-        shoot("dialog", height = 640) { DialogFace() }
+    fun `the new folder dialog`() {
+        shootDialog("dialog-new-folder") {
+            OloPromptDialog(
+                title = R.string.new_folder_title,
+                detail = R.string.new_folder_detail,
+                label = R.string.prompt_name,
+                onDismiss = {},
+                onConfirm = {},
+            )
+        }
+    }
+
+    /** And the one that cannot be taken back. */
+    @Test
+    fun `the delete confirmation`() {
+        shootDialog("dialog-delete") {
+            OloConfirmDialog(
+                title = androidx.compose.ui.res.pluralStringResource(R.plurals.confirm_delete_selected, 3, 3),
+                detail = stringResource(R.string.confirm_delete_detail),
+                confirmLabel = stringResource(R.string.action_delete),
+                onDismiss = {},
+                onConfirm = {},
+            )
+        }
     }
 
     @Test
     @Config(qualifiers = "w411dp-h891dp-night-xhdpi")
-    fun `a dialog at night`() {
-        shoot("dialog-night", height = 640) { DialogFace() }
+    fun `the new folder dialog at night`() {
+        shootDialog("dialog-new-folder-night") {
+            OloPromptDialog(
+                title = R.string.new_folder_title,
+                detail = R.string.new_folder_detail,
+                label = R.string.prompt_name,
+                onDismiss = {},
+                onConfirm = {},
+            )
+        }
     }
 
-    @Composable
-    private fun DialogFace() {
-        val scheme = androidx.compose.material3.MaterialTheme.colorScheme
-        val type = androidx.compose.material3.MaterialTheme.typography
-        androidx.compose.foundation.layout.Box(
-            modifier = Modifier.fillMaxWidth().padding(24.dp),
-        ) {
-            androidx.compose.material3.Surface(
-                color = scheme.surfaceContainerHigh,
-                contentColor = scheme.onSurface,
-                shape = androidx.compose.material3.MaterialTheme.shapes.extraLarge,
-                tonalElevation = 6.dp,
-            ) {
-                androidx.compose.foundation.layout.Column(modifier = Modifier.padding(24.dp)) {
-                    androidx.compose.material3.Text("1개 항목을 삭제할까요?", style = type.headlineSmall)
-                    androidx.compose.material3.Text(
-                        "폴더는 안에 든 것까지 함께 삭제됩니다. 되돌릴 수 없습니다.",
-                        style = type.bodyMedium,
-                        color = scheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 16.dp),
-                    )
-                    androidx.compose.foundation.layout.Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
-                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End,
-                    ) {
-                        androidx.compose.material3.TextButton(onClick = {}) {
-                            androidx.compose.material3.Text("취소")
-                        }
-                        // The real dialog's confirm button, not a second copy
-                        // of its cancel: the two used to be drawn the same
-                        // here and on screen, which is the whole reason the
-                        // error colour moved.
-                        DangerButton("삭제", onClick = {})
-                    }
-                }
-            }
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-night-xhdpi")
+    fun `the delete confirmation at night`() {
+        shootDialog("dialog-delete-night") {
+            OloConfirmDialog(
+                title = androidx.compose.ui.res.pluralStringResource(R.plurals.confirm_delete_selected, 3, 3),
+                detail = stringResource(R.string.confirm_delete_detail),
+                confirmLabel = stringResource(R.string.action_delete),
+                onDismiss = {},
+                onConfirm = {},
+            )
         }
     }
 
     /**
-     * The card a failure arrives in.
+     * The other four, so that every dialog in the app has been looked at.
      *
-     * Shot because the user saw it before this did: it was a pink card on a
-     * cream page, and nothing that rendered a screen here had ever drawn one.
+     * The point of the shell is that these carry their own content through
+     * one frame. A shot of each is how that stops being a claim: a dialog
+     * that quietly stopped matching the rest would show up here rather than
+     * on somebody's phone.
      */
     @Test
-    fun `an error card`() {
-        shoot("error-panel", height = 520) { FailureFace() }
+    fun `the conflict dialog`() {
+        shootDialog("dialog-conflict") {
+            ConflictDialog(
+                conflicts = listOf(
+                    DownloadConflict(
+                        displayName = "holiday-2024.jpg",
+                        remoteSize = 3_500_000,
+                        remoteModifiedMillis = 1_726_000_000_000,
+                        localSize = 3_412_000,
+                        localModifiedMillis = 1_725_000_000_000,
+                    ),
+                ),
+                onChoose = {},
+                onDismiss = {},
+            )
+        }
     }
 
     @Test
-    @Config(qualifiers = "w411dp-h891dp-night-xhdpi")
-    fun `an error card at night`() {
-        shoot("error-panel-night", height = 520) { FailureFace() }
+    fun `the properties dialog`() {
+        shootDialog("dialog-properties", height = 1200) {
+            PropertiesDialog(
+                entry = DirectoryEntry(
+                    name = "season-01.mkv",
+                    isDirectory = false,
+                    size = 1_932_735_283,
+                    permissions = "-rw-r--r--",
+                    ownerGroup = "bob staff",
+                ),
+                path = "/media/shows",
+                onDismiss = {},
+            )
+        }
     }
 
-    @Composable
-    private fun FailureFace() {
-        ErrorPanel(
-            failure = describeFailure(java.net.SocketTimeoutException("Read timed out"), online = false),
-            onRetry = {},
-            onOpenLog = {},
-        )
+    @Test
+    fun `the view options dialog`() {
+        shootDialog("dialog-view-options", height = 1200) {
+            ViewOptionsDialog(options = BrowseOptions(), onDismiss = {}, onApply = {})
+        }
+    }
+
+    @Test
+    fun `the site editor`() {
+        shootDialog("dialog-site-editor", height = 1600) {
+            SiteEditor(
+                initial = SiteDraft(
+                    id = "1",
+                    name = "Office NAS",
+                    host = "nas.example.org",
+                    port = 21,
+                    user = "bob",
+                    password = "",
+                    security = FtpSecurity.EXPLICIT_TLS,
+                    transferMode = TransferMode.DEFAULT,
+                    trustAllCertificates = false,
+                    initialPath = null,
+                ),
+                onDismiss = {},
+                onSave = {},
+            )
+        }
     }
 
     /** The strip the transfers tab was replaced by, at the foot of the screen. */

@@ -3,6 +3,8 @@ package org.filezilla.android.ui
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -16,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import org.filezilla.android.R
 
@@ -35,9 +38,12 @@ import org.filezilla.android.R
  * below are the two questions this app actually asks; anything richer passes
  * its own [content].
  *
- * Every dialog offers a way out. The exception is one whose only action is
- * to close it, which is its own way out -- and that is the only case where
- * [dismissLabel] may be null.
+ * Every dialog offers a way out. [dismissLabel] may be null only when the
+ * dialog already provides one: a dialog whose single action is to close it,
+ * or one whose choices are stacked and carry their own last line. Material
+ * lays the two button slots out side by side, so a tall stack in one of them
+ * leaves the other floating alongside, and the way out stops looking like
+ * part of the question.
  */
 @Composable
 fun OloDialog(
@@ -117,7 +123,11 @@ fun OloPromptDialog(
     @StringRes detail: Int? = null,
     @StringRes confirmLabel: Int = R.string.action_ok,
 ) {
-    var text by remember { mutableStateOf(initial) }
+    // Keyed on what it started from. Unkeyed, a dialog reopened on a
+    // different entry keeps the first one's name in the box, because the
+    // same composable is reused and remember has nothing to tell it that
+    // the question changed.
+    var text by remember(initial) { mutableStateOf(initial) }
     OloDialog(
         title = if (titleArg == null) stringResource(title) else stringResource(title, titleArg),
         detail = detail?.let { stringResource(it) },
@@ -128,6 +138,13 @@ fun OloPromptDialog(
                 onValueChange = { text = it },
                 label = { Text(stringResource(label)) },
                 singleLine = true,
+                // The keyboard's own key finishes the job. Without this it
+                // says "next" and moves to nothing, so the only way to
+                // confirm a name is to put the keyboard away first.
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(
+                    onDone = { if (text.isNotBlank()) onConfirm(text.trim()) },
+                ),
             )
         },
         action = {

@@ -1,7 +1,5 @@
 package org.filezilla.android.ui
 
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,14 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.background
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Tab
@@ -37,7 +28,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -271,9 +262,13 @@ fun FilePanes(
 
     if (renaming) {
         val entry = state.entries.firstOrNull { it.name in state.selection }
-        if (entry == null) {
-            renaming = false
-        } else {
+        // The row can go out from under an open dialog -- a refresh lands and
+        // the selection no longer matches anything. Closing it is a side
+        // effect: assigning to state from the composition body is a write to
+        // the very thing being read, which re-runs the composition that is
+        // running and is what Compose warns about.
+        LaunchedEffect(entry == null) { if (entry == null) renaming = false }
+        if (entry != null) {
             OloPromptDialog(
                 // Names the thing being renamed. It used to carry the menu
                 // item's own label, so a dialog asking about one file was
@@ -309,7 +304,7 @@ fun FilePanes(
 @Composable
 private fun ConfirmDelete(count: Int, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     OloConfirmDialog(
-        title = stringResource(R.string.confirm_delete_selected, count),
+        title = pluralStringResource(R.plurals.confirm_delete_selected, count, count),
         detail = stringResource(R.string.confirm_delete_detail),
         confirmLabel = stringResource(R.string.action_delete),
         onDismiss = onDismiss,

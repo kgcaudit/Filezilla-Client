@@ -323,19 +323,6 @@ private fun moodLabel(mood: TransferMood): String = stringResource(
 )
 
 @Composable
-private fun stateLabel(state: TransferState): String = stringResource(
-    when (state) {
-        TransferState.PENDING -> R.string.state_pending
-        TransferState.RUNNING -> R.string.state_running
-        TransferState.PAUSED -> R.string.state_paused
-        TransferState.INTERRUPTED -> R.string.state_interrupted
-        TransferState.WAITING_FOR_NETWORK -> R.string.state_waiting_for_network
-        TransferState.COMPLETED -> R.string.state_completed
-        TransferState.FAILED -> R.string.state_failed
-    },
-)
-
-@Composable
 private fun directionLabel(direction: TransferDirection): String = stringResource(
     if (direction == TransferDirection.DOWNLOAD) R.string.direction_download else R.string.direction_upload,
 )

@@ -22,7 +22,6 @@ import org.filezilla.android.data.SiteEntity
 import org.filezilla.android.files.AccessRoute
 import org.filezilla.android.files.FilePath
 import org.filezilla.android.files.LocalOperations
-import org.filezilla.android.files.LocalFileToSend
 import org.filezilla.android.files.LocalWalk
 import org.filezilla.android.files.localParent
 import org.filezilla.android.files.StorageRoot

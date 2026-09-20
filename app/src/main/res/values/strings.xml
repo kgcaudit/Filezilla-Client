@@ -34,7 +34,7 @@
     <string name="sites_new_title">New server</string>
     <string name="sites_edit_title">Edit server</string>
     <string name="field_name">Name</string>
-    <string name="name_hint">The address is used if left blank</string>
+    <string name="name_hint">The host is used if left blank</string>
     <string name="field_host">Host</string>
     <string name="field_port">Port</string>
     <string name="field_encryption">Encryption</string>
@@ -66,7 +66,6 @@
     <string name="browse_refresh">Refresh listing</string>
     <string name="browse_download">Download %1$s</string>
     <string name="browse_more">More actions for %1$s</string>
-    <string name="browse_new_directory">New folder</string>
     <string name="browse_upload">Upload a file</string>
     <string name="menu_select">Select</string>
     <string name="menu_select_all">Select all</string>
@@ -132,7 +131,10 @@
     <string name="new_folder_detail">The folder is created in the folder you are looking at.</string>
     <string name="new_file_detail">An empty file is created in the folder you are looking at.</string>
     <string name="rename_detail">Only the name changes. The contents are left alone.</string>
-    <string name="confirm_delete_selected">Delete %1$d items?</string>
+    <plurals name="confirm_delete_selected">
+        <item quantity="one">Delete this item?</item>
+        <item quantity="other">Delete %d items?</item>
+    </plurals>
     <string name="prompt_name">Name</string>
 
     <!-- Queue -->
@@ -155,7 +157,6 @@
     <string name="state_pending">Waiting</string>
     <string name="state_running">Transferring</string>
     <string name="state_paused">Paused</string>
-    <string name="state_interrupted">Interrupted — will resume</string>
     <string name="state_waiting_for_network">Waiting for Wi‑Fi</string>
     <string name="state_completed">Done</string>
     <string name="state_failed">Failed</string>

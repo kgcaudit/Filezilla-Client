@@ -54,7 +54,17 @@ class WordingTest {
         "내려받기" to "다운로드",
     )
 
-    private val hostIsRight = setOf("detail_host", "fail_host_advice", "field_host")
+    /**
+     * Where a hostname really is what is meant.
+     *
+     * The two failures are about a name lookup, and the other two are the
+     * site editor's address field and the sentence under it. A field and its
+     * own hint have to use one word between them -- calling the field "host"
+     * and its hint "address" is the same two-names-for-one-thing this test
+     * exists to stop, and it is a mistake this test's author made while
+     * writing it.
+     */
+    private val hostIsRight = setOf("detail_host", "fail_host_advice", "field_host", "name_hint")
 
     @Test
     fun `no string uses a word the app decided against`() {

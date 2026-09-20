@@ -6,11 +6,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -69,11 +69,18 @@ fun ConflictDialog(
                 }
             }
         },
+        // Its own, at the foot of the stack: see [OloDialog]. In the slot
+        // Material puts it in, it sat halfway up the side of the choices,
+        // reading as a fourth option that had drifted out of line.
+        dismissLabel = null,
         action = {
             // Three choices do not fit across a dialog in Korean, so they
             // stack. Keep-both is first because it is the only one that
             // cannot lose a file.
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.End,
+            ) {
                 TextButton(onClick = { onChoose(ConflictChoice.KEEP_BOTH) }) {
                     Text(stringResource(R.string.conflict_keep_both))
                 }
@@ -82,6 +89,9 @@ fun ConflictDialog(
                 }
                 TextButton(onClick = { onChoose(ConflictChoice.SKIP) }) {
                     Text(stringResource(R.string.conflict_skip))
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         },

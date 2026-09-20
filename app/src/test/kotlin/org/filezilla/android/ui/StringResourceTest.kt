@@ -43,6 +43,34 @@ class StringResourceTest {
 
     private val specifier = Regex("""%(\d+\$)?[sdf]""")
 
+    /**
+     * That the file holds no strings the app has stopped saying.
+     *
+     * Not tidiness. A string nobody shows is a string nobody checks, and it
+     * sits there looking like the wording of a screen -- so the next person
+     * to touch that screen reads it, believes it, and writes the new copy to
+     * match something that has not been on screen for months. Two of these
+     * had already accumulated: a label for a transfer state the queue stopped
+     * naming, and a title for a dialog that had three implementations and
+     * lost the one that used it.
+     */
+    @Test
+    fun `no string is left over`() {
+        val used = sources().map { it.second }
+        // The launcher label, which the manifest names and no Kotlin does.
+        val exempt = setOf("app_name")
+        val orphans = strings("values").keys
+            .filter { it !in exempt }
+            // Either form: a <plurals> is reached through R.plurals, so
+            // looking only for R.string reports every one of them as dead.
+            .filter { name ->
+                used.none { Regex("""R\.(string|plurals)\.$name\b""").containsMatchIn(it) }
+            }
+            .sorted()
+
+        assertEquals(emptyList<String>(), orphans)
+    }
+
     @Test
     fun `every English string has a Korean translation`() {
         val en = strings("values").keys
