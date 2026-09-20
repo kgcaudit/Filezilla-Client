@@ -1,6 +1,7 @@
 package org.filezilla.android
 
 import android.content.Context
+import androidx.annotation.VisibleForTesting
 import org.filezilla.android.data.AppDatabase
 import org.filezilla.android.data.AppPreferences
 import org.filezilla.android.data.KeystorePasswordCipher
@@ -31,7 +32,7 @@ class AppGraph private constructor(context: Context) {
     private val app = context.applicationContext
 
     /** Built before the database, which needs it to migrate old rows. */
-    val passwords: PasswordCipher = KeystorePasswordCipher()
+    val passwords: PasswordCipher = sealPasswordsWith()
 
     val database: AppDatabase = AppDatabase.open(app, passwords)
     val preferences = AppPreferences(app)
@@ -67,6 +68,38 @@ class AppGraph private constructor(context: Context) {
     companion object {
         @Volatile
         private var instance: AppGraph? = null
+
+        /**
+         * How passwords are sealed. The keystore, except under test.
+         *
+         * The one seam in this graph, and it is here because its absence was
+         * costing real bugs. Everything below the view model can be tested
+         * against a live FTPS server, and nothing at or above it could be,
+         * because a site's password goes through the Android keystore and
+         * there is no keystore off a device. So the tests stopped one layer
+         * short of where the app is actually assembled -- and that is the
+         * layer where an upload forgot to make its folders, and where a copy
+         * forgot the folders with nothing in them. Both shipped. Both would
+         * have been caught by a test that could paste.
+         *
+         * Internal, so only this module can reach it, and
+         * [org.filezilla.android.AppGraphSeamTest] fails if anything outside
+         * a test ever assigns it.
+         */
+        @Volatile
+        @VisibleForTesting
+        internal var sealPasswordsWith: () -> PasswordCipher = { KeystorePasswordCipher() }
+
+        /**
+         * Throws the graph away so the next [of] builds a fresh one.
+         *
+         * Only for a test that has just changed [sealPasswordsWith]: the
+         * graph reads it once, when it is built.
+         */
+        @VisibleForTesting
+        internal fun forget() {
+            instance = null
+        }
 
         fun of(context: Context): AppGraph =
             instance ?: synchronized(this) {
