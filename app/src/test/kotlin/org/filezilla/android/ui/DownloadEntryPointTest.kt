@@ -166,6 +166,28 @@ class DownloadEntryPointTest {
         assertEquals(setOf("paste"), membersContaining("localPasteConflicts("))
     }
 
+    // ------------------------------------------------ removing on a server
+
+    /**
+     * And a fourth time, for the same shape of hole.
+     *
+     * Deleting had two ways in -- one row's menu, and a selection -- and both
+     * sent a bare `RMD`. FTP's `RMD` refuses a directory that is not empty,
+     * so deleting a folder with anything in it came back as
+     * "550 Directory not empty" while deleting a file worked. Two call sites,
+     * one missing walk, and nothing in a compile to say so.
+     */
+    @Test
+    fun `only one place removes anything from a server`() {
+        assertEquals(setOf("removeRemotely"), membersContaining("session.removeDirectory("))
+        assertEquals(setOf("removeRemotely"), membersContaining("session.deleteFile("))
+    }
+
+    @Test
+    fun `and it is the place that walked the folder first`() {
+        assertEquals(setOf("removeRemotely"), membersContaining("RemoteDelete.plan("))
+    }
+
     @Test
     fun `queueing uploads is fed by the paths that looked at the server`() {
         assertEquals(

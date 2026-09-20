@@ -45,6 +45,16 @@ fun describeFailure(error: Throwable, online: Boolean): ConnectionFailure {
     val host = (error as? UnknownHostException)?.message.orEmpty()
     val message = error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName
 
+    // Ahead of the offline check, because this one is not a network failure
+    // at all -- nothing was sent and nothing was removed -- and the offline
+    // wording would send the user to look at their signal.
+    if (error is TooMuchToDeleteException) {
+        return ConnectionFailure(
+            R.string.fail_too_much_to_delete, R.string.fail_too_much_to_delete_advice,
+            R.string.detail_plain, message,
+        )
+    }
+
     // Offline is checked first: every network failure looks like a broken
     // server when the phone has no connection, and blaming the server would
     // send the user to fix something that is not wrong.

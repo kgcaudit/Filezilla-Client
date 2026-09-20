@@ -1253,12 +1253,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         val chosen = browse.selection.toSet()
-        val rows = browse.entries.filter { it.name in chosen }
-        mutate { session ->
-            for (entry in rows) {
-                if (entry.isDirectory) session.removeDirectory(entry.name) else session.deleteFile(entry.name)
-            }
-        }
+        removeRemotely(browse.entries.filter { it.name in chosen })
         clearSelection()
     }
 
@@ -1275,8 +1270,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             writeThen(id) { LocalOperations.delete(FilePath.child(pane(id).path, entry.name)) }
             return
         }
+        removeRemotely(listOf(entry))
+    }
+
+    /**
+     * Removes rows from the server, contents and all.
+     *
+     * FTP has no recursive delete: `RMD` refuses a directory that is not
+     * empty, so this used to come back as "550 Directory not empty" and the
+     * folder stayed where it was -- while deleting a file worked, which made
+     * it look like the app was broken rather than the protocol being narrow.
+     * The walk that empties it first is [RemoteDelete].
+     */
+    private fun removeRemotely(rows: List<DirectoryEntry>) {
+        if (rows.isEmpty()) return
+        val directory = browse.path
         mutate { session ->
-            if (entry.isDirectory) session.removeDirectory(entry.name) else session.deleteFile(entry.name)
+            val plan = RemoteDelete.plan(
+                // One connection for the whole walk, and the same one that
+                // then does the removing: a session per folder would
+                // reconnect for every level of the tree.
+                lister = { path ->
+                    session.changeDirectory(path)
+                    session.list()
+                },
+                directory = directory,
+                picks = rows,
+            )
+            // Refused rather than part-done. Half a delete leaves a tree the
+            // user did not ask for and cannot see the shape of, and the
+            // failing RMD at the end of it would not say which half.
+            if (plan.truncated) throw TooMuchToDeleteException()
+            for (step in plan.steps) {
+                if (step.isDirectory) session.removeDirectory(step.path) else session.deleteFile(step.path)
+            }
+            // Back where the pane is looking, because the walk left the
+            // connection wherever the deepest folder was -- and the re-list
+            // that follows starts from the current directory.
+            session.changeDirectory(directory)
         }
     }
 

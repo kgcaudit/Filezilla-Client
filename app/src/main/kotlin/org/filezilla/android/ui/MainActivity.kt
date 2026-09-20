@@ -452,7 +452,11 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
         AlertDialog(
             onDismissRequest = { confirmingDelete = false },
             title = { Text(stringResource(R.string.confirm_delete_title, count)) },
-            text = { Text(stringResource(R.string.confirm_delete_body)) },
+            // The same sentence the row's own delete shows, because it is
+            // the same promise: a folder goes with everything in it. The
+            // wording it replaces said directories had to be empty, which is
+            // what RMD forces and no longer what the app does.
+            text = { Text(stringResource(R.string.confirm_delete_detail)) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmingDelete = false

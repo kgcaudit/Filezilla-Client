@@ -110,7 +110,6 @@
     <string name="action_download_selected">Download</string>
     <string name="action_delete_selected">Delete</string>
     <string name="confirm_delete_title">Delete %1$d item(s)?</string>
-    <string name="confirm_delete_body">This cannot be undone. Directories must be empty.</string>
     <string name="queued_many">%1$d queued</string>
     <string name="queued_none">Nothing to download in what you selected</string>
     <string name="conflict_many_detail">These files are already in the chosen folder:</string>
@@ -233,6 +232,9 @@
     <string name="new_folder_title">New folder</string>
     <string name="new_file_title">New file</string>
     <string name="confirm_delete_detail">Folders go with everything in them. This cannot be undone.</string>
+    <string name="confirm_delete_one">Delete \u0022%1$s\u0022?</string>
+    <string name="fail_too_much_to_delete">Too much to delete at once</string>
+    <string name="fail_too_much_to_delete_advice">Nothing was removed. Open the folder and delete it in parts.</string>
     <string name="paste_between_servers">Copying between two servers is not possible over FTP</string>
     <string name="paste_upload_here">Send %1$d to this server</string>
     <string name="paste_download_here">Save %1$d to this phone</string>

@@ -109,7 +109,6 @@
     <string name="action_download_selected">다운로드</string>
     <string name="action_delete_selected">삭제</string>
     <string name="confirm_delete_title">%1$d개 항목을 삭제할까요?</string>
-    <string name="confirm_delete_body">되돌릴 수 없습니다. 디렉터리는 비어 있어야 삭제됩니다.</string>
     <string name="queued_many">%1$d개 대기열에 추가됨</string>
     <string name="queued_none">선택한 항목에 내려받을 파일이 없습니다</string>
     <string name="conflict_many_detail">아래 파일이 이미 저장 폴더에 있습니다:</string>
@@ -231,6 +230,9 @@
     <string name="new_folder_title">새 폴더</string>
     <string name="new_file_title">새 파일</string>
     <string name="confirm_delete_detail">폴더는 안에 든 것까지 함께 삭제됩니다. 되돌릴 수 없습니다.</string>
+    <string name="confirm_delete_one">\u0022%1$s\u0022을(를) 삭제할까요?</string>
+    <string name="fail_too_much_to_delete">한 번에 지우기엔 너무 많습니다</string>
+    <string name="fail_too_much_to_delete_advice">아무것도 삭제되지 않았습니다. 폴더를 열어 나누어 삭제하세요.</string>
     <string name="paste_between_servers">FTP에서는 서버끼리 복사할 수 없습니다</string>
     <string name="paste_upload_here">이 서버로 %1$d개 보내기</string>
     <string name="paste_download_here">이 휴대폰에 %1$d개 저장</string>

@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -35,6 +36,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -45,6 +47,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -91,6 +95,7 @@ fun BrowseScreen(
     }
 
     var renaming by remember { mutableStateOf<DirectoryEntry?>(null) }
+    var deleting by remember { mutableStateOf<DirectoryEntry?>(null) }
 
     Column(modifier = modifier) {
         if (state.filterOpen) {
@@ -137,12 +142,44 @@ fun BrowseScreen(
                             isLocal = state.isLocal,
                             actions = actions,
                             onRename = { renaming = entry },
+                            onDelete = { deleting = entry },
                         )
                         HorizontalDivider()
                     }
                 }
             }
         }
+    }
+
+    // Asked about, which it was not. Deleting a selection has always asked;
+    // this one route -- a row's own menu -- went straight through, and since
+    // a folder now takes everything inside it, one tap there could remove a
+    // tree. There is no undo on a server.
+    deleting?.let { entry ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            icon = {
+                Icon(
+                    painter = painterResource(R.drawable.ic_flat_warning),
+                    contentDescription = null,
+                    tint = Color.Unspecified,
+                    modifier = Modifier.size(28.dp),
+                )
+            },
+            title = { Text(stringResource(R.string.confirm_delete_one, entry.name)) },
+            text = { Text(stringResource(R.string.confirm_delete_detail)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    actions.onDelete(entry)
+                    deleting = null
+                }) { Text(stringResource(R.string.action_delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleting = null }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
     }
 
     renaming?.let { entry ->
@@ -184,6 +221,7 @@ private fun EntryRow(
     isLocal: Boolean,
     actions: EntryActions,
     onRename: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val chip = if (entry.isDirectory) {
@@ -306,7 +344,7 @@ private fun EntryRow(
                     text = { Text(stringResource(R.string.action_delete)) },
                     onClick = {
                         menuOpen = false
-                        actions.onDelete(entry)
+                        onDelete()
                     },
                 )
             }
