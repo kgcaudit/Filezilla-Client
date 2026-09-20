@@ -258,8 +258,27 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
         }
     }
 
+    // The queue's own line along the foot, and only while it has something
+    // to say; see [summariseTransfers].
+    val queue = remember(transfers) { summariseTransfers(transfers) }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbars) },
+        bottomBar = {
+            // In the Scaffold's own bottom slot rather than at the foot of
+            // the files screen. A snackbar is placed above the bottom bar and
+            // over everything else, so the strip drawn as content meant
+            // "1 queued" landed on top of "1 transferring, 0%" -- the
+            // transient message covering the one that was going to stay.
+            //
+            // Only on the files screen: the queue screen is the thing the
+            // strip is a shortcut to.
+            if (screen == HOME) {
+                queue?.let { summary ->
+                    TransferStrip(summary = summary, onOpen = { screen = Screen.QUEUE })
+                }
+            }
+        },
         topBar = {
             // Only for a screen that opens over the files screen. The
             // files screen has no bar of its own: every action on it

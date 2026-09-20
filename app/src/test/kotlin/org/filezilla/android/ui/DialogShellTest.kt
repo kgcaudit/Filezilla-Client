@@ -141,3 +141,48 @@ class TextFieldShellTest {
         assertEquals(listOf("BrowseScreen.kt", "Dialogs.kt", "SiteEditor.kt"), users)
     }
 }
+
+/**
+ * That the two things at the foot of the screen do not stack on each other.
+ *
+ * A snackbar is drawn above the Scaffold's bottom bar and over everything
+ * else, so where the transfer strip sits decides whether the two can
+ * collide. It sat at the foot of the files screen's own content, which put
+ * it under the snackbar: queueing a download raised both in the same
+ * instant, and "1 queued" landed on top of "1 transferring, 0%" -- the
+ * message that disappears covering the one that was going to stay. Not a
+ * rare overlap; it is what every download looked like.
+ *
+ * Checked by reading the sources rather than by drawing it. What matters is
+ * which slot the strip is passed to, and the stacking that follows is the
+ * Scaffold's own behaviour -- a screenshot of it would be a test of
+ * Material, and an attempt at one only proved that a snackbar does not
+ * animate itself into place under Robolectric.
+ */
+class FootOfScreenTest {
+
+    private val uiDir = File("src/main/kotlin/org/filezilla/android/ui")
+
+    private fun sources() = uiDir.walkTopDown().filter { it.extension == "kt" }
+
+    @Test
+    fun `the transfer strip is shown from the scaffold's bottom slot`() {
+        val callers = sources()
+            .filter { it.name != "TransferStrip.kt" }
+            .filter { Regex("""\bTransferStrip\(""").containsMatchIn(it.readText()) }
+            .map { it.name }
+            .sorted()
+            .toList()
+
+        // One caller, and it is the screen that owns the Scaffold.
+        assertEquals(listOf("MainActivity.kt"), callers)
+
+        val host = File(uiDir, "MainActivity.kt").readText()
+        val bottomBar = host.substring(host.indexOf("bottomBar = {"))
+            .substringBefore("\n        },")
+        assertTrue(
+            "the strip is no longer in the bottom slot",
+            "TransferStrip(" in bottomBar,
+        )
+    }
+}

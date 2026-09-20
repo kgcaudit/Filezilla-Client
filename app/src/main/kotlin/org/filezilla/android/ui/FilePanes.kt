@@ -22,7 +22,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -93,11 +92,6 @@ fun FilePanes(
     var naming by remember { mutableStateOf<NewThing?>(null) }
     var renaming by remember { mutableStateOf(false) }
     var confirmingDelete by remember { mutableStateOf(false) }
-
-    // The queue's own line along the foot, and only while it has something
-    // to say; see [summariseTransfers].
-    val transfers by model.transfers.collectAsStateWithLifecycle()
-    val queue = remember(transfers) { summariseTransfers(transfers) }
 
     // No inset taken here. The Scaffold already applies its content window
     // insets whether or not it has bars to apply them around, so taking them
@@ -221,9 +215,6 @@ fun FilePanes(
                 }
             }
 
-            queue?.let { summary ->
-                TransferStrip(summary = summary, onOpen = { onOpenScreen(Screen.QUEUE) })
-            }
         }
 
         // Hidden while a bar is up, and not only for tidiness: the button
