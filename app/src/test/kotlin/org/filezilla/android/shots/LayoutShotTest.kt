@@ -46,6 +46,10 @@ import org.filezilla.android.ui.MainViewModel
 import org.filezilla.android.ui.PaneHeader
 import org.filezilla.android.ui.PaneId
 import org.filezilla.android.ui.PaneSource
+import org.filezilla.android.ui.SearchDeeperRow
+import org.filezilla.android.ui.SearchHit
+import org.filezilla.android.ui.SearchResults
+import org.filezilla.android.ui.SearchState
 import org.filezilla.android.ui.SelectionBar
 import org.filezilla.android.ui.TransferStrip
 import org.filezilla.android.ui.TransferSummary
@@ -174,6 +178,10 @@ class LayoutShotTest {
                 onOpenLog = {},
                 onFilterChange = {},
                 onCloseFilter = {},
+                onSearchDeeper = {},
+                onStopWalking = {},
+                onCloseSearch = {},
+                onOpenHit = {},
                 actions = EntryActions(
                     onOpen = {},
                     onDownload = {},
@@ -382,6 +390,36 @@ class LayoutShotTest {
         }
     }
 
+    /** The search results, and the offer that leads to them. */
+    @Test
+    fun `a deep search`() {
+        val here = DirectoryEntry(name = "here", isDirectory = false)
+        shoot("search-results", height = 900) {
+            SearchResults(
+                search = SearchState(
+                    needle = "나토리",
+                    running = false,
+                    hits = listOf(
+                        SearchHit("/HDD1/Database/MUSIC/2025", here.copy(name = "나토리 - Iris out.mp3")),
+                        SearchHit("/HDD1/Database/MOVIE/라이브", here.copy(name = "킨모쿠세이 - 나토리.mkv")),
+                        SearchHit("/HDD1/Backup", here.copy(name = "나토리", isDirectory = true)),
+                    ),
+                    foldersRead = 214,
+                ),
+                onOpen = {},
+                onStopWalking = {},
+                onClose = {},
+            )
+        }
+    }
+
+    @Test
+    fun `the offer to search deeper`() {
+        shoot("search-offer", height = 160) {
+            SearchDeeperRow(shown = 4, onSearch = {})
+        }
+    }
+
     @Test
     fun `the view options dialog`() {
         shootDialog("dialog-view-options", height = 1200) {
@@ -504,6 +542,10 @@ class LayoutShotTest {
                 onOpenLog = {},
                 onFilterChange = {},
                 onCloseFilter = {},
+                onSearchDeeper = {},
+                onStopWalking = {},
+                onCloseSearch = {},
+                onOpenHit = {},
                 actions = EntryActions(
                     onOpen = {},
                     onDownload = {},
@@ -651,6 +693,10 @@ class LayoutShotTest {
                 onOpenLog = {},
                 onFilterChange = {},
                 onCloseFilter = {},
+                onSearchDeeper = {},
+                onStopWalking = {},
+                onCloseSearch = {},
+                onOpenHit = {},
                 actions = EntryActions(
                     onOpen = {},
                     onDownload = {},

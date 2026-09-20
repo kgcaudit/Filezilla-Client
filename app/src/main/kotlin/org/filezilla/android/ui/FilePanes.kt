@@ -442,6 +442,10 @@ private fun PaneBody(
                 onOpenLog = onOpenLog,
                 onFilterChange = model::setFilter,
                 onCloseFilter = model::toggleFilter,
+                onSearchDeeper = { model.searchDeeper(id) },
+                onStopWalking = { model.stopWalking(id) },
+                onCloseSearch = { model.stopSearch(id) },
+                onOpenHit = { model.openHit(id, it) },
                 actions = EntryActions(
                     onOpen = { model.openChild(id, it.name) },
                     // On the phone a tap opens the file; on a server it

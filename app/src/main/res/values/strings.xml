@@ -274,4 +274,25 @@
     <string name="chosen">Chosen</string>
     <string name="action_share_selected">Share</string>
     <string name="share_no_app">No app on this phone accepts these files</string>
+
+    <!-- Searching below the folder on screen, which the filter does not do. -->
+    <string name="search_deeper">Search subfolders too</string>
+    <string name="search_here_count">%1$d in this folder</string>
+    <string name="search_results_title">Results for \"%1$s\"</string>
+    <string name="search_running">%1$d found · %2$d folders read</string>
+    <string name="search_found">%1$d found</string>
+    <string name="search_truncated">%1$d found; there may be more. Try a narrower name.</string>
+    <string name="search_stopped">%1$d found before it was stopped</string>
+    <string name="search_stop">Stop</string>
+    <string name="search_close">Close the results</string>
+    <string name="search_none">Nothing below here is called \"%1$s\"</string>
+    <string name="search_none_detail">Subfolders were read too.</string>
+
+    <!-- What a folder holds, shown on its row. -->
+    <plurals name="folder_items">
+        <item quantity="one">%d item</item>
+        <item quantity="other">%d items</item>
+    </plurals>
+    <string name="folder_empty">Empty</string>
+    <string name="folder_summary">%1$d folders · %2$d files</string>
 </resources>

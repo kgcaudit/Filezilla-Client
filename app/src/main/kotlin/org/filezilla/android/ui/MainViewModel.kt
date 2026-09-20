@@ -16,6 +16,7 @@ import org.filezilla.android.storage.ConflictChoice
 import org.filezilla.android.storage.DownloadConflict
 import org.filezilla.android.storage.DownloadDestination
 import org.filezilla.android.storage.numberedName
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.filezilla.android.AppGraph
 import org.filezilla.android.data.SiteEntity
@@ -61,6 +62,14 @@ data class BrowseState(
     val selecting: Boolean = false,
     val filter: String = "",
     val filterOpen: Boolean = false,
+    /**
+     * A search below this folder, or null when only the filter is running.
+     *
+     * Kept apart from [filter] deliberately. The filter is a pure predicate
+     * over [entries] and stays instant; this one reads folders, costs a
+     * round trip each on a server, and is something the user asks for.
+     */
+    val search: SearchState? = null,
     /** The entry whose properties are being shown, if any. */
     val properties: DirectoryEntry? = null,
 ) {
@@ -86,6 +95,25 @@ data class BrowseState(
         selection = if (name in selection) selection - name else selection + name,
     )
 }
+
+/**
+ * A search below the folder on screen, as the screen sees it.
+ *
+ * Filled as the walk goes rather than at the end of it: on a server a deep
+ * search is a round trip per folder, so waiting for the whole thing before
+ * showing anything would mean a blank screen for however long that takes.
+ */
+data class SearchState(
+    /** What is being looked for; kept so a changed filter can end the search. */
+    val needle: String,
+    val running: Boolean = true,
+    val hits: List<SearchHit> = emptyList(),
+    /** True when a limit was hit, so the count is not the whole answer. */
+    val truncated: Boolean = false,
+    val cancelled: Boolean = false,
+    /** Folders opened so far, which is what the search has cost. */
+    val foldersRead: Int = 0,
+)
 
 /** Which side the file tab is showing. The seed of the two panes. */
 enum class FileSide { LOCAL, REMOTE }
@@ -1465,6 +1493,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // ---------------------------------------------------------------- filter
 
     fun setFilter(text: String) {
+        // A search is an answer to the old text. Left standing it would sit
+        // there claiming to be results for what is now in the box.
+        if (browse.search != null && browse.search?.needle != text.trim()) stopSearch(activePane)
         browse = browse.copy(filter = text)
     }
 
@@ -1472,9 +1503,140 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // Closing the bar clears the filter: leaving a hidden one applied is
         // how a directory comes to look empty for no visible reason.
         browse = if (browse.filterOpen) {
-            browse.copy(filterOpen = false, filter = "")
+            stopSearch(activePane)
+            browse.copy(filterOpen = false, filter = "", search = null)
         } else {
             browse.copy(filterOpen = true)
+        }
+    }
+
+    // ------------------------------------------------------------ searching
+
+    /**
+     * Walks in progress, by pane, so one can be called off.
+     *
+     * Per pane rather than one for the app: both sides can be searched, and
+     * starting one on the server must not silently end the one running on
+     * the phone.
+     */
+    private val searchJobs = mutableMapOf<PaneId, Job>()
+
+    /**
+     * Looks for the filter's text below the folder [id] is showing.
+     *
+     * Asked for explicitly, never automatic. The filter above it stays a
+     * pure predicate over the rows already on screen -- instant, no network
+     * -- and this is the paid-for version: on a server it is a round trip
+     * per folder, which is fine once and would not be fine on a keystroke.
+     */
+    fun searchDeeper(id: PaneId) {
+        val state = pane(id)
+        val needle = state.filter.trim()
+        if (needle.isEmpty()) return
+
+        stopSearch(id)
+        update(id) { it.copy(search = SearchState(needle = needle)) }
+
+        searchJobs[id] = viewModelScope.launch {
+            val outcome = runCatching {
+                withContext(Dispatchers.IO) { walkFor(state, needle) { hit -> reportHit(id, needle, hit) } }
+            }
+            update(id) { pane ->
+                // Only if this is still the same search. A second one
+                // started while this was walking owns the state now.
+                val current = pane.search ?: return@update pane
+                if (current.needle != needle) return@update pane
+                val found = outcome.getOrNull()
+                pane.copy(
+                    search = current.copy(
+                        running = false,
+                        // The streamed hits, not the returned ones: a search
+                        // called off mid-folder has already shown them.
+                        truncated = found?.truncated ?: false,
+                        cancelled = found?.cancelled ?: (outcome.isFailure),
+                        foldersRead = found?.foldersRead ?: current.foldersRead,
+                    ),
+                )
+            }
+            searchJobs.remove(id)
+        }
+    }
+
+    /** Calls off [id]'s search and forgets its results. */
+    fun stopSearch(id: PaneId) {
+        searchJobs.remove(id)?.cancel()
+        update(id) { it.copy(search = null) }
+    }
+
+    /** Calls off the walk but keeps what it has already found on screen. */
+    fun stopWalking(id: PaneId) {
+        searchJobs.remove(id)?.cancel()
+        update(id) { pane ->
+            pane.copy(search = pane.search?.copy(running = false, cancelled = true))
+        }
+    }
+
+    /** Goes to where a result lives: the folder itself, or the one holding it. */
+    fun openHit(id: PaneId, hit: SearchHit) {
+        val target = if (hit.entry.isDirectory && !hit.entry.isLink) hit.path else hit.folder
+        stopSearch(id)
+        // The filter stays on, so the row that was tapped is the one in
+        // front when the folder opens.
+        openPath(id, target)
+    }
+
+    private fun reportHit(id: PaneId, needle: String, hit: SearchHit) {
+        viewModelScope.launch {
+            update(id) { pane ->
+                val current = pane.search ?: return@update pane
+                if (current.needle != needle) return@update pane
+                pane.copy(search = current.copy(hits = current.hits + hit))
+            }
+        }
+    }
+
+    /** The same walk on either side; only what lists a folder differs. */
+    private suspend fun walkFor(
+        state: BrowseState,
+        needle: String,
+        onHit: (SearchHit) -> Unit,
+    ): SearchOutcome {
+        val source = state.source
+        val showHidden = options.showHidden
+        // Captured here, where this is still a suspend function. The walk
+        // itself is blocking, so asking the coroutine context from inside it
+        // would answer about whatever thread it ended up on.
+        val job = kotlinx.coroutines.currentCoroutineContext()[Job]
+        val stopped = { job?.isActive == false }
+        return when (source) {
+            is PaneSource.Local -> DeepSearch.walk(
+                root = state.path,
+                lister = RemoteLister { path ->
+                    org.filezilla.android.files.LocalFileSource("").list(path)
+                },
+                needle = needle,
+                showHidden = showHidden,
+                cancelled = stopped,
+                onHit = onHit,
+            )
+
+            is PaneSource.Remote -> graph.transfers.browse(source.site) { session ->
+                DeepSearch.walk(
+                    root = state.path,
+                    // One session for the whole walk. A login per folder
+                    // would cost more than the listings do.
+                    lister = RemoteLister { path ->
+                        session.changeDirectory(path)
+                        session.list()
+                    },
+                    needle = needle,
+                    showHidden = showHidden,
+                    cancelled = stopped,
+                    onHit = onHit,
+                )
+            }
+
+            PaneSource.Empty -> SearchOutcome()
         }
     }
 

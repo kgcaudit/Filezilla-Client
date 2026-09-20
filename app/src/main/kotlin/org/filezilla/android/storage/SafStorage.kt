@@ -86,7 +86,8 @@ class SafStorage(private val context: Context) {
         if (!root.canWrite()) {
             throw IOException("no permission to write to the destination folder")
         }
-        val folder = descend(root, destination.subPath)
+        // Serialised: see [makingFolders].
+        val folder = synchronized(makingFolders) { descend(root, destination.subPath) }
 
         var name = displayName
         val existing = folder.findFile(displayName)?.takeIf { it.isFile }
@@ -150,8 +151,21 @@ class SafStorage(private val context: Context) {
         displayName: String,
     ): Uri? {
         val folder = File(destination.localPath, destination.subPath.joinToString(File.separator))
-        if (!folder.isDirectory && !folder.mkdirs()) {
-            throw IOException("could not create the destination folder")
+        // Asked again after mkdirs fails, because two transfers run at once
+        // and the usual reason it fails is that the other one has just made
+        // the folder. Trusting the false threw an IOException for a folder
+        // that was there, which the caller reads as "could not save it" --
+        // so downloading a folder tree left a file behind now and then, said
+        // nothing, and promised to save it on some later run. The race is
+        // between "to/Vision/test", whose mkdirs makes Vision as well, and
+        // "to/Vision" arriving a moment later.
+        synchronized(makingFolders) {
+            // Asked again after mkdirs fails, in case something outside this
+            // app made it in between. The lock is what deals with the case
+            // inside it; see [makingFolders].
+            if (!folder.isDirectory && !folder.mkdirs() && !folder.isDirectory) {
+                throw IOException("could not create the destination folder")
+            }
         }
 
         var target = File(folder, displayName)
@@ -181,6 +195,24 @@ class SafStorage(private val context: Context) {
         }
         throw IOException("too many files named $displayName")
     }
+
+    /**
+     * Held while a download works out which folder it lands in.
+     *
+     * Two transfers run at once, and a folder tree gives them destinations
+     * that overlap: "Vision/test" creates Vision on its way down, and
+     * "Vision" arriving a moment later finds mkdirs returning false for a
+     * folder that now exists. Read as a failure, that threw -- and the
+     * caller treats a throw as "could not save it", keeps the bytes in
+     * app-private storage and says it will try on some later run. So
+     * downloading a folder tree quietly left a file out, now and then,
+     * depending on which order two workers happened to finish in.
+     *
+     * Making the folders is a moment's work next to the copy that follows,
+     * so serialising it costs nothing worth measuring. The copies themselves
+     * still run at once.
+     */
+    private val makingFolders = Any()
 
     private fun descend(root: DocumentFile, subPath: List<String>): DocumentFile {
         var folder = root

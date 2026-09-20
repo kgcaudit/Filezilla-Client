@@ -45,7 +45,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.filezilla.android.files.FilePath
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -75,6 +80,11 @@ fun BrowseScreen(
     onFilterChange: (String) -> Unit,
     onCloseFilter: () -> Unit,
     actions: EntryActions,
+    /** Walks below this folder for the filter's text. Asked for, never automatic. */
+    onSearchDeeper: () -> Unit,
+    onStopWalking: () -> Unit,
+    onCloseSearch: () -> Unit,
+    onOpenHit: (SearchHit) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // On the source, not on the site: a pane showing the phone has no site
@@ -104,6 +114,20 @@ fun BrowseScreen(
 
         HorizontalDivider()
 
+        // Results stand in for the listing rather than joining it. They come
+        // from other folders, and a selection spanning several folders has
+        // no single place to paste into -- so this is a way *to* somewhere,
+        // and every ordinary action waits until you are there.
+        state.search?.let { search ->
+            SearchResults(
+                search = search,
+                onOpen = onOpenHit,
+                onStopWalking = onStopWalking,
+                onClose = onCloseSearch,
+            )
+            return@Column
+        }
+
         // Counted rather than flagged: see [refreshIndicatorShown]. The
         // indicator's whole lifecycle hangs off this going up.
         var pulls by remember { mutableLongStateOf(0L) }
@@ -119,11 +143,19 @@ fun BrowseScreen(
                 // A filter that matches nothing must say so. An empty list
                 // otherwise looks like an empty directory, and the user has
                 // no way to tell which it is.
-                rows.isEmpty() && state.filter.isNotBlank() -> EmptyState(
-                    title = stringResource(R.string.filter_none, state.filter),
-                    detail = stringResource(R.string.filter_hint),
-            icon = R.drawable.ic_tile_search,
-                )
+                rows.isEmpty() && state.filter.isNotBlank() -> Column {
+                    EmptyState(
+                        title = stringResource(R.string.filter_none, state.filter),
+                        detail = stringResource(R.string.filter_hint),
+                        icon = R.drawable.ic_tile_search,
+                        modifier = Modifier.weight(1f),
+                    )
+                    // Nothing here is exactly when the rest of the tree is
+                    // worth offering, so the offer is not buried under an
+                    // empty state that looks like the end of the matter.
+                    HorizontalDivider()
+                    SearchDeeperRow(shown = 0, onSearch = onSearchDeeper)
+                }
 
                 options.viewMode == ViewMode.GRID -> LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 108.dp),
@@ -165,11 +197,43 @@ fun BrowseScreen(
                                 selected = entry.name in state.selection,
                                 selecting = state.selecting,
                                 isLocal = state.isLocal,
+                                folder = state.path,
                                 actions = actions,
                                 onRename = { renaming = entry },
                                 onDelete = { deleting = entry },
                             )
                             HorizontalDivider()
+                        }
+                        // After the matches, where it reads as "and also"
+                        // rather than as a second search box. Only while a
+                        // filter is on: with none there is nothing to look
+                        // for, and the row would be an invitation to walk
+                        // the whole tree for nothing.
+                        if (state.filter.isNotBlank()) {
+                            item {
+                                SearchDeeperRow(shown = rows.size, onSearch = onSearchDeeper)
+                                HorizontalDivider()
+                            }
+                        }
+                        // What the folder adds up to. At the foot rather
+                        // than in the header, which is one line on purpose
+                        // -- a permanent second line costs every screen,
+                        // and this is a thing looked at once on arriving
+                        // or after scrolling to the end.
+                        item {
+                            val summary = remember(rows) { summarise(rows) }
+                            Text(
+                                stringResource(
+                                    R.string.folder_summary,
+                                    summary.folders,
+                                    summary.files,
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                            )
                         }
                     }
                     FastScroller(
@@ -239,6 +303,8 @@ private fun EntryRow(
     selected: Boolean,
     selecting: Boolean,
     isLocal: Boolean,
+    /** The folder this row is in, so a folder row can count what it holds. */
+    folder: String,
     actions: EntryActions,
     onRename: () -> Unit,
     onDelete: () -> Unit,
@@ -299,12 +365,35 @@ private fun EntryRow(
             // calendar and a formatted string, and doing that for every
             // visible row on every recomposition is paid for in dropped
             // frames while the list is moving.
-            val detail = remember(entry) {
-                listOfNotNull(
-                    if (entry.isDirectory) null else formatSize(entry.size).ifBlank { null },
-                    formatEntryTime(entry).ifBlank { null },
-                ).joinToString("  ·  ")
+            // What a folder holds, which is the one thing a folder row is
+            // asked and the one thing it did not say. Off the main thread
+            // and only for rows on screen: LazyColumn asks for a row when it
+            // draws it, so a folder of a thousand subfolders counts the
+            // handful that are visible rather than all of them.
+            //
+            // The phone only. On a server this is a round trip per row --
+            // see FolderCount.
+            val counted = if (isLocal && entry.isDirectory && !entry.isLink) {
+                produceState<Int?>(initialValue = null, entry.name, folder) {
+                    value = withContext(Dispatchers.IO) {
+                        FolderCount.of(FilePath.child(folder, entry.name))
+                    }
+                }.value
+            } else {
+                null
             }
+            val held = counted?.let {
+                if (it == 0) {
+                    stringResource(R.string.folder_empty)
+                } else {
+                    pluralStringResource(R.plurals.folder_items, it, it)
+                }
+            }
+            val when_ = remember(entry) { formatEntryTime(entry).ifBlank { null } }
+            val size = remember(entry) {
+                if (entry.isDirectory) null else formatSize(entry.size).ifBlank { null }
+            }
+            val detail = listOfNotNull(size, held, when_).joinToString("  ·  ")
             if (detail.isNotBlank()) {
                 Text(
                     detail,
