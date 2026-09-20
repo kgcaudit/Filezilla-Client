@@ -304,9 +304,7 @@ private fun ConfirmDelete(count: Int, onDismiss: () -> Unit, onConfirm: () -> Un
         title = { Text(stringResource(R.string.confirm_delete_title, count)) },
         text = { Text(stringResource(R.string.confirm_delete_detail)) },
         confirmButton = {
-            androidx.compose.material3.TextButton(onClick = onConfirm) {
-                Text(stringResource(R.string.action_delete_selected))
-            }
+            DangerButton(stringResource(R.string.action_delete_selected), onConfirm)
         },
         dismissButton = {
             androidx.compose.material3.TextButton(onClick = onDismiss) {
@@ -339,7 +337,7 @@ private fun PaneTabs(current: Int, model: MainViewModel, onPick: (Int) -> Unit) 
                 onClick = { onPick(page) },
                 text = {
                     Text(
-                        paneLabel(model.pane(id)),
+                        paneLabel(model, id),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = if (page == current) FontWeight.SemiBold else FontWeight.Normal,
                         maxLines = 1,
@@ -357,19 +355,28 @@ private fun PaneTabs(current: Int, model: MainViewModel, onPick: (Int) -> Unit) 
  *
  * A local pane is named by the folder it is in rather than by the words "my
  * files", because both panes can be on the phone at once -- and then both
- * tabs said "my files" and neither said which was which. A server keeps its
- * own name: it is the server you are on that matters there, and the folder
- * is in the crumb trail a line below.
+ * tabs said "my files" and neither said which was which.
+ *
+ * The name comes from the end of the crumb trail rather than from the path,
+ * and that is the fix for a tab that read "0". A pane sitting at the phone's
+ * own storage is at /storage/emulated/0, whose last segment is the digit
+ * zero; the trail already knows that folder as "내부 저장소", because naming
+ * the volumes is what its first crumb is for.
+ *
+ * A server keeps its own name instead: which server you are on is what
+ * matters there, and the folder is in the trail a line below.
  */
 @Composable
-private fun paneLabel(state: BrowseState): String = when (state.source) {
-    PaneSource.Empty -> stringResource(R.string.pane_no_source)
-    PaneSource.Local -> state.path.takeIf { it.isNotEmpty() }
-        ?.let { FilePath.name(it) }
-        ?: stringResource(R.string.side_local)
+private fun paneLabel(model: MainViewModel, id: PaneId): String {
+    val state = model.pane(id)
+    return when (state.source) {
+        PaneSource.Empty -> stringResource(R.string.pane_no_source)
+        PaneSource.Local -> model.breadcrumbsFor(id).lastOrNull()?.label
+            ?: stringResource(R.string.side_local)
 
-    is PaneSource.Remote -> (state.source as PaneSource.Remote).site.let {
-        it.name.ifBlank { it.host }
+        is PaneSource.Remote -> (state.source as PaneSource.Remote).site.let {
+            it.name.ifBlank { it.host }
+        }
     }
 }
 

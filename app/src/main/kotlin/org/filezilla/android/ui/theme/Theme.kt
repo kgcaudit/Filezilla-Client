@@ -30,10 +30,19 @@ import androidx.core.view.WindowCompat
  * appears.
  */
 
-private val Ocean = Color(0xFF0B5FA5)
-private val OceanLight = Color(0xFF8FC2F0)
-private val Slate = Color(0xFF3F5A73)
-private val SlateLight = Color(0xFFB4CAE0)
+/**
+ * Claude's clay, which is what the user asked the app to be built around.
+ *
+ * It was Ocean, a deep blue, and the whole palette hung off it: the surfaces
+ * were cool greys, the icons were recoloured to it, the launcher was a blue
+ * field. Moving the brand means moving all of that, because a warm accent on
+ * cool grey looks like a mistake rather than a choice -- so the neutrals are
+ * warm now too, an ivory rather than a blue-grey.
+ */
+private val Clay = Color(0xFFC5613F)
+private val ClayLight = Color(0xFFE8A183)
+private val Stone = Color(0xFF6E5C50)
+private val StoneLight = Color(0xFFD6C3B4)
 
 /*
  * Every role, set.
@@ -46,102 +55,110 @@ private val SlateLight = Color(0xFFB4CAE0)
  * An unset role is not an omission; it is somebody else's colour.
  */
 internal val LightColors = lightColorScheme(
-    primary = Ocean,
+    primary = Clay,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFD5E7F9),
-    onPrimaryContainer = Color(0xFF042C4F),
-    inversePrimary = OceanLight,
+    primaryContainer = Color(0xFFF6E0D6),
+    onPrimaryContainer = Color(0xFF4A1E0C),
+    inversePrimary = ClayLight,
 
-    secondary = Slate,
+    secondary = Stone,
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFDCE6F1),
-    onSecondaryContainer = Color(0xFF16283A),
+    secondaryContainer = Color(0xFFEFE6DE),
+    onSecondaryContainer = Color(0xFF2A211B),
 
     // A teal, because the third accent has to differ from the first two in
     // hue and not merely in lightness, and green and amber already carry
     // meanings here -- done and paused.
-    tertiary = Color(0xFF3E8E98),
+    tertiary = Color(0xFF3E7F80),
     onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFCFE7EA),
-    onTertiaryContainer = Color(0xFF0B2C30),
+    tertiaryContainer = Color(0xFFCDE5E4),
+    onTertiaryContainer = Color(0xFF0A2C2C),
 
     // A touch off pure white, so cards can be white and still read as raised.
-    background = Color(0xFFF4F6F9),
-    onBackground = Color(0xFF161C22),
-    surface = Color(0xFFF4F6F9),
-    onSurface = Color(0xFF161C22),
-    surfaceVariant = Color(0xFFE2E8EF),
-    onSurfaceVariant = Color(0xFF44505C),
-    surfaceTint = Ocean,
+    background = Color(0xFFF7F4EF),
+    onBackground = Color(0xFF1D1A16),
+    surface = Color(0xFFF7F4EF),
+    onSurface = Color(0xFF1D1A16),
+    surfaceVariant = Color(0xFFECE5DC),
+    onSurfaceVariant = Color(0xFF574D45),
+    surfaceTint = Clay,
 
     // The ladder Material lifts a surface up by. A dialog sits on High, a
     // menu on it too, a bottom sheet on Low -- so these are the colours the
     // user sees most often without any screen here naming them.
-    surfaceBright = Color(0xFFF9FBFD),
-    surfaceDim = Color(0xFFD8DFE8),
+    surfaceBright = Color(0xFFFBF9F5),
+    surfaceDim = Color(0xFFDFD8CC),
     surfaceContainerLowest = Color(0xFFFFFFFF),
-    surfaceContainerLow = Color(0xFFF7F9FC),
-    surfaceContainer = Color(0xFFEFF3F8),
-    surfaceContainerHigh = Color(0xFFE9EEF5),
-    surfaceContainerHighest = Color(0xFFE1E8F1),
+    surfaceContainerLow = Color(0xFFFCFAF6),
+    surfaceContainer = Color(0xFFF3EFE8),
+    surfaceContainerHigh = Color(0xFFEDE8DF),
+    surfaceContainerHighest = Color(0xFFE7E1D6),
 
-    inverseSurface = Color(0xFF2B323A),
-    inverseOnSurface = Color(0xFFF1F4F8),
+    inverseSurface = Color(0xFF35302A),
+    inverseOnSurface = Color(0xFFF5F1EA),
 
-    outline = Color(0xFF75828F),
-    outlineVariant = Color(0xFFC6CFD8),
+    outline = Color(0xFF8B7F74),
+    outlineVariant = Color(0xFFD6CCC1),
     scrim = Color(0xFF000000),
 
-    error = Color(0xFFB3261E),
+    // A crimson, not the orange-red Material ships.
+    //
+    // Material's error is hue 3 and the brand is hue 15, which was no trouble
+    // at all while the brand was a blue: an error stood out because it was the
+    // only warm thing on screen. Against clay the two are neighbours, so a
+    // delete button drawn in error and a cancel button drawn in primary came
+    // up the same shade. Pulled round past red into crimson, and deepened,
+    // so danger is told from brand by hue and by weight rather than by neither.
+    error = Color(0xFFA50E2E),
     onError = Color.White,
-    errorContainer = Color(0xFFF9DEDC),
-    onErrorContainer = Color(0xFF410E0B),
+    errorContainer = Color(0xFFFBDCE1),
+    onErrorContainer = Color(0xFF3F0313),
 )
 
 internal val DarkColors = darkColorScheme(
-    primary = OceanLight,
-    onPrimary = Color(0xFF002F52),
-    primaryContainer = Color(0xFF004574),
-    onPrimaryContainer = Color(0xFFD1E4FF),
-    inversePrimary = Ocean,
+    primary = ClayLight,
+    onPrimary = Color(0xFF4A1E0C),
+    primaryContainer = Color(0xFF8A3E22),
+    onPrimaryContainer = Color(0xFFFBE0D4),
+    inversePrimary = Clay,
 
-    secondary = SlateLight,
-    onSecondary = Color(0xFF213546),
-    secondaryContainer = Color(0xFF374C5E),
-    onSecondaryContainer = Color(0xFFD5E3F3),
+    secondary = StoneLight,
+    onSecondary = Color(0xFF2A211B),
+    secondaryContainer = Color(0xFF52443A),
+    onSecondaryContainer = Color(0xFFEFE0D4),
 
-    tertiary = Color(0xFF8FD2DA),
-    onTertiary = Color(0xFF0B2C30),
-    tertiaryContainer = Color(0xFF2B5A60),
-    onTertiaryContainer = Color(0xFFCFE7EA),
+    tertiary = Color(0xFF86CFCF),
+    onTertiary = Color(0xFF08292A),
+    tertiaryContainer = Color(0xFF2A5455),
+    onTertiaryContainer = Color(0xFFCDE5E4),
 
-    background = Color(0xFF11161B),
-    onBackground = Color(0xFFE2E6EA),
-    surface = Color(0xFF11161B),
-    onSurface = Color(0xFFE2E6EA),
-    surfaceVariant = Color(0xFF3F4850),
-    onSurfaceVariant = Color(0xFFBFC8D1),
-    surfaceTint = OceanLight,
+    background = Color(0xFF181613),
+    onBackground = Color(0xFFE8E3DA),
+    surface = Color(0xFF181613),
+    onSurface = Color(0xFFE8E3DA),
+    surfaceVariant = Color(0xFF49423A),
+    onSurfaceVariant = Color(0xFFCFC5B9),
+    surfaceTint = ClayLight,
 
-    surfaceBright = Color(0xFF363E46),
-    surfaceDim = Color(0xFF0E1318),
-    surfaceContainerLowest = Color(0xFF0B0F13),
-    surfaceContainerLow = Color(0xFF161C22),
-    surfaceContainer = Color(0xFF1A2127),
-    surfaceContainerHigh = Color(0xFF242C33),
-    surfaceContainerHighest = Color(0xFF2E373F),
+    surfaceBright = Color(0xFF3D362E),
+    surfaceDim = Color(0xFF141210),
+    surfaceContainerLowest = Color(0xFF0F0E0B),
+    surfaceContainerLow = Color(0xFF1C1A16),
+    surfaceContainer = Color(0xFF211E1A),
+    surfaceContainerHigh = Color(0xFF2B2723),
+    surfaceContainerHighest = Color(0xFF363029),
 
-    inverseSurface = Color(0xFFE2E6EA),
-    inverseOnSurface = Color(0xFF11161B),
+    inverseSurface = Color(0xFFE8E3DA),
+    inverseOnSurface = Color(0xFF181613),
 
-    outline = Color(0xFF89929B),
-    outlineVariant = Color(0xFF3F4850),
+    outline = Color(0xFF978C80),
+    outlineVariant = Color(0xFF49423A),
     scrim = Color(0xFF000000),
 
-    error = Color(0xFFF2B8B5),
-    onError = Color(0xFF601410),
-    errorContainer = Color(0xFF8C1D18),
-    onErrorContainer = Color(0xFFF9DEDC),
+    error = Color(0xFFFFB0BE),
+    onError = Color(0xFF5E001C),
+    errorContainer = Color(0xFF8C0F30),
+    onErrorContainer = Color(0xFFFFD9E0),
 )
 
 /**
@@ -170,15 +187,20 @@ val MaterialTheme.tiles: TileColors
     get() = if (colorScheme.background.luminanceIsDark()) DarkTiles else LightTiles
 
 internal val LightTiles = TileColors(
-    folder = Ocean,
-    archive = Color(0xFF8A6A46),
+    folder = Clay,
+    // Pulled apart from each other by hue, not by lightness: nine tiles in a
+    // list are told apart at a glance or not at all, and a warm brand means
+    // the warm half of the wheel is busier than it was. Audio moved to a rose
+    // and archive to an ochre for exactly that -- both were browns sitting
+    // next to a clay folder.
+    archive = Color(0xFF8A6A3B),
     image = Color(0xFF2E8B6B),
-    video = Color(0xFF5B57A8),
-    audio = Color(0xFFB0602A),
-    document = Color(0xFF4A6273),
-    code = Color(0xFF3E8E98),
-    app = Color(0xFF2E7D4F),
-    other = Color(0xFF6B7885),
+    video = Color(0xFF6A5A9E),
+    audio = Color(0xFFB04A6A),
+    document = Color(0xFF55606B),
+    code = Color(0xFF3E7F80),
+    app = Color(0xFF4C7A3E),
+    other = Color(0xFF7A7168),
 )
 
 /**
@@ -189,15 +211,15 @@ internal val LightTiles = TileColors(
  * every colour for a dark theme would leave white on near-black on black.
  */
 internal val DarkTiles = TileColors(
-    folder = Color(0xFF2E7FC2),
-    archive = Color(0xFFA5825C),
+    folder = Color(0xFFD1734F),
+    archive = Color(0xFFB08A54),
     image = Color(0xFF3FA383),
-    video = Color(0xFF7671C4),
-    audio = Color(0xFFC97B44),
-    document = Color(0xFF61798B),
-    code = Color(0xFF52A5AF),
-    app = Color(0xFF429568),
-    other = Color(0xFF828F9C),
+    video = Color(0xFF8A7AC0),
+    audio = Color(0xFFC96B88),
+    document = Color(0xFF6E7A86),
+    code = Color(0xFF55A0A1),
+    app = Color(0xFF69985A),
+    other = Color(0xFF938A80),
 )
 
 /** Colours that mean something, rather than colours that merely differ. */
@@ -216,25 +238,27 @@ val MaterialTheme.status: StatusColors
     get() = if (colorScheme.background.luminanceIsDark()) DarkStatus else LightStatus
 
 internal val LightStatus = StatusColors(
-    // Deliberately not the primary colour, which it used to be exactly. With
-    // the same value, a blue progress bar under a blue app bar left blue
-    // meaning both "this app" and "this is moving", and neither clearly. They
-    // are now near relations with separate jobs: primary marks what you can
-    // press, this marks what is happening.
+    // Cool, and deliberately so now that the brand is warm: primary marks
+    // what you can press and this marks what is happening, and the surest way
+    // to keep those apart is to put them on opposite sides of the wheel. It
+    // was a near relation of a blue brand, which asked the eye to tell two
+    // blues apart.
     running = Color(0xFF1273BE),
-    waiting = Color(0xFF6B7885),
-    paused = Color(0xFFB26A00),
+    waiting = Color(0xFF7A6F65),
+    // Yellower than it was. Against a clay primary the old amber was a near
+    // miss -- close enough to read as the brand rather than as a state.
+    paused = Color(0xFF9C7A0C),
     done = Color(0xFF1B7F4B),
-    failed = Color(0xFFB3261E),
-    progressTrack = Color(0xFFC9D6E3),
+    failed = Color(0xFF9E0C2B),
+    progressTrack = Color(0xFFDCD3C6),
 )
 
 internal val DarkStatus = StatusColors(
     running = Color(0xFF7FC0F5),
-    waiting = Color(0xFF98A4B0),
-    paused = Color(0xFFFFB95C),
+    waiting = Color(0xFFA79C90),
+    paused = Color(0xFFE0BE52),
     done = Color(0xFF6FD79B),
-    failed = Color(0xFFF2B8B5),
+    failed = Color(0xFFFFB0BE),
     progressTrack = Color(0xFF39434D),
 )
 

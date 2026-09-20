@@ -188,7 +188,10 @@ fun StoragePlaces(
             // places you visit, not places you live, and a permanent seat for
             // each cost 80dp of every screen in the app.
             PlaceRow(
-                glyph = R.drawable.ic_tile_folder,
+                // Its own mark, not a folder's: the folder tile is what the
+                // row above this one means, and two rows carrying the same
+                // picture is two rows nobody reads.
+                glyph = R.drawable.ic_tile_transfers,
                 colour = MaterialTheme.tiles.code,
                 title = stringResource(R.string.title_queue),
                 subtitle = null,

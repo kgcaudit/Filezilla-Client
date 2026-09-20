@@ -16,12 +16,15 @@ import re
 
 OUT = pathlib.Path("app/src/main/res/drawable")
 
-OCEAN = "#0B5FA5"
-OCEAN_SOFT = "#7FB0DE"
-OCEAN_PALE = "#D5E7F9"
-SLATE = "#44505C"
-MIST = "#E2E8EF"
+# Claude's clay and the warm neutrals that go with it; see ui/theme/Theme.kt.
+CLAY = "#C5613F"
+CLAY_SOFT = "#E0A088"
+CLAY_PALE = "#F6E0D6"
+SLATE = "#574D45"
+MIST = "#ECE5DC"
 WHITE = "#FFFFFF"
+# White at the alpha the pack's tiles put a background shape at.
+GHOST_WHITE = "#8CFFFFFF"
 
 # An arrow: a shaft with a rounded tail that runs into a solid head, which is
 # how the pack's own arrows are built.
@@ -92,16 +95,28 @@ def vector(paths: list[tuple[str, str]], size: int = 24) -> str:
 ICONS = {
     # Transfers: one arrow down, one up, the down one carrying the accent
     # because downloading is what this app is mostly used for.
-    "ic_flat_transfers": [(OCEAN, ARROW_DOWN), (OCEAN_SOFT, ARROW_UP)],
+    "ic_flat_transfers": [(CLAY, ARROW_DOWN), (CLAY_SOFT, ARROW_UP)],
 
     # Log: lines on a panel, the newest picked out. The last line is short,
     # which is what makes it read as a list rather than as a document.
     "ic_flat_log": [
         (MIST, rounded_rect(86, 96, 340, 320, 40)),
-        (OCEAN, rounded_rect(136, 152, 240, 36, 18)),
+        (CLAY, rounded_rect(136, 152, 240, 36, 18)),
         (SLATE, rounded_rect(136, 238, 240, 36, 18)),
         (SLATE, rounded_rect(136, 324, 160, 36, 18)),
     ],
+}
+
+# The white-on-tile half of the set.
+#
+# Every place in the drawer wears a filled tile with a white glyph, and the
+# transfer queue had no glyph of its own -- it wore a folder, which is what
+# the row above it means. So the same two arrows are drawn again in white,
+# the up one at the reduced alpha the pack's tiles use for the part of a
+# shape that sits behind, so the pair reads as down-and-up rather than as a
+# solid block.
+TILES = {
+    "ic_tile_transfers": [(WHITE, ARROW_DOWN), (GHOST_WHITE, ARROW_UP)],
 }
 
 # The launcher, on Android's adaptive canvas.
@@ -123,13 +138,13 @@ ARROW_SHAFT = rounded_rect(196, 244, 120, 24, 12)
 ARROW_WEST = "M160,256 L206,224 L206,288 Z"
 ARROW_EAST = "M352,256 L306,224 L306,288 Z"
 
-LAUNCHER_BACKGROUND = [(OCEAN, rounded_rect(0, 0, 512, 512, 0))]
+LAUNCHER_BACKGROUND = [(CLAY, rounded_rect(0, 0, 512, 512, 0))]
 LAUNCHER_FOREGROUND = [
     (WHITE, PANE_LEFT),
     (WHITE, PANE_RIGHT),
-    (OCEAN, ARROW_SHAFT),
-    (OCEAN, ARROW_WEST),
-    (OCEAN, ARROW_EAST),
+    (CLAY, ARROW_SHAFT),
+    (CLAY, ARROW_WEST),
+    (CLAY, ARROW_EAST),
 ]
 # The monochrome layer is a mask: the system paints the whole of it in one
 # colour, so nothing inside it can be a different colour and the arrow cannot
@@ -143,6 +158,9 @@ LAUNCHER_MONOCHROME = [
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     for name, paths in ICONS.items():
+        (OUT / f"{name}.xml").write_text(vector(paths))
+        print(f"{name}.xml")
+    for name, paths in TILES.items():
         (OUT / f"{name}.xml").write_text(vector(paths))
         print(f"{name}.xml")
     for name, paths in (

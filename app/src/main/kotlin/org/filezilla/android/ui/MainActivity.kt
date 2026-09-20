@@ -473,10 +473,10 @@ private fun AppScreen(model: MainViewModel = viewModel()) {
             // what RMD forces and no longer what the app does.
             text = { Text(stringResource(R.string.confirm_delete_detail)) },
             confirmButton = {
-                TextButton(onClick = {
+                DangerButton(stringResource(R.string.action_delete)) {
                     confirmingDelete = false
                     model.deleteSelected()
-                }) { Text(stringResource(R.string.action_delete)) }
+                }
             },
             dismissButton = {
                 TextButton(onClick = { confirmingDelete = false }) {

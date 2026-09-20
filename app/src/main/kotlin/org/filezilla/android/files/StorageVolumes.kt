@@ -85,7 +85,26 @@ class StorageVolumes(private val context: Context) {
     fun volumePaths(): List<String> =
         roots().filter { it.kind != StorageRoot.Kind.SHORTCUT }.map { it.path }
 
-    fun roots(): List<StorageRoot> {
+    @Volatile
+    private var known: List<StorageRoot>? = null
+
+    /**
+     * The places a pane can start from, worked out once.
+     *
+     * Asking the platform costs a handful of filesystem calls, and this is
+     * now read while drawing -- the tab's name and every crumb of the trail
+     * come from it -- so it would otherwise run on each frame. Forgotten
+     * whenever storage access is re-checked, which is when a card being put
+     * in would show up.
+     */
+    fun roots(): List<StorageRoot> = known ?: findRoots().also { known = it }
+
+    /** Drops what was worked out, so the next ask looks again. */
+    fun forget() {
+        known = null
+    }
+
+    private fun findRoots(): List<StorageRoot> {
         val roots = mutableListOf<StorageRoot>()
 
         val internal = runCatching { Environment.getExternalStorageDirectory() }.getOrNull()

@@ -173,6 +173,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * Which listing each pane is waiting for.
+     *
+     * A listing is asked for on the main thread and answered later, so two
+     * can be in flight at once and the one that lands last wins -- whichever
+     * was asked for last. Tapping into a folder while the one above it was
+     * still being read left the header naming the folder tapped and the rows
+     * belonging to the folder left behind, and the app looked like it had
+     * simply failed to open anything.
+     *
+     * Comparing paths is not enough to sort that out: a refresh lists the
+     * path it is already on, and a server decides for itself where a path
+     * landed. So each ask takes a number and only the newest may speak.
+     */
+    private val listingAsked = mutableMapOf<PaneId, Int>()
+
+    /** Claims the pane for a new listing, and hands back the number to quote. */
+    private fun askForListing(id: PaneId): Int {
+        val next = (listingAsked[id] ?: 0) + 1
+        listingAsked[id] = next
+        return next
+    }
+
+    /** Whether an answer that started as [asked] is still the one being waited for. */
+    private fun stillWanted(id: PaneId, asked: Int): Boolean = listingAsked[id] == asked
+
+    /**
      * The pane every existing action works on.
      *
      * The toolbar, the selection and the download button were all written
@@ -1118,6 +1144,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun refreshStorageAccess() {
         val was = storageGranted
+        // A card put in while the app was away shows up here, and nowhere
+        // else: this is the one moment storage is looked at again.
+        graph.volumes.forget()
         storageGranted = graph.storageAccess.isGranted()
         storageRoute = graph.storageAccess.route
         if (storageGranted && !was) {
@@ -1145,11 +1174,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun listLocal(id: PaneId, path: String) {
         val target = FilePath.normalize(path)
         val cameFrom = pane(id).path
+        val asked = askForListing(id)
         update(id) { it.copy(path = target, loading = true, error = null) }
         run {
             val rows = withContext(Dispatchers.IO) {
                 runCatching { graph.localFiles.list(target) }
             }
+            // Somewhere else was asked for while this was being read, so
+            // these rows are a folder nobody is looking at any more -- and
+            // the pane they would land in is not the one they came from.
+            if (!stillWanted(id, asked)) return
             rows.onSuccess { entries ->
                 graph.preferences.setPanePath(id.name, LOCAL_SOURCE_KEY, target)
                 update(id) {
@@ -1239,6 +1273,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun refresh() = open(activePane)
 
     private fun loadRemote(id: PaneId, site: SiteEntity, path: String?) {
+        val asked = askForListing(id)
         update(id) { it.copy(source = PaneSource.Remote(site), loading = true, error = null) }
         viewModelScope.launch {
             runCatching {
@@ -1252,6 +1287,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     here to session.list()
                 }
             }.onSuccess { (here, entries) ->
+                if (!stillWanted(id, asked)) return@launch
                 graph.preferences.setPanePath(id.name, siteSourceKey(site), here)
                 update(id) {
                     it.copy(
@@ -1265,6 +1301,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
             }.onFailure { error ->
+                if (!stillWanted(id, asked)) return@launch
                 update(id) {
                     it.copy(
                         loading = false,
@@ -1551,6 +1588,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         val site = pane(id).site ?: return
         val path = pane(id).path
+        val asked = askForListing(id)
         update(id) { it.copy(loading = true, error = null) }
         viewModelScope.launch {
             runCatching {
@@ -1564,6 +1602,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     session.currentDirectory() to session.list()
                 }
             }.onSuccess { (here, entries) ->
+                if (!stillWanted(id, asked)) return@launch
                 update(id) {
                     it.copy(
                         path = here,
@@ -1578,6 +1617,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
             }.onFailure { error ->
+                if (!stillWanted(id, asked)) return@launch
                 update(id) {
                     it.copy(
                         loading = false,

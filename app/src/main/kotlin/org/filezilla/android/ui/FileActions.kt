@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.automirrored.filled.NoteAdd
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -298,4 +299,27 @@ fun NameDialog(
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         },
     )
+}
+
+/**
+ * The button that does the thing there is no undo for.
+ *
+ * A confirmation puts two buttons side by side and exactly one of them can be
+ * taken back, so the two cannot look alike -- and they did. Every TextButton
+ * draws itself in the primary colour, which was a blue while the error colour
+ * was a red, so the destructive one stood out for free. The brand is a warm
+ * clay now, near enough to red that "Delete" and "Cancel" came up the same
+ * shade: the irreversible action wearing what reads as a warning, and the safe
+ * one wearing it too.
+ *
+ * So it is said once, here, rather than remembered at each of the three places
+ * that ask before deleting something. The colour is the theme's error, which
+ * was pulled round to a crimson for exactly this reason.
+ */
+@Composable
+fun DangerButton(text: String, onClick: () -> Unit) {
+    TextButton(
+        onClick = onClick,
+        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+    ) { Text(text) }
 }

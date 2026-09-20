@@ -104,6 +104,38 @@ class BreadcrumbsTest {
         assertEquals(listOf("/", "storage", "emulated", "01", "Music"), labels(crumbs))
     }
 
+    /**
+     * The volume's own name, not the folder's.
+     *
+     * The tab above a pane is named by the last crumb of its trail, and a
+     * pane sitting at the phone's own storage is at /storage/emulated/0 --
+     * whose last path segment is the digit zero. The tab read "0". Naming the
+     * volumes is what the first crumb is for, and at the top of a volume the
+     * first crumb is also the last.
+     */
+    @Test
+    fun `the volume root is named by the volume and not by its last segment`() {
+        val crumbs = breadcrumbs(
+            "/storage/emulated/0",
+            rootPath = "/storage/emulated/0",
+            rootLabel = "내부 저장소",
+        )
+
+        assertEquals("내부 저장소", crumbs.last().label)
+    }
+
+    /** One folder in, the folder's own name is the right answer again. */
+    @Test
+    fun `a folder inside the volume is named by itself`() {
+        val crumbs = breadcrumbs(
+            "/storage/emulated/0/Download",
+            rootPath = "/storage/emulated/0",
+            rootLabel = "내부 저장소",
+        )
+
+        assertEquals("Download", crumbs.last().label)
+    }
+
     /** The last crumb is always where the pane actually is. */
     @Test
     fun `the trail ends where the pane is`() {

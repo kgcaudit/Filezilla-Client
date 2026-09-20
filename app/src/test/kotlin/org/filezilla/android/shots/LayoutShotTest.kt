@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.filezilla.android.R
+import org.filezilla.android.ui.DangerButton
 import org.filezilla.android.ui.FileKind
 import org.filezilla.android.ui.FileTile
 import org.filezilla.android.ui.FlatIcon
@@ -273,9 +274,11 @@ class LayoutShotTest {
                         androidx.compose.material3.TextButton(onClick = {}) {
                             androidx.compose.material3.Text("취소")
                         }
-                        androidx.compose.material3.TextButton(onClick = {}) {
-                            androidx.compose.material3.Text("삭제")
-                        }
+                        // The real dialog's confirm button, not a second copy
+                        // of its cancel: the two used to be drawn the same
+                        // here and on screen, which is the whole reason the
+                        // error colour moved.
+                        DangerButton("삭제") {}
                     }
                 }
             }

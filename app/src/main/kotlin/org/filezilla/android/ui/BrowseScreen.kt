@@ -177,10 +177,10 @@ fun BrowseScreen(
             title = { Text(stringResource(R.string.confirm_delete_one, entry.name)) },
             text = { Text(stringResource(R.string.confirm_delete_detail)) },
             confirmButton = {
-                TextButton(onClick = {
+                DangerButton(stringResource(R.string.action_delete)) {
                     actions.onDelete(entry)
                     deleting = null
-                }) { Text(stringResource(R.string.action_delete)) }
+                }
             },
             dismissButton = {
                 TextButton(onClick = { deleting = null }) {

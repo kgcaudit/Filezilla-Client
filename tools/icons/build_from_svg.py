@@ -33,23 +33,31 @@ NS = "{http://www.w3.org/2000/svg}"
 # the server's yellow-green lands nearer amber than green, and every light on
 # it went amber -- so it stopped saying "some of these are fine".
 #
-# The right-hand side is the app's own palette, from ui/theme/Theme.kt.
+# The right-hand side is the app's own palette, from ui/theme/Theme.kt. It was
+# a blue one; the brand is Claude's clay now, so the pack's blues come out warm
+# and the greys that carry most of these drawings warm with them -- a cool grey
+# under a clay accent reads as a mistake rather than as a choice.
 RECOLOUR = {
     # The pack's blue is brighter and lighter than Ocean; side by side they
     # read as two palettes, which is the whole reason for this pass.
-    "#5096FF": "#0B5FA5",  # primary
-    "#6BA6FF": "#0B5FA5",
-    "#5585CD": "#1273BE",
-    "#88BFFF": "#7FB0DE",
-    "#CBDFFF": "#D5E7F9",  # primaryContainer
-    "#DBECFF": "#D5E7F9",
-    "#B8D3FB": "#D5E7F9",
+    "#5096FF": "#C5613F",  # primary
+    "#6BA6FF": "#C5613F",
+    "#5585CD": "#A34E31",
+    "#88BFFF": "#E0A088",
+    # Deeper than primaryContainer, which is where this started. The pack
+    # draws a folder as a clay tab over a pale front panel, and the panel is
+    # the bigger of the two shapes -- at container lightness on a white chip
+    # it went to a ghost, so the folder read as a stripe with nothing under
+    # it. This still sits well clear of the clay above it.
+    "#CBDFFF": "#F0C9B6",
+    "#DBECFF": "#F0C9B6",
+    "#B8D3FB": "#F0C9B6",
     # The phone's screen, which the pack draws as a lilac-to-pink wash. Sent
     # to this app's own blues: a screen is the one part of that icon anybody
     # reads, and in two colours from nowhere else in the app it read as a
     # sticker rather than as part of the set.
-    "#C6BFF7": "#7FB0DE",
-    "#FEDFEE": "#D5E7F9",
+    "#C6BFF7": "#E0A088",
+    "#FEDFEE": "#F0C9B6",
     # The pale greys the pack uses for paper and for the body of an object.
     # Left near where the pack put them, which is a shade off white, because
     # the artwork is drawn for a white background -- see FlatIconChip, which
@@ -57,34 +65,34 @@ RECOLOUR = {
     # surfaceVariant instead, a shade off the chip of the day, and the page of
     # the file icon disappeared into it: every file in every listing was drawn
     # as three floating bars that read as a list icon.
-    "#EFF7FF": "#EEF4FA",
-    "#E7ECEF": "#E6EBF0",
-    "#F0F0F0": "#EFF2F5",
-    "#E8E8E8": "#E6EBF0",
-    "#E2E2E2": "#E6EBF0",
-    "#E6EAEE": "#E6EBF0",
-    "#E1E6EA": "#E6EBF0",
-    "#EFE8E1": "#E6EBF0",
+    "#EFF7FF": "#FBF2EC",
+    "#E7ECEF": "#F0EAE1",
+    "#F0F0F0": "#F3EFE9",
+    "#E8E8E8": "#EAE3D9",
+    "#E2E2E2": "#EAE3D9",
+    "#E6EAEE": "#EAE3D9",
+    "#E1E6EA": "#EAE3D9",
+    "#EFE8E1": "#EAE3D9",
     "white": "#FFFFFF",
     "#FFFFFF": "#FFFFFF",
     "#FFFEFD": "#FFFFFF",
 
     # Greys carry most of the pack. They go to the theme's neutrals.
-    "#737A83": "#44505C",  # onSurfaceVariant
-    "#70706F": "#44505C",
-    "#707070": "#44505C",
-    "#747B84": "#44505C",
-    "#607080": "#44505C",
-    "#6B758F": "#44505C",
-    "#808080": "#44505C",
-    "#999999": "#75828F",  # outline
-    "#333333": "#161C22",  # onSurface
-    "#A0A6AB": "#9AA6B2",
-    "#C7CED5": "#C6CFD8",  # outlineVariant
-    "#C0C0D0": "#C6CFD8",
-    "#CCCCCC": "#C6CFD8",
-    "#C7C7C7": "#C6CFD8",
-    "#9C9188": "#8A8F96",
+    "#737A83": "#574D45",  # onSurfaceVariant
+    "#70706F": "#574D45",
+    "#707070": "#574D45",
+    "#747B84": "#574D45",
+    "#607080": "#574D45",
+    "#6B758F": "#574D45",
+    "#808080": "#574D45",
+    "#999999": "#8B7F74",  # outline
+    "#333333": "#1D1A16",  # onSurface
+    "#A0A6AB": "#A99E92",
+    "#C7CED5": "#D6CCC1",  # outlineVariant
+    "#C0C0D0": "#D6CCC1",
+    "#CCCCCC": "#D6CCC1",
+    "#C7C7C7": "#D6CCC1",
+    "#9C9188": "#8E8377",
 
     # Status colours, in the app's families but lightened: these are fills,
     # and the theme's versions are chosen to be read as text.
@@ -93,17 +101,17 @@ RECOLOUR = {
     "#70D0B0": "#2E9E68",
     "#7AD7B5": "#2E9E68",
     "#91E2C5": "#8FD9BC",
-    "#FFC738": "#D98A2B",  # the paused amber
-    "#F0C030": "#D98A2B",
-    "#FDA16E": "#D98A2B",
-    "#FFA36F": "#D98A2B",
-    "#FFBD81": "#EBC08A",
-    "#FFE457": "#E8C24A",
-    "#FFF8B8": "#F3E7B5",
-    "#FBF3DF": "#F3E7B5",
-    "#F57C75": "#C9564F",  # the failed red
-    "#F07070": "#C9564F",
-    "#F4868F": "#C9564F",
+    "#FFC738": "#9C7A0C",  # the paused amber
+    "#F0C030": "#9C7A0C",
+    "#FDA16E": "#9C7A0C",
+    "#FFA36F": "#9C7A0C",
+    "#FFBD81": "#E0C98C",
+    "#FFE457": "#DCC155",
+    "#FFF8B8": "#F0E6BC",
+    "#FBF3DF": "#F0E6BC",
+    "#F57C75": "#A32017",  # the failed red
+    "#F07070": "#A32017",
+    "#F4868F": "#A32017",
     "#FCDBDC": "#F4DDDB",
     "#FCDBDD": "#F4DDDB",
     "#FBD8DA": "#F4DDDB",
