@@ -492,6 +492,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** An upload waiting on the user to say what to do about files already there. */
     data class PendingUpload(
         val files: List<Outgoing>,
+        /** Including the empty ones, which no file would imply. */
+        val folders: List<List<String>>,
         val site: SiteEntity,
         val remoteDirectory: String,
         val conflicts: List<DownloadConflict>,
@@ -515,6 +517,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             onQueued(
                 queueUploads(
                     pending.files,
+                    pending.folders,
                     pending.site,
                     pending.remoteDirectory,
                     choice,
@@ -540,12 +543,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         onQueued: (Int) -> Unit,
     ) {
         viewModelScope.launch {
+            val picked = held.paths()
             val files = withContext(Dispatchers.IO) {
-                held.paths().flatMap { LocalWalk.filesUnder(it) }.map {
+                picked.flatMap { LocalWalk.filesUnder(it) }.map {
                     Outgoing(Uri.fromFile(java.io.File(it.path)), it.name, it.size, it.subPath)
                 }
             }
-            sendToServer(files, site, remoteDirectory, onQueued)
+            // Folders too, and not only the ones a file implies. A folder
+            // holding nothing produces no files, so an upload built out of
+            // files alone simply lost it -- nothing queued, nothing said,
+            // and nothing on the server afterwards.
+            val folders = withContext(Dispatchers.IO) {
+                picked.flatMap { LocalWalk.foldersUnder(it) }.distinct()
+            }
+            sendToServer(files, folders, site, remoteDirectory, onQueued)
         }
     }
 
@@ -560,6 +571,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun sendToServer(
         files: List<Outgoing>,
+        folders: List<List<String>>,
         site: SiteEntity,
         remoteDirectory: String,
         onQueued: (Int) -> Unit,
@@ -583,6 +595,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         onQueued(
                             queueUploads(
                                 files,
+                                folders,
                                 site,
                                 remoteDirectory,
                                 ConflictChoice.DEFAULT,
@@ -592,6 +605,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     } else {
                         pendingUploadConflicts = PendingUpload(
                             files,
+                            folders,
                             site,
                             remoteDirectory,
                             conflicts,
@@ -606,6 +620,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     onQueued(0)
                 }
+        }
+    }
+
+    /**
+     * Makes the copied folders on the server, shallowest first.
+     *
+     * Every folder in the selection, not only the empty ones: the ones with
+     * files in them cost a single `MKD` that the server answers "already
+     * there", which is cheaper than working out which is which and much
+     * easier to be sure of.
+     *
+     * A failure is not fatal to the paste. The usual reason is that the
+     * folder is already there, and the files still have their own folders
+     * made for them as they go -- so a refusal here loses an empty folder
+     * rather than the copy.
+     */
+    private suspend fun makeRemoteFolders(
+        site: SiteEntity,
+        remoteDirectory: String,
+        folders: List<List<String>>,
+    ) {
+        if (folders.isEmpty()) return
+        runCatching {
+            graph.transfers.browse(site) { session ->
+                for (folder in folders.sortedBy { it.size }) {
+                    val path = folder.fold(remoteDirectory, FilePath::child)
+                    runCatching { session.createDirectory(path) }
+                }
+            }
         }
     }
 
@@ -636,11 +679,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun queueUploads(
         files: List<Outgoing>,
+        folders: List<List<String>>,
         site: SiteEntity,
         remoteDirectory: String,
         choice: ConflictChoice,
         clashing: Set<String>,
     ): Int {
+        // Made here rather than left to the transfers, because a transfer
+        // only ever makes the folders above the file it is carrying -- and
+        // an empty folder has no file to carry. Made before anything is
+        // queued, so a copy of a folder tree arrives as a folder tree even
+        // if the files in it are still on their way.
+        makeRemoteFolders(site, remoteDirectory, folders)
+
         var queued = 0
         val taken = clashing.toMutableSet()
         for (file in files) {
@@ -1647,6 +1698,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val (name, size) = described
         sendToServer(
             listOf(Outgoing(source, name, size.takeIf { it > 0 }, emptyList())),
+            // One document the system picker handed over; there is no folder
+            // around it to recreate.
+            emptyList(),
             site,
             browse.path,
             onQueued,

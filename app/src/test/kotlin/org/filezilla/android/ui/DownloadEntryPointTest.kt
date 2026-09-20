@@ -247,3 +247,46 @@ class DownloadEntryPointTest {
         )
     }
 }
+
+/**
+ * That a copy to a server is made of folders as well as files.
+ *
+ * The bug the user found: the files all arrived and the empty folder beside
+ * them did not. An upload was built by walking the selection for files, so a
+ * folder holding none produced nothing to queue -- and nothing queued means
+ * nothing made, no row in the transfer list, and no error. The folder simply
+ * was not there afterwards.
+ *
+ * Read from the source rather than driven end to end, and that is a
+ * limitation worth naming: nothing here can connect the view model to a
+ * server, because passwords are sealed with the Android keystore and there
+ * is no keystore off a device. So the walk is tested on its own
+ * ([org.filezilla.android.files.LocalWalkFoldersTest]), the folders are made
+ * on a live server by the engine's own tests, and what this covers is the
+ * join between them -- which is exactly where the bug was.
+ */
+class UploadCarriesFoldersTest {
+
+    private val viewModel =
+        File("src/main/kotlin/org/filezilla/android/ui/MainViewModel.kt").readText()
+
+    @Test
+    fun `the paste walks folders as well as files`() {
+        assertTrue(
+            "an upload is built from files alone again",
+            "LocalWalk.foldersUnder(" in viewModel,
+        )
+    }
+
+    /** And makes them before it queues anything, so an empty one still lands. */
+    @Test
+    fun `the folders are made before the files are queued`() {
+        val queueing = viewModel.substring(viewModel.indexOf("private suspend fun queueUploads("))
+        val makes = queueing.indexOf("makeRemoteFolders(")
+        val queues = queueing.indexOf("enqueueUpload(")
+
+        assertTrue("nothing makes the folders", makes >= 0)
+        assertTrue("nothing queues the files", queues >= 0)
+        assertTrue("the folders are made after the files are queued", makes < queues)
+    }
+}

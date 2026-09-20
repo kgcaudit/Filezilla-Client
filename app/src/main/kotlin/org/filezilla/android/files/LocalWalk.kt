@@ -59,6 +59,36 @@ object LocalWalk {
         return found
     }
 
+    /**
+     * Every folder under [path], including the picked folder itself and
+     * including the ones with nothing in them.
+     *
+     * Separate from [filesUnder] because a folder is not a file, and an
+     * upload built only out of files loses the folders that hold none.
+     * Copying an empty folder to a server queued nothing at all, so nothing
+     * happened and nothing said why -- the folder simply was not there
+     * afterwards.
+     *
+     * Shallowest first, since a folder cannot be made before its parent.
+     */
+    fun foldersUnder(path: String): List<List<String>> {
+        val root = File(FilePath.normalize(path))
+        if (!root.isDirectory || isLink(root)) return emptyList()
+
+        val found = mutableListOf<List<String>>()
+
+        fun walk(file: File, subPath: List<String>) {
+            if (found.size >= MAX_FILES || subPath.size >= MAX_DEPTH) return
+            if (isLink(file) || !file.isDirectory) return
+            val here = subPath + file.name
+            found += here
+            for (child in file.listFiles().orEmpty()) walk(child, here)
+        }
+
+        walk(root, emptyList())
+        return found
+    }
+
     private fun isLink(file: File): Boolean =
         runCatching { file.canonicalPath != file.absolutePath }.getOrDefault(false)
 }
