@@ -173,4 +173,169 @@ class RemoteDeleteTest {
         assertFalse(RemoteDelete.needsRemoteWalk(listOf(link("l"))))
         assertTrue(RemoteDelete.needsRemoteWalk(listOf(file("a"), dir("d"))))
     }
+    @Test
+    fun `the walk says how many folders it has opened`() {
+        val read = mutableListOf<Int>()
+
+        RemoteDelete.plan(
+            server(
+                mapOf(
+                    "/pub/a" to listOf(dir("b"), file("one.txt")),
+                    "/pub/a/b" to listOf(file("two.txt")),
+                ),
+            ),
+            "/pub",
+            listOf(dir("a")),
+            onFolder = { read += it },
+        )
+
+        // Counted as it goes, not at the end: the whole point is having
+        // something to show while the walk is still running.
+        assertEquals(listOf(1, 2), read)
+    }
+
+    @Test
+    fun `a walk called off stops within one listing`() {
+        var listings = 0
+        val lister = RemoteLister { path ->
+            listings++
+            when (path) {
+                "/pub/a" -> listOf(dir("b"), dir("c"))
+                else -> listOf(file("deep.txt"))
+            }
+        }
+
+        val plan = RemoteDelete.plan(
+            lister,
+            "/pub",
+            listOf(dir("a")),
+            // Stopped the moment the first folder has been read.
+            cancelled = { listings >= 1 },
+        )
+
+        assertTrue("a walk that was called off must say so", plan.cancelled)
+        assertEquals("it kept reading after being told to stop", 1, listings)
+    }
+
+    @Test
+    fun `being called off is not the same as being too big`() {
+        // One is somebody deciding to stop a plan they can see the size of.
+        // The other is the app never learning the shape of the tree. Only
+        // the second must refuse to run, so they cannot share a flag.
+        val plan = RemoteDelete.plan(
+            server(mapOf("/pub/a" to listOf(file("one.txt")))),
+            "/pub",
+            listOf(dir("a")),
+            cancelled = { true },
+        )
+
+        assertTrue(plan.cancelled)
+        assertFalse(plan.truncated)
+    }
+
+    @Test
+    fun `a walk nobody stops reports neither`() {
+        val plan = RemoteDelete.plan(
+            server(mapOf("/pub/a" to listOf(file("one.txt")))),
+            "/pub",
+            listOf(dir("a")),
+        )
+
+        assertFalse(plan.cancelled)
+        assertFalse(plan.truncated)
+        assertEquals(1, plan.foldersRead)
+    }
+
+    private fun removals(vararg names: String) =
+        names.map { PlannedRemoval(it, it.endsWith("/")) }
+
+    @Test
+    fun `sending a plan counts from nothing up to all of it`() {
+        val progress = mutableListOf<Pair<Int, Int>>()
+
+        val done = RemoteDelete.remove(
+            steps = removals("/a.txt", "/b.txt", "/c.txt"),
+            remover = {},
+            onProgress = { sent, total, _ -> progress += sent to total },
+        )
+
+        assertEquals(3, done)
+        // Reported before each step, so the figure on screen is what is
+        // finished rather than what is being attempted.
+        assertEquals(listOf(0 to 3, 1 to 3, 2 to 3), progress)
+    }
+
+    @Test
+    fun `the total does not move while the work runs`() {
+        val totals = mutableSetOf<Int>()
+
+        RemoteDelete.remove(
+            steps = removals("/a.txt", "/b.txt", "/c.txt"),
+            remover = {},
+            onProgress = { _, total, _ -> totals += total },
+        )
+
+        // A bar whose end moves is a bar that jumps backwards.
+        assertEquals(setOf(3), totals)
+    }
+
+    @Test
+    fun `each step says which file it is about`() {
+        val named = mutableListOf<String>()
+
+        RemoteDelete.remove(
+            steps = removals("/pub/one.svg", "/pub/two.svg"),
+            remover = {},
+            onProgress = { _, _, next -> named += next.path },
+        )
+
+        assertEquals(listOf("/pub/one.svg", "/pub/two.svg"), named)
+    }
+
+    @Test
+    fun `stopping leaves the steps it never reached`() {
+        val sent = mutableListOf<String>()
+        var stopped = false
+
+        val done = RemoteDelete.remove(
+            steps = removals("/a.txt", "/b.txt", "/c.txt", "/d.txt"),
+            remover = { step ->
+                sent += step.path
+                if (step.path == "/b.txt") stopped = true
+            },
+            cancelled = { stopped },
+        )
+
+        assertEquals(2, done)
+        assertEquals(listOf("/a.txt", "/b.txt"), sent)
+    }
+
+    @Test
+    fun `a stop never lands in the middle of a command`() {
+        // Asked between steps only. A stop that cut into one would leave
+        // the control connection with a reply nobody read, and the next
+        // borrower would read this one's answer as its own.
+        var inside = false
+        var brokeIn = false
+
+        RemoteDelete.remove(
+            steps = removals("/a.txt", "/b.txt"),
+            remover = {
+                inside = true
+                inside = false
+            },
+            cancelled = {
+                if (inside) brokeIn = true
+                false
+            },
+        )
+
+        assertFalse(brokeIn)
+    }
+
+    @Test
+    fun `an empty plan sends nothing and says so`() {
+        assertEquals(0, RemoteDelete.remove(emptyList(), { error("nothing to remove") }))
+    }
+
 }

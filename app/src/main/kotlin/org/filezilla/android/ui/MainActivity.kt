@@ -35,6 +35,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -712,6 +713,26 @@ private fun AppScreen(
             onTrust = model::trustCertificate,
             onDismiss = model::dismissCertificateQuestion,
         )
+    }
+
+    // Above the pane it belongs to, because until it ends nothing else can
+    // reach that server: the browse connection is held by one caller at a
+    // time, so the pane underneath could not have answered anyway.
+    model.serverWork?.let { work ->
+        // Keyed on the kind, so the wait before it appears is paid once --
+        // a walk that turns into a delete does not go away and come back.
+        key(work.kind) {
+            ServerWorkDialog(work, onStop = model::stopServerWork)
+        }
+    }
+
+    model.workOutcome?.let { outcome ->
+        LaunchedEffect(outcome) {
+            model.outcomeShown()
+            snackbars.showSnackbar(
+                context.getString(outcome.message, outcome.done, outcome.total),
+            )
+        }
     }
 
     model.viewing?.let { ViewingDialog(it, onCancel = model::cancelViewing) }

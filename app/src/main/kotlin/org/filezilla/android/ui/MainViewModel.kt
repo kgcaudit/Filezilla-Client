@@ -862,20 +862,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val picks = held.names.map { name ->
                 rows.firstOrNull { it.name == name } ?: DirectoryEntry(name = name)
             }
+            val stop = Stoppable()
             runCatching {
                 val plan = if (FolderDownload.needsRemoteWalk(picks)) {
+                    serverWork = ServerWork(ServerWork.Kind.SCANNING, stopper = stop::stop)
                     graph.transfers.browse(site) { session ->
-                        FolderDownload.plan(
-                            lister = { path ->
-                                session.changeDirectory(path)
-                                session.list()
-                            },
-                            directory = held.directory,
-                            picks = picks,
-                        )
+                        planDownload(session, held.directory, picks, stop)
                     }
                 } else {
                     FolderDownload.plan({ emptyList() }, held.directory, picks)
+                }
+                serverWork = null
+                if (plan.cancelled) {
+                    // Nothing queued, and said so: a paste that looked like
+                    // it did nothing is the thing being avoided here.
+                    workOutcome = WorkOutcome(org.filezilla.android.R.string.work_scan_stopped, 0, 0)
+                    return@runCatching 0
                 }
                 val folder = android.net.Uri.fromFile(java.io.File(localDirectory))
                 // Through the one path that looks in the destination first.
@@ -1479,6 +1481,75 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * held. Navigation leaves it off -- walking back up a tree is where
      * every cache hit comes from -- and refresh turns it on.
      */
+    // ------------------------------------------------ long work on a server
+
+    /**
+     * A flag a walk and a loop both read, set from the screen.
+     *
+     * Not coroutine cancellation: that would interrupt whatever command is
+     * in flight and leave the control connection with a reply nobody read,
+     * which the next borrower of that connection would read as its own.
+     * Asked between steps instead, so the protocol is always at a boundary
+     * when the work stops.
+     */
+    class Stoppable {
+        @Volatile
+        private var asked = false
+
+        fun stop() {
+            asked = true
+        }
+
+        fun stopped(): Boolean = asked
+    }
+
+    /**
+     * Walks a server tree to plan a download, saying how far it has got.
+     *
+     * The walk is a listing per folder and nothing is queued until it ends,
+     * so on a deep tree the app has taken a selection and gone quiet. The
+     * transfer list takes over once there is something in it; this covers
+     * the part before that.
+     */
+    private fun planDownload(
+        session: org.filezilla.android.transfer.FtpSession,
+        directory: String,
+        picks: List<DirectoryEntry>,
+        stop: Stoppable,
+    ): DownloadPlan = FolderDownload.plan(
+        lister = { path ->
+            session.changeDirectory(path)
+            session.list()
+        },
+        directory = directory,
+        picks = picks,
+        cancelled = stop::stopped,
+        onFolder = { read ->
+            serverWork = ServerWork(
+                ServerWork.Kind.SCANNING,
+                foldersRead = read,
+                stopper = stop::stop,
+            )
+        },
+    )
+
+    /** What to say about work that stopped early. Nothing to say otherwise. */
+    data class WorkOutcome(@androidx.annotation.StringRes val message: Int, val done: Int, val total: Int)
+
+    var serverWork by mutableStateOf<ServerWork?>(null)
+        private set
+
+    var workOutcome by mutableStateOf<WorkOutcome?>(null)
+        private set
+
+    fun stopServerWork() {
+        serverWork?.stop()
+    }
+
+    fun outcomeShown() {
+        workOutcome = null
+    }
+
     // -------------------------------------------------- opening a server file
 
     /**
@@ -2050,20 +2121,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val directory = browse.path
 
         browse = browse.copy(loading = true, error = null)
+        val stop = Stoppable()
         viewModelScope.launch {
             runCatching {
                 val plan = if (FolderDownload.needsRemoteWalk(picks)) {
                     // One connection for the whole walk: a session per folder
                     // would reconnect for every level of the tree.
+                    serverWork = ServerWork(ServerWork.Kind.SCANNING, stopper = stop::stop)
                     graph.transfers.browse(site) { session ->
-                        FolderDownload.plan(
-                            lister = { path ->
-                                session.changeDirectory(path)
-                                session.list()
-                            },
-                            directory = directory,
-                            picks = picks,
-                        )
+                        planDownload(session, directory, picks, stop)
                     }
                 } else {
                     // Files name themselves, so there is nothing to ask the
@@ -2073,7 +2139,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 plan to findConflicts(plan, folder)
             }.onSuccess { (plan, conflicts) ->
+                serverWork = null
                 browse = browse.copy(loading = false)
+                if (plan.cancelled) {
+                    workOutcome = WorkOutcome(org.filezilla.android.R.string.work_scan_stopped, 0, 0)
+                    onQueued(DownloadPlan())
+                    return@onSuccess
+                }
                 clearSelection()
                 if (conflicts.isEmpty()) {
                     enqueuePlan(plan, site, folder, ConflictChoice.DEFAULT)
@@ -2084,6 +2156,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     pendingConflicts = PendingDownload(plan, site, folder, conflicts)
                 }
             }.onFailure { error ->
+                serverWork = null
                 browse = browse.copy(
                     loading = false,
                     error = failureOn(site, error),
@@ -2217,6 +2290,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun removeRemotely(id: PaneId, rows: List<DirectoryEntry>) {
         if (rows.isEmpty()) return
         val directory = pane(id).path
+        val stop = Stoppable()
+        serverWork = ServerWork(ServerWork.Kind.SCANNING, stopper = stop::stop)
+
         mutate(id) { session ->
             val plan = RemoteDelete.plan(
                 // One connection for the whole walk, and the same one that
@@ -2228,13 +2304,53 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 },
                 directory = directory,
                 picks = rows,
+                cancelled = stop::stopped,
+                onFolder = { read ->
+                    serverWork = ServerWork(
+                        ServerWork.Kind.SCANNING,
+                        foldersRead = read,
+                        stopper = stop::stop,
+                    )
+                },
             )
+            // Stopped before anything was removed. Nothing to report beyond
+            // the pane coming back as it was.
+            if (plan.cancelled) return@mutate
             // Refused rather than part-done. Half a delete leaves a tree the
             // user did not ask for and cannot see the shape of, and the
             // failing RMD at the end of it would not say which half.
+            //
+            // Not the same thing as the stop above, which is somebody
+            // deciding to halt a plan they can see the size of. This is the
+            // app not knowing the shape of the tree at all.
             if (plan.truncated) throw TooMuchToDeleteException()
-            for (step in plan.steps) {
-                if (step.isDirectory) session.removeDirectory(step.path) else session.deleteFile(step.path)
+
+            val done = RemoteDelete.remove(
+                steps = plan.steps,
+                remover = { step ->
+                    if (step.isDirectory) {
+                        session.removeDirectory(step.path)
+                    } else {
+                        session.deleteFile(step.path)
+                    }
+                },
+                cancelled = stop::stopped,
+                onProgress = { sent, total, next ->
+                    serverWork = ServerWork(
+                        ServerWork.Kind.DELETING,
+                        done = sent,
+                        total = total,
+                        current = next.path.substringAfterLast('/'),
+                        stopper = stop::stop,
+                    )
+                },
+            )
+            if (done < plan.steps.size) {
+                workOutcome = WorkOutcome(
+                    org.filezilla.android.R.string.work_delete_stopped,
+                    done,
+                    plan.steps.size,
+                )
             }
             // Back where the pane is looking, because the walk left the
             // connection wherever the deepest folder was -- and the re-list
@@ -2265,6 +2381,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     session.currentDirectory() to session.list()
                 }
             }.onSuccess { (here, entries) ->
+                serverWork = null
                 if (!stillWanted(id, asked)) return@launch
                 update(id) {
                     it.copy(
@@ -2280,6 +2397,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
             }.onFailure { error ->
+                serverWork = null
                 if (!stillWanted(id, asked)) return@launch
                 update(id) {
                     it.copy(

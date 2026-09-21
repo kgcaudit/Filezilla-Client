@@ -375,4 +375,10 @@
     <string name="setting_view_cache">Files kept for opening</string>
     <string name="setting_view_cache_detail">%1$s in use. Copies of server files, kept so opening the same one again is instant. They go when the space is wanted.</string>
     <string name="setting_view_cache_clear">Empty</string>
+    <string name="work_scanning">Looking through the folders</string>
+    <string name="work_deleting">Deleting from the server</string>
+    <string name="work_counted">%1$d of %2$d</string>
+    <string name="work_folders_read">%1$d folders so far</string>
+    <string name="work_delete_stopped">Stopped after deleting %1$d of %2$d</string>
+    <string name="work_scan_stopped">Stopped; nothing was queued</string>
 </resources>

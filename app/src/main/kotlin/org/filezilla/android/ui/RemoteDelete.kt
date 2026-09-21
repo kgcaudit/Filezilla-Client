@@ -13,6 +13,10 @@ data class RemovalPlan(
     val links: Int = 0,
     /** True when the walk did not reach the bottom, so the plan is incomplete. */
     val truncated: Boolean = false,
+    /** True when the walk was called off, so the plan is not the whole tree. */
+    val cancelled: Boolean = false,
+    /** Folders opened. What the walk cost, and what it has to show for itself. */
+    val foldersRead: Int = 0,
 )
 
 /**
@@ -47,17 +51,38 @@ object RemoteDelete {
      * delete leaves a tree the user did not ask for and cannot see the shape
      * of.
      */
-    fun plan(lister: RemoteLister, directory: String, picks: List<DirectoryEntry>): RemovalPlan {
+    fun plan(
+        lister: RemoteLister,
+        directory: String,
+        picks: List<DirectoryEntry>,
+        /**
+         * Asked between folders, so a walk somebody has called off stops
+         * within one listing rather than reading the whole tree first.
+         */
+        cancelled: () -> Boolean = { false },
+        /** Told after each folder, so the count can be shown as it climbs. */
+        onFolder: (Int) -> Unit = {},
+    ): RemovalPlan {
         val steps = mutableListOf<PlannedRemoval>()
         var links = 0
         var truncated = false
+        var stopped = false
+        var foldersRead = 0
 
         fun walk(path: String, depth: Int) {
             if (depth >= FolderDownload.MAX_DEPTH) {
                 truncated = true
                 return
             }
-            for (entry in lister.list(path)) {
+            if (stopped || cancelled()) {
+                stopped = true
+                return
+            }
+            val listing = lister.list(path)
+            foldersRead++
+            onFolder(foldersRead)
+            for (entry in listing) {
+                if (stopped) return
                 if (steps.size >= FolderDownload.MAX_FILES) {
                     truncated = true
                     return
@@ -86,6 +111,10 @@ object RemoteDelete {
                 truncated = true
                 break
             }
+            if (stopped || cancelled()) {
+                stopped = true
+                break
+            }
             val path = remotePathOf(directory, pick.name)
             when {
                 pick.isLink -> {
@@ -102,7 +131,44 @@ object RemoteDelete {
             }
         }
 
-        return RemovalPlan(steps, links, truncated)
+        return RemovalPlan(steps, links, truncated, stopped, foldersRead)
+    }
+
+    /**
+     * Sends a plan, reporting as it goes and stopping when asked.
+     *
+     * Here rather than in the view model because it is the half of the
+     * delete that can be checked: a walk that produces the right plan and
+     * a loop that reports the wrong thing is still an app that looks
+     * broken, and the loop is where the counting is.
+     *
+     * [cancelled] is asked *between* steps and never inside one. A stop
+     * that interrupted a command would leave the control connection with a
+     * reply nobody read, and the next thing to borrow it would read this
+     * one's answer as its own.
+     *
+     * Returns how many steps were sent, which is the whole plan unless
+     * somebody stopped it.
+     */
+    fun remove(
+        steps: List<PlannedRemoval>,
+        remover: Remover,
+        cancelled: () -> Boolean = { false },
+        onProgress: (done: Int, total: Int, next: PlannedRemoval) -> Unit = { _, _, _ -> },
+    ): Int {
+        var done = 0
+        for (step in steps) {
+            if (cancelled()) break
+            onProgress(done, steps.size, step)
+            remover.remove(step)
+            done++
+        }
+        return done
+    }
+
+    /** What actually sends `DELE` and `RMD`. The seam the tests replace. */
+    fun interface Remover {
+        fun remove(step: PlannedRemoval)
     }
 
     /** Whether removing [picks] has to ask the server what is inside anything. */

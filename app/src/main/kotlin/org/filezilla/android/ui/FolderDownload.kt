@@ -21,6 +21,10 @@ data class DownloadPlan(
     val skippedLinks: Int = 0,
     /** True when the walk stopped early because the selection was enormous. */
     val truncated: Boolean = false,
+    /** True when the walk was called off, so the plan is not the whole tree. */
+    val cancelled: Boolean = false,
+    /** Folders opened. What the walk cost, and what it has to show for itself. */
+    val foldersRead: Int = 0,
 )
 
 /** Lists one remote directory. Narrow on purpose, so the walk can be tested. */
@@ -67,10 +71,20 @@ object FolderDownload {
      * link as a directory whether or not it is one, so this skips file links
      * too -- passing over a file is the cheaper mistake.
      */
-    fun plan(lister: RemoteLister, directory: String, picks: List<DirectoryEntry>): DownloadPlan {
+    fun plan(
+        lister: RemoteLister,
+        directory: String,
+        picks: List<DirectoryEntry>,
+        /** Asked between folders, so a walk called off stops within one listing. */
+        cancelled: () -> Boolean = { false },
+        /** Told after each folder, so the count can be shown as it climbs. */
+        onFolder: (Int) -> Unit = {},
+    ): DownloadPlan {
         val files = mutableListOf<PlannedDownload>()
         var skippedLinks = 0
         var truncated = false
+        var stopped = false
+        var foldersRead = 0
 
         fun take(path: String, entry: DirectoryEntry, subPath: List<String>) {
             files += PlannedDownload(
@@ -86,7 +100,15 @@ object FolderDownload {
                 truncated = true
                 return
             }
-            for (entry in lister.list(path)) {
+            if (stopped || cancelled()) {
+                stopped = true
+                return
+            }
+            val listing = lister.list(path)
+            foldersRead++
+            onFolder(foldersRead)
+            for (entry in listing) {
+                if (stopped) return
                 if (files.size >= MAX_FILES) {
                     truncated = true
                     return
@@ -104,6 +126,10 @@ object FolderDownload {
                 truncated = true
                 break
             }
+            if (stopped || cancelled()) {
+                stopped = true
+                break
+            }
             when {
                 pick.isLink -> skippedLinks++
                 // The picked folder is recreated by name, so downloading
@@ -114,6 +140,6 @@ object FolderDownload {
             }
         }
 
-        return DownloadPlan(files, skippedLinks, truncated)
+        return DownloadPlan(files, skippedLinks, truncated, stopped, foldersRead)
     }
 }
