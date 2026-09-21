@@ -794,7 +794,7 @@ class LayoutShotTest {
                 onRequestNotifications = {},
                 onTransfersQueued = {},
                 onDownloadSelected = {},
-                onOpenLocalFile = {},
+                onOpenLocalFile = { _, _ -> },
                 onOpenLocalFileWith = {},
                 onShareLocal = {},
                 onNewDirectory = {},

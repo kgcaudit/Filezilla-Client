@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderZip
+import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.automirrored.filled.NoteAdd
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -167,6 +168,8 @@ fun SelectionBar(
      * bar should quietly start.
      */
     onCompress: (() -> Unit)? = null,
+    /** On a phone pane, when every picked row is an archive: unpack them. */
+    onExtract: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -210,6 +213,14 @@ fun SelectionBar(
                     Icon(
                         Icons.Filled.FolderZip,
                         contentDescription = stringResource(R.string.archive_compress),
+                    )
+                }
+            }
+            onExtract?.let { extract ->
+                IconButton(onClick = extract) {
+                    Icon(
+                        Icons.Filled.Unarchive,
+                        contentDescription = stringResource(R.string.archive_extract_all),
                     )
                 }
             }
@@ -344,3 +355,45 @@ private fun refusalText(refusal: PasteRefusal?, count: Int, cut: Boolean): Strin
         PasteRefusal.BETWEEN_SERVERS -> stringResource(R.string.paste_between_servers)
         PasteRefusal.NO_SERVER_COPY -> stringResource(R.string.paste_no_server_copy)
     }
+
+/**
+ * The bar shown while picking rows inside an archive.
+ *
+ * An archive is read only, so none of the ordinary selection actions --
+ * cut, copy, delete, rename, share -- apply. What is left is one thing:
+ * unpack what is picked, into a new folder beside the archive.
+ */
+@Composable
+fun ArchiveSelectionBar(
+    count: Int,
+    onExtract: () -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        tonalElevation = 3.dp,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onClear) {
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.menu_select_none))
+            }
+            Text(
+                stringResource(R.string.selection_count, count),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.weight(1f).padding(start = 4.dp),
+            )
+            IconButton(onClick = onExtract) {
+                Icon(
+                    Icons.Filled.Unarchive,
+                    contentDescription = stringResource(R.string.archive_extract_picked),
+                )
+            }
+        }
+    }
+}

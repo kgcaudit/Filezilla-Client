@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.SortByAlpha
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.GridView
@@ -70,6 +71,8 @@ fun BrowseOverflow(
     onNewDirectory: (() -> Unit)? = null,
     /** Null on a pane showing the phone: "up" from there is the other pane. */
     onUpload: (() -> Unit)? = null,
+    /** Set only inside an archive: unpack the whole of it. */
+    onExtractAll: (() -> Unit)? = null,
 ) {
     var open by remember { mutableStateOf(false) }
 
@@ -83,6 +86,13 @@ fun BrowseOverflow(
             Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.menu_more))
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            onExtractAll?.let { action ->
+                Item(R.string.archive_extract_all, Icons.Filled.Unarchive) {
+                    open = false
+                    action()
+                }
+                HorizontalDivider()
+            }
             onNewDirectory?.let { action ->
                 Item(R.string.new_folder_title, Icons.Filled.CreateNewFolder) {
                     open = false

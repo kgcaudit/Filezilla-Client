@@ -21,6 +21,9 @@ import kotlinx.coroutines.launch
 import org.filezilla.android.AppGraph
 import org.filezilla.android.R
 import org.filezilla.android.archive.ArchiveBrowsing
+import org.filezilla.android.archive.ArchiveNav
+import org.filezilla.android.archive.WrongPassword
+import org.filezilla.android.archive.ArchiveSession
 import org.filezilla.android.archive.ArchiveEntry
 import org.filezilla.android.archive.ArchiveExtract
 import org.filezilla.android.archive.ArchiveWriter
@@ -83,6 +86,15 @@ data class BrowseState(
     val search: SearchState? = null,
     /** The entry whose properties are being shown, if any. */
     val properties: DirectoryEntry? = null,
+
+    /**
+     * The archive this pane is looking inside, or null for an ordinary folder.
+     *
+     * When set, the pane's rows are the archive's, its breadcrumb continues
+     * into the archive, and the write actions are put away: an archive is
+     * browsed, not edited in place.
+     */
+    val archive: ArchiveSession? = null,
 ) {
 
     /** The server this pane is on, or null when it is the phone or empty. */
@@ -342,10 +354,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Walks up, or does nothing at the top rather than looping. */
     fun up(id: PaneId) {
+        if (pane(id).archive != null) { archiveUp(id); return }
         parentOf(id)?.let { openPath(id, it) }
     }
 
-    fun canGoUp(id: PaneId): Boolean = parentOf(id) != null
+    fun canGoUp(id: PaneId): Boolean = pane(id).archive != null || parentOf(id) != null
 
     /**
      * The folder above this pane's, bounded by what the pane can reach.
@@ -1322,6 +1335,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun breadcrumbsFor(id: PaneId): List<Crumb> {
         val state = pane(id)
+        state.archive?.let { session ->
+            val base = folderCrumbs(state)
+            val out = base.toMutableList()
+            out += Crumb(session.name, ArchiveNav.SCHEME)
+            var walked = ""
+            for (segment in session.at.split('/').filter { it.isNotEmpty() }) {
+                walked = if (walked.isEmpty()) segment else "$walked/$segment"
+                out += Crumb(segment, ArchiveNav.SCHEME + walked)
+            }
+            return out
+        }
+        return folderCrumbs(state)
+    }
+
+    private fun folderCrumbs(state: BrowseState): List<Crumb> {
         if (state.isLocal) {
             val volume = storageRoots()
                 .filter { it.kind != StorageRoot.Kind.SHORTCUT }
@@ -1649,9 +1677,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             modifiedMillis = entry.time?.epochMillis ?: 0,
         )
 
+        val home = pane(id).path
         graph.viewCache.readyFile(key)?.let { held ->
             graph.viewCache.touch(held)
-            offerToOpen(held)
+            offerToOpen(id, home, held)
             return
         }
 
@@ -1679,7 +1708,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
                 graph.viewCache.evictDownTo(keep = held)
-                offerToOpen(held)
+                offerToOpen(id, home, held)
             }.onFailure { error ->
                 viewing = null
                 partial.delete()
@@ -1688,7 +1717,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun offerToOpen(file: java.io.File) {
+    private fun offerToOpen(id: PaneId, home: String, file: java.io.File) {
+        // An archive fetched from a server is browsed in the pane it came
+        // from, the same as one on the phone; backing out returns to the
+        // server folder. Anything else is handed to whatever reads it, with
+        // the read-only note first because it is a copy of a server file.
+        if (ArchiveNav.browsable(file.name)) {
+            openArchive(id, file, home)
+            return
+        }
         if (!graph.preferences.warnedThatViewingIsReadOnly) warnReadOnly = true
         readyToOpen = file
     }
@@ -1707,15 +1744,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val args: List<Any> = emptyList(),
     )
 
-    /** The archive being looked inside, or null. */
-    var archive by mutableStateOf<ArchiveView?>(null)
-        private set
-
-    /** Where that archive's bytes are: on the phone, or fetched to look at. */
-    private var archiveFile: java.io.File? = null
-
-    /** Where an unpack from it would go; see [unpackInto]. */
-    private var archiveInto: java.io.File? = null
+    /** A pane's current inside-an-archive location, resolved off [BrowseState]. */
+    fun archiveIn(id: PaneId): ArchiveSession? = pane(id).archive
 
     var archiveBusy by mutableStateOf<ArchiveBusy?>(null)
         private set
@@ -1747,7 +1777,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var archivePasswordWrong by mutableStateOf(false)
         private set
 
-    private var archiveExtractAll = false
+    /** What a password, once given, is for: an extract, or opening one file. */
+    private sealed interface PendingPassword {
+        val id: PaneId
+        val session: ArchiveSession
+        data class Extract(override val id: PaneId, override val session: ArchiveSession, val picks: Set<String>) : PendingPassword
+        data class Open(override val id: PaneId, override val session: ArchiveSession, val name: String) : PendingPassword
+    }
+
+    private var pendingPassword: PendingPassword? = null
 
     fun archiveOutcomeShown() {
         archiveOutcome = null
@@ -1759,18 +1797,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Opens [file] as an archive and shows what is in it.
+     * Opens [file] as an archive inside pane [id], showing it like a folder.
      *
-     * [into] is where an unpack lands. For a file on the phone that is a
-     * new folder beside it, which is what every file manager does. A file
-     * fetched from a server has no "beside it" -- it is in the cache of
-     * copies kept for opening -- so the caller passes the folder a
-     * download from that pane would have used, which is the rule the rest
-     * of this app already follows.
+     * The pane keeps its real source and remembers [home] -- the folder to
+     * return to when the archive is backed out of -- so an archive is a
+     * place the pane walks into, not a window over the top of it. The bytes
+     * are on disk whether the archive is on the phone or was fetched from a
+     * server to be looked at, so this one path serves both.
      */
-    fun openArchive(file: java.io.File, into: java.io.File) {
-        // Set here rather than inside the coroutine, so the spinner is up
-        // on the frame the tap lands rather than after the read.
+    fun openArchive(id: PaneId, file: java.io.File, home: String) {
         archiveOpening = file.name
         viewModelScope.launch {
             val opened = withContext(Dispatchers.IO) {
@@ -1778,9 +1813,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             archiveOpening = null
             opened.onSuccess { entries ->
-                archiveFile = file
-                archiveInto = into
-                archive = ArchiveView(name = file.name, entries = entries)
+                val session = ArchiveSession(file, file.name, home, entries)
+                update(id) {
+                    it.copy(
+                        archive = session,
+                        path = home,
+                        entries = ArchiveNav.rows(session),
+                        selection = emptySet(),
+                        selecting = false,
+                        filter = "",
+                        filterOpen = false,
+                    )
+                }
             }.onFailure { failure ->
                 // The reason, not a bare "cannot read": a truncated
                 // download, an unsupported variant and a file that is not
@@ -1813,92 +1857,213 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return shown ?: beside ?: file
     }
 
-    fun closeArchive() {
-        archiveBusy?.onStop?.invoke()
-        archive = null
-        archiveFile = null
-        archiveInto = null
-        archivePasswordAsked = false
-        archivePasswordWrong = false
+    /** A row tapped inside an archive: into a folder, or open a file. */
+    fun archiveTap(id: PaneId, name: String) {
+        val session = pane(id).archive ?: return
+        val row = ArchiveNav.rows(session).firstOrNull { it.name == name } ?: return
+        if (row.isDirectory) {
+            val next = ArchiveNav.into(session, name)
+            update(id) { it.copy(archive = next, entries = ArchiveNav.rows(next), selection = emptySet(), filter = "") }
+        } else {
+            openArchiveEntry(id, session, name, password = null)
+        }
     }
 
-    fun archiveEnter(at: String) {
-        archive = archive?.copy(at = at)
+    /**
+     * Back a step inside an archive: a shallower folder, or out of it.
+     *
+     * Backing out of the root lists [ArchiveSession.home] again, so the
+     * one gesture walks up through the archive and then out into the folder
+     * it was opened from -- exactly what the back button does in a folder.
+     */
+    fun archiveUp(id: PaneId): Boolean {
+        val session = pane(id).archive ?: return false
+        val up = ArchiveNav.up(session)
+        if (up == null) {
+            update(id) { it.copy(archive = null, entries = emptyList(), selection = emptySet(), selecting = false, filter = "") }
+            openPath(id, session.home)
+        } else {
+            update(id) { it.copy(archive = up, entries = ArchiveNav.rows(up), selection = emptySet(), filter = "") }
+        }
+        return true
     }
 
-    fun archiveUp() {
-        val at = archive?.at ?: return
-        archive = archive?.copy(at = ArchiveBrowsing.upFrom(at) ?: "")
+    /** A breadcrumb tap while inside an archive: another archive folder, or out. */
+    fun crumbTap(id: PaneId, path: String) {
+        val session = pane(id).archive
+        if (session != null) {
+            val target = ArchiveNav.target(path)
+            if (target != null) {
+                val next = session.copy(at = target)
+                update(id) { it.copy(archive = next, entries = ArchiveNav.rows(next), selection = emptySet(), filter = "") }
+                return
+            }
+            update(id) { it.copy(archive = null, entries = emptyList(), selection = emptySet(), selecting = false, filter = "") }
+        }
+        openPath(id, path)
     }
 
-    fun archiveToggle(path: String) {
-        val view = archive ?: return
-        archive = view.copy(
-            picks = if (path in view.picks) view.picks - path else view.picks + path,
-        )
-    }
-
-    /** Chooses what is on screen, not the whole archive: see [ArchiveBrowsing.pathsIn]. */
-    fun archivePickAll() {
-        val view = archive ?: return
-        archive = view.copy(picks = view.picks + ArchiveBrowsing.pathsIn(view.entries, view.at))
-    }
-
-    fun archivePickNone() {
-        archive = archive?.copy(picks = emptySet())
-    }
+    /** True while [id] is showing the inside of an archive. */
+    fun inArchive(id: PaneId): Boolean = pane(id).archive != null
 
     fun dismissArchivePassword() {
         archivePasswordAsked = false
         archivePasswordWrong = false
+        pendingPassword = null
+    }
+
+    /** The answer to the password prompt, dispatched to whatever asked for it. */
+    fun submitArchivePassword(password: CharArray) {
+        val pending = pendingPassword ?: return
+        archivePasswordAsked = false
+        when (pending) {
+            is PendingPassword.Extract -> runExtract(pending.id, pending.session, pending.picks, password)
+            is PendingPassword.Open -> openArchiveEntry(pending.id, pending.session, pending.name, password)
+        }
     }
 
     /**
-     * Starts an unpack, asking for a password first when one is needed.
+     * Opens one file from inside an archive with whatever reads it.
      *
-     * [all] is the button that was pressed rather than a state: with
-     * nothing chosen the button says "unpack all" and means it.
+     * The bytes are unpacked to a private cache file and handed to the same
+     * door a tapped phone file goes through, so the remembered app, the
+     * chooser and the nested-archive case are the ones already written. A
+     * locked entry asks for the password first.
      */
-    fun archiveExtract(all: Boolean) {
-        val view = archive ?: return
-        val file = archiveFile ?: return
-        archiveExtractAll = all
-        val picks = if (all) emptySet() else ArchiveBrowsing.expand(view.entries, view.picks)
-        val locked = view.entries.any {
+    private fun openArchiveEntry(id: PaneId, session: ArchiveSession, name: String, password: CharArray?) {
+        val entry = ArchiveNav.entryFor(session, name) ?: return
+        if (entry.unreadable != null) {
+            archiveOutcome = ArchiveOutcome(R.string.archive_open_failed, listOf(name, ""))
+            return
+        }
+        if (entry.encrypted && password == null) {
+            pendingPassword = PendingPassword.Open(id, session, name)
+            archivePasswordAsked = true
+            return
+        }
+        archiveBusy = ArchiveBusy(
+            getApplication<android.app.Application>().getString(R.string.archive_extracting),
+            name, 0, 0,
+        ) {}
+        viewModelScope.launch {
+            val opened = withContext(Dispatchers.IO) {
+                runCatching {
+                    val dir = java.io.File(getApplication<android.app.Application>().cacheDir, "opened")
+                    dir.mkdirs()
+                    val out = java.io.File(dir, entry.name)
+                    Archives.open(session.file).use { archive ->
+                        archive.open(entry, password).use { source ->
+                            out.outputStream().use { sink -> source.copyTo(sink) }
+                        }
+                    }
+                    out
+                }
+            }
+            archiveBusy = null
+            opened.onSuccess { readyToOpen = it }
+                .onFailure { failure ->
+                    if (failure is WrongPassword) {
+                        pendingPassword = PendingPassword.Open(id, session, name)
+                        archivePasswordAsked = true
+                        archivePasswordWrong = true
+                    } else {
+                        archiveOutcome = ArchiveOutcome(R.string.archive_open_failed, listOf(name, failure.message ?: ""))
+                    }
+                }
+        }
+    }
+
+    /**
+     * Unpacks the selected rows of the archive open in [id].
+     *
+     * The selection is names in the current folder; a chosen folder brings
+     * what is under it, the same as everywhere else. With nothing chosen
+     * this unpacks the whole archive, which is what the button says then.
+     */
+    fun extractSelected(id: PaneId) {
+        val session = pane(id).archive ?: return
+        val names = pane(id).selection
+        val picks = if (names.isEmpty()) emptySet() else names.mapTo(mutableSetOf()) { name ->
+            val base = if (session.at.isEmpty()) name else session.at + "/" + name
+            val isFolder = session.entries.none { it.path == base && !it.isDirectory }
+            if (isFolder) "$base/" else base
+        }.let { ArchiveBrowsing.expand(session.entries, it) }
+        beginExtract(id, session, picks)
+    }
+
+    private fun beginExtract(id: PaneId, session: ArchiveSession, picks: Set<String>) {
+        val locked = session.entries.any {
             !it.isDirectory && it.encrypted &&
                 it.unreadable != ArchiveEntry.Unreadable.ENCRYPTED_METHOD &&
                 (picks.isEmpty() || it.path in picks)
         }
         if (locked) {
+            pendingPassword = PendingPassword.Extract(id, session, picks)
             archivePasswordAsked = true
             return
         }
-        runExtract(file, picks, null)
+        runExtract(id, session, picks, null)
     }
 
-    fun archiveExtractWith(password: CharArray) {
-        val view = archive ?: return
-        val file = archiveFile ?: return
-        archivePasswordAsked = false
-        archivePasswordWrong = false
-        val picks = if (archiveExtractAll) emptySet()
-        else ArchiveBrowsing.expand(view.entries, view.picks)
-        runExtract(file, picks, password)
+    /**
+     * Unpacks a selected, unopened archive row -- the bottom bar's counterpart
+     * to compress -- into a new folder beside it.
+     */
+    fun extractArchives(id: PaneId, names: List<String>) {
+        val folder = pane(id).path.takeIf { it.isNotEmpty() && pane(id).isLocal } ?: return
+        val files = names.map { java.io.File(folder, it) }.filter { ArchiveNav.browsable(it.name) }
+        if (files.isEmpty()) return
+        clearSelectionIn(id)
+        extractNext(id, files, 0, 0, 0)
     }
 
-    private fun runExtract(file: java.io.File, picks: Set<String>, password: CharArray?) {
-        val root = archiveInto ?: return
+    /** One archive at a time, so several selected archives each get their own folder. */
+    private fun extractNext(id: PaneId, files: List<java.io.File>, index: Int, done: Int, skipped: Int) {
+        if (index >= files.size) {
+            archiveOutcome = when {
+                done == 0 -> ArchiveOutcome(R.string.archive_extract_none)
+                skipped == 0 -> ArchiveOutcome(R.string.archive_extracted, listOf(done, files.first().parentFile?.name ?: ""))
+                else -> ArchiveOutcome(R.string.archive_extracted_some, listOf(done, skipped))
+            }
+            relistLocalPanes()
+            return
+        }
+        val file = files[index]
+        archiveOpening = file.name
+        viewModelScope.launch {
+            val opened = withContext(Dispatchers.IO) { runCatching { Archives.open(file).use { it.entries } } }
+            archiveOpening = null
+            val session = opened.getOrNull()?.let { ArchiveSession(file, file.name, file.parent ?: "", it) }
+            if (session == null) {
+                extractNext(id, files, index + 1, done, skipped + 1)
+            } else if (session.entries.any { it.encrypted }) {
+                // A locked one in a batch asks on its own, then the batch goes on.
+                pendingPassword = PendingPassword.Extract(id, session, emptySet())
+                archivePasswordAsked = true
+            } else {
+                runExtract(id, session, emptySet(), null) { relistLocalPanes() }
+            }
+        }
+    }
+
+    private fun runExtract(
+        id: PaneId,
+        session: ArchiveSession,
+        picks: Set<String>,
+        password: CharArray?,
+        onDone: () -> Unit = {},
+    ) {
+        val root = unpackInto(session.file)
         val stop = java.util.concurrent.atomic.AtomicBoolean(false)
-        val extracting = getApplication<android.app.Application>()
-            .getString(R.string.archive_extracting)
+        val extracting = getApplication<android.app.Application>().getString(R.string.archive_extracting)
         archiveBusy = ArchiveBusy(extracting, "", 0, 0) { stop.set(true) }
 
         viewModelScope.launch {
             val outcome = withContext(Dispatchers.IO) {
                 runCatching {
-                    val into = java.io.File(root, freeNameIn(root.path, Archives.folderNameFor(file.name)))
+                    val into = java.io.File(root, freeNameIn(root.path, Archives.folderNameFor(session.name)))
                     into.mkdirs()
-                    Archives.open(file).use { opened ->
+                    Archives.open(session.file).use { opened ->
                         ArchiveExtract.run(
                             archive = opened,
                             into = into,
@@ -1914,36 +2079,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             archiveBusy = null
 
             outcome.onSuccess { (result, into) ->
-                // A password that opened nothing is the one failure worth
-                // asking about again rather than reporting: it is almost
-                // always a typo, and the archive is still open in front of
-                // the user.
                 val allLocked = result.written.isEmpty() &&
                     result.skipped.isNotEmpty() &&
                     result.skipped.all { it.reason == ExtractResult.Reason.PASSWORD }
                 if (allLocked) {
                     runCatching { into.delete() }
+                    pendingPassword = PendingPassword.Extract(id, session, picks)
                     archivePasswordAsked = true
                     archivePasswordWrong = true
                     return@onSuccess
                 }
+                archivePasswordWrong = false
                 archiveOutcome = when {
-                    result.cancelled -> ArchiveOutcome(
-                        R.string.archive_extract_stopped,
-                        listOf(result.written.size),
-                    )
+                    result.cancelled -> ArchiveOutcome(R.string.archive_extract_stopped, listOf(result.written.size))
                     result.written.isEmpty() -> ArchiveOutcome(R.string.archive_extract_none)
-                    result.skipped.isEmpty() -> ArchiveOutcome(
-                        R.string.archive_extracted,
-                        listOf(result.written.size, into.name),
-                    )
-                    else -> ArchiveOutcome(
-                        R.string.archive_extracted_some,
-                        listOf(result.written.size, result.skipped.size),
-                    )
+                    result.skipped.isEmpty() -> ArchiveOutcome(R.string.archive_extracted, listOf(result.written.size, into.name))
+                    else -> ArchiveOutcome(R.string.archive_extracted_some, listOf(result.written.size, result.skipped.size))
                 }
                 if (result.written.isNotEmpty()) relistLocalPanes()
-                closeArchive()
+                onDone()
             }.onFailure {
                 archiveOutcome = ArchiveOutcome(R.string.archive_not_readable)
             }

@@ -127,7 +127,7 @@ fun PaneHeader(
             } else {
                 BreadcrumbBar(
                     crumbs = model.breadcrumbsFor(id),
-                    onOpen = { path -> model.focusPane(id); model.openPath(id, path) },
+                    onOpen = { path -> model.focusPane(id); model.crumbTap(id, path) },
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -157,13 +157,16 @@ fun PaneHeader(
                     // a folder belongs to both: the round button does it on
                     // the phone, but that button is hidden whenever a
                     // selection or a paste bar is up, which is exactly when
-                    // somewhere new to put things is wanted.
-                    onNewDirectory = if (state.source is PaneSource.Empty) {
+                    // somewhere new to put things is wanted. Inside an
+                    // archive neither applies -- it is read only -- and the
+                    // menu offers unpacking the whole of it instead.
+                    onNewDirectory = if (state.source is PaneSource.Empty || state.archive != null) {
                         null
                     } else {
                         here(onNewDirectory)
                     },
-                    onUpload = if (state.site != null) here(onUpload) else null,
+                    onUpload = if (state.site != null && state.archive == null) here(onUpload) else null,
+                    onExtractAll = if (state.archive != null) here { model.extractSelected(id) } else null,
                 )
             }
         }

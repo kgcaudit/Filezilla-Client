@@ -54,7 +54,7 @@ fun FilePanes(
     onRequestNotifications: () -> Unit,
     onTransfersQueued: (Int) -> Unit,
     onDownloadSelected: () -> Unit,
-    onOpenLocalFile: (String) -> Unit,
+    onOpenLocalFile: (PaneId, String) -> Unit,
     /** The same, but always asking which app rather than using the remembered one. */
     onOpenLocalFileWith: (String) -> Unit,
     /** Hands the given full paths, all on this phone, to another app. */
@@ -175,13 +175,30 @@ fun FilePanes(
             // pager rather than inside each page: a selection made on one side
             // is acted on where it was made, and swiping does not carry the
             // bar to a pane the selection is not in.
-            if (state.selecting && state.selection.isNotEmpty()) {
+            if (state.archive != null && state.selecting && state.selection.isNotEmpty()) {
+                // Inside an archive there is nothing to cut, delete or share
+                // -- it is read only -- so the bar is one action: unpack what
+                // is picked, into a new folder beside the archive.
+                ArchiveSelectionBar(
+                    count = state.selection.size,
+                    onExtract = { model.extractSelected(active) },
+                    onClear = model::clearSelection,
+                )
+            } else if (state.selecting && state.selection.isNotEmpty()) {
                 // Folders are dropped: nothing can be handed a folder through
                 // a share sheet, so picking one alongside six photos shares
                 // the six rather than refusing the lot.
                 val sharable = state.entries
                     .filter { it.name in state.selection && !it.isDirectory }
                     .map { FilePath.child(state.path, it.name) }
+                // Every picked row an archive this app reads: then the bar
+                // offers to unpack them, each into a folder beside itself --
+                // the counterpart to compress, and the way to unpack without
+                // opening first.
+                val archives = state.selection.filter { name ->
+                    org.filezilla.android.archive.ArchiveNav.browsable(name) &&
+                        state.entries.any { it.name == name && !it.isDirectory }
+                }
                 SelectionBar(
                     count = state.selection.size,
                     canRename = state.selection.size == 1,
@@ -194,6 +211,11 @@ fun FilePanes(
                     // folder is the commonest thing anybody wants a zip of.
                     onCompress = if (state.isLocal) {
                         { model.compress(active, state.selection.toList()) }
+                    } else {
+                        null
+                    },
+                    onExtract = if (state.isLocal && archives.isNotEmpty() && archives.size == state.selection.size) {
+                        { model.extractArchives(active, archives) }
                     } else {
                         null
                     },
@@ -251,7 +273,7 @@ fun FilePanes(
         // paste button sits -- so the one action the paste bar exists for was
         // underneath it and could not be pressed.
         val barShowing = (state.selecting && state.selection.isNotEmpty()) || model.clipboard != null
-        if (state.isLocal && model.storageGranted && !barShowing) {
+        if (state.isLocal && model.storageGranted && !barShowing && state.archive == null) {
             NewThingFab(
                 expanded = dialOpen,
                 onExpandedChange = { dialOpen = it },
@@ -412,7 +434,7 @@ private fun PaneBody(
     onGrant: () -> Unit,
     onPickSite: () -> Unit,
     onDownload: (org.filezilla.ftp.listing.DirectoryEntry) -> Unit,
-    onOpenLocalFile: (String) -> Unit,
+    onOpenLocalFile: (PaneId, String) -> Unit,
     onOpenLocalFileWith: (String) -> Unit,
     onNewDirectory: () -> Unit,
     onUpload: () -> Unit,
@@ -480,7 +502,7 @@ private fun PaneBody(
                 onCloseSearch = { model.stopSearch(id) },
                 onOpenHit = { model.openHit(id, it) },
                 actions = EntryActions(
-                    onOpen = { model.openChild(id, it.name) },
+                    onOpen = { if (state.archive != null) model.archiveTap(id, it.name) else model.openChild(id, it.name) },
                     // The button beside a server row, and nothing else. It
                     // means "keep a copy", which is a different act from
                     // looking at the file -- the two shared this call, and
@@ -492,10 +514,13 @@ private fun PaneBody(
                     // the same way, by whichever app the extension is
                     // remembered against.
                     onOpenFile = { entry ->
-                        if (state.isLocal) {
-                            onOpenLocalFile(FilePath.child(model.pane(id).path, entry.name))
-                        } else {
-                            model.viewOnServer(id, entry)
+                        when {
+                            // Inside an archive a file tap opens that entry
+                            // with the app that reads it; a folder tap
+                            // descends -- both handled by the pane itself.
+                            state.archive != null -> model.archiveTap(id, entry.name)
+                            state.isLocal -> onOpenLocalFile(id, FilePath.child(model.pane(id).path, entry.name))
+                            else -> model.viewOnServer(id, entry)
                         }
                     },
                     onDelete = model::delete,

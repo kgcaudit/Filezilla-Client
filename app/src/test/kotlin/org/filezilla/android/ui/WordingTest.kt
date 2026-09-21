@@ -129,6 +129,10 @@ class WordingTest {
             // same thing to the same kind of thing, so they say it the
             // same way.
             "action_stop",
+            // Unpack the whole archive: the selection bar's button on a
+            // picked archive and the overflow's item inside an open one.
+            // One act, one word, said in the two places it is offered.
+            "archive_extract_all",
             // Our own "open with" sheet, and the system chooser it hands
             // off to: the same question asked by two pieces of machinery,
             // and it must read as one question.

@@ -120,13 +120,12 @@ class IconMeaningTest {
         "Download" to setOf("action_download_selected", "browse_download"),
         "Search" to setOf("menu_filter"),
         "Add" to setOf("sites_add"),
-        // Going up: out of a folder on a screen, and out of a folder
-        // inside an archive. One act on two kinds of folder.
-        "ArrowBack" to setOf("action_back", "archive_up"),
-        // Packing files into an archive. The only zip in the app, and it
-        // is a verb rather than a file type: the row icons for archives
-        // are the app's own tiles, not this.
+        "ArrowBack" to setOf("action_back"),
+        // Packing files into an archive, and unpacking one. Verbs, a pair,
+        // and the only zip glyphs in the app -- the row icons for archives
+        // are the app's own tiles, not these.
         "FolderZip" to setOf("archive_compress"),
+        "Unarchive" to setOf("archive_extract_all", "archive_extract_picked"),
         "KeyboardArrowUp" to setOf("sites_move_up"),
         "KeyboardArrowDown" to setOf("sites_move_down"),
     )

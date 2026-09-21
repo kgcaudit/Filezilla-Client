@@ -49,6 +49,7 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.filezilla.android.archive.ArchiveNav
 import org.filezilla.android.archive.Archives
 import kotlinx.coroutines.launch
 import org.filezilla.android.R
@@ -467,15 +468,18 @@ private fun AppScreen(
                 onPickSite = { screen = Screen.SITES },
                 onDownload = ::startDownload,
                 onRequestNotifications = ::requestNotifications,
-                onOpenLocalFile = { path ->
+                onOpenLocalFile = { id, path ->
                     val file = java.io.File(path)
-                    // An archive opens here, the same as one tapped on a
-                    // server: the in-app list, not another app. A plain tap
-                    // means "let me see inside"; the overflow's "open with"
-                    // below is how the file still reaches ZArchiver.
-                    val archive = Archives.kindOf(file)
+                    // Only the three extensions this app browses open here,
+                    // and only if the bytes agree. An apk, a docx, a jar are
+                    // all zip underneath, so a magic-byte check would open
+                    // them in an archive list rather than in the app that
+                    // reads them -- the apk that opened as an archive. A
+                    // plain tap means "let me see inside"; the overflow's
+                    // "open with" still hands the file to another app.
                     when {
-                        archive != null -> model.openArchive(file, model.unpackInto(file))
+                        ArchiveNav.browsable(file.name) && Archives.kindOf(file) != null ->
+                            model.openArchive(id, file, file.parent ?: model.pane(id).path)
                         InstallApk.isPackage(file.name) && !InstallApk.allowed(context) ->
                             installBlockedFor = file
                         else -> {
@@ -764,51 +768,35 @@ private fun AppScreen(
     LaunchedEffect(ready, model.warnReadOnly) {
         if (ready != null && !model.warnReadOnly) {
             model.openedReady()
-            // An archive is opened here rather than handed to another app.
-            // Nothing else on a phone reads alz or egg, and for a zip the
-            // chooser offers whatever will take it -- which is how tapping
-            // an archive used to end in a photo viewer.
-            val kind = withContext(Dispatchers.IO) { Archives.kindOf(ready) }
-            if (kind != null) {
-                model.openArchive(ready, model.unpackInto(ready))
-            } else if (InstallApk.isPackage(ready.name) && !InstallApk.allowed(context)) {
-                installBlockedFor = ready
-            } else {
-                askWhichApp = false
-                openingFile = ready
+            // Archives -- on the phone or fetched from a server -- are opened
+            // in the pane before they ever reach here, so this is a file for
+            // another app: the installer for a package, the chooser or the
+            // remembered app for the rest. A nested archive extracted from
+            // inside one does come back through here, and opens in the pane.
+            when {
+                ArchiveNav.browsable(ready.name) && Archives.kindOf(ready) != null ->
+                    model.openArchive(model.activePane, ready, ready.parent ?: "")
+                InstallApk.isPackage(ready.name) && !InstallApk.allowed(context) ->
+                    installBlockedFor = ready
+                else -> {
+                    askWhichApp = false
+                    openingFile = ready
+                }
             }
         }
-    }
-
-    model.archive?.let { view ->
-        ArchiveScreen(
-            view = view,
-            busy = model.archiveBusy,
-            actions = ArchiveActions(
-                onEnter = model::archiveEnter,
-                onUp = model::archiveUp,
-                onToggle = model::archiveToggle,
-                onPickAll = model::archivePickAll,
-                onPickNone = model::archivePickNone,
-                onExtract = model::archiveExtract,
-                onClose = model::closeArchive,
-            ),
-        )
     }
 
     if (model.archivePasswordAsked) {
         ArchivePasswordDialog(
             wrong = model.archivePasswordWrong,
-            onSubmit = model::archiveExtractWith,
+            onSubmit = model::submitArchivePassword,
             onDismiss = model::dismissArchivePassword,
         )
     }
 
-    // A compress started from the pane has no archive screen behind it, so
-    // it needs somewhere of its own to show what it is doing.
-    if (model.archive == null) {
-        model.archiveBusy?.let { busy -> ArchiveWorkDialog(busy) }
-    }
+    // Extract, compress and opening one file from inside all show their
+    // progress the same way, as a small modal with a stop button.
+    model.archiveBusy?.let { busy -> ArchiveWorkDialog(busy) }
 
     // While an archive's index is being read. A large one on slow storage
     // takes a moment, and without this a tap on it shows nothing until it

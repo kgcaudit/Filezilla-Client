@@ -220,6 +220,11 @@ fun BrowseScreen(
                                 selecting = state.selecting,
                                 isLocal = state.isLocal,
                                 folder = state.path,
+                                // Inside an archive the rows are read only: no
+                                // count from the phone (the path is inside the
+                                // archive, not on disk), no rename or delete,
+                                // no server fetch. A tap opens; that is all.
+                                readOnly = state.archive != null,
                                 actions = actions,
                                 onRename = { renaming = entry },
                                 onDelete = { deleting = entry },
@@ -347,6 +352,8 @@ private fun EntryRow(
     isLocal: Boolean,
     /** The folder this row is in, so a folder row can count what it holds. */
     folder: String,
+    /** True inside an archive: no count, no edit menu, no fetch button. */
+    readOnly: Boolean,
     actions: EntryActions,
     onRename: () -> Unit,
     onDelete: () -> Unit,
@@ -419,7 +426,7 @@ private fun EntryRow(
             //
             // The phone only. On a server this is a round trip per row --
             // see FolderCount.
-            val counted = if (isLocal && entry.isDirectory && !entry.isLink) {
+            val counted = if (isLocal && entry.isDirectory && !entry.isLink && !readOnly) {
                 produceState<Int?>(initialValue = null, entry.name, folder) {
                     value = withContext(Dispatchers.IO) {
                         FolderCount.of(FilePath.child(folder, entry.name))
@@ -449,7 +456,7 @@ private fun EntryRow(
                 )
             }
         }
-        if (!selecting) {
+        if (!selecting && !readOnly) {
             if (showsFetchButton(isLocal = isLocal, isDirectory = entry.isDirectory)) {
                 IconButton(onClick = { actions.onDownload(entry) }) {
                     Icon(

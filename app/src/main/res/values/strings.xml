@@ -381,13 +381,6 @@
     <string name="work_folders_read">%1$d folders so far</string>
     <string name="work_delete_stopped">Stopped after deleting %1$d of %2$d</string>
     <string name="work_scan_stopped">Stopped; nothing was queued</string>
-    <string name="archive_up">Up a folder</string>
-    <string name="archive_items">%1$d files</string>
-    <string name="archive_locked">Needs a password</string>
-    <string name="archive_unreadable">This app cannot unpack it</string>
-    <string name="archive_picked">%1$d chosen, %2$s</string>
-    <string name="archive_pick_all">Choose all</string>
-    <string name="archive_pick_none">Clear</string>
     <string name="archive_extract_all">Unpack all</string>
     <string name="archive_extract_picked">Unpack chosen</string>
     <string name="archive_extracting">Unpacking</string>
@@ -399,7 +392,6 @@
     <string name="archive_password_detail">Some files in this archive are locked. Without the password they are left out.</string>
     <string name="archive_password_wrong">That password does not open it.</string>
     <string name="archive_not_readable">This file is not an archive this app reads.</string>
-    <string name="archive_empty">There is nothing in this archive.</string>
     <string name="archive_compress">Compress</string>
     <string name="archive_compressing">Compressing</string>
     <string name="archive_compressed">Made %1$s from %2$d files</string>
