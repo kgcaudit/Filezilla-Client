@@ -28,10 +28,13 @@ class TransferNotificationsTest {
         notifications = TransferNotifications(ApplicationProvider.getApplicationContext())
     }
 
-    private fun progress(speed: Long? = 6_500_000) = ActiveProgress(
+    private fun progress(
+        speed: Long? = 6_500_000,
+        direction: TransferDirection = TransferDirection.DOWNLOAD,
+    ) = ActiveProgress(
         id = "one",
         remotePath = "/HDD1/One.Night.Only.mkv",
-        direction = TransferDirection.DOWNLOAD,
+        direction = direction,
         bytes = 102_100_000,
         totalBytes = 2_000_000_000,
         bytesPerSecond = speed,
@@ -43,6 +46,17 @@ class TransferNotificationsTest {
 
     private fun Notification.subText(): String =
         extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString().orEmpty()
+
+    @Test
+    fun `the arrow points the way the bytes are going`() {
+        // The reported bug: an upload showed the download arrow, so a file
+        // going up the tray had an arrow pointing down at it. The small
+        // icon has to follow the transfer's own direction.
+        val up = notifications.build(progress(direction = TransferDirection.UPLOAD), queued = 0)
+        val down = notifications.build(progress(direction = TransferDirection.DOWNLOAD), queued = 0)
+        assertEquals(android.R.drawable.stat_sys_upload, up.smallIcon.resId)
+        assertEquals(android.R.drawable.stat_sys_download, down.smallIcon.resId)
+    }
 
     @Test
     fun `the speed is on the line the user reads`() {

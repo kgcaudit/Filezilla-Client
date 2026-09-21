@@ -9,6 +9,7 @@ import android.content.Intent
 import androidx.core.app.NotificationCompat
 import org.filezilla.android.R
 import org.filezilla.android.transfer.ActiveProgress
+import org.filezilla.ftp.journal.TransferDirection
 import org.filezilla.android.ui.OpenAt
 import org.filezilla.android.ui.Screen
 import org.filezilla.android.ui.formatSize
@@ -96,7 +97,18 @@ class TransferNotifications(private val context: Context) {
         )
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_download)
+            // The arrow follows the transfer's direction. It was fixed on
+            // download, so sending a file up the tray showed an arrow
+            // pointing down at it -- the opposite of what was happening.
+            // While the queue is still being prepared there is no direction
+            // yet, and download is the older default.
+            .setSmallIcon(
+                if (progress?.direction == TransferDirection.UPLOAD) {
+                    android.R.drawable.stat_sys_upload
+                } else {
+                    android.R.drawable.stat_sys_download
+                },
+            )
             .setContentTitle(
                 progress?.remotePath?.substringAfterLast('/')
                     ?: context.getString(
