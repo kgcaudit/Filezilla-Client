@@ -30,6 +30,23 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!--
+        What this app is allowed to see of the other apps on the phone.
+
+        Since Android 11 an app cannot list who can open a file without
+        saying so here. Without it, asking the package manager which apps
+        handle a video comes back empty, and a file manager that cannot
+        name a single app to open a file with is not much of one. The
+        declaration is the narrowest that answers the question: apps that
+        can view something, and nothing else about the phone.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="*/*" />
+        </intent>
+    </queries>
+
     <application
         android:name=".FileZillaApp"
         android:allowBackup="false"

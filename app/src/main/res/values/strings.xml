@@ -298,4 +298,14 @@
     <string name="sort_descending_short">↓ Descending</string>
     <string name="option_only_here">This folder only</string>
     <string name="option_only_here_detail">Keeps these settings for this folder. Every other folder goes on using the shared ones.</string>
+
+    <!-- Choosing, and remembering, which app opens a kind of file. -->
+    <string name="open_with_title">Open with</string>
+    <string name="open_always">Always open .%1$s this way</string>
+    <string name="open_system_chooser">Find another app…</string>
+    <string name="open_none_detail">No app on this phone offers to open this kind of file. Try the system chooser.</string>
+    <string name="associations_title">Default apps</string>
+    <string name="associations_empty">No file type has been given an app yet. Tap a file and choose one.</string>
+    <string name="associations_forget">Clear</string>
+    <string name="menu_associations">Default apps</string>
 </resources>

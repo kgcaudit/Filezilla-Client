@@ -55,7 +55,7 @@ class DialogShellTest {
 
         assertEquals(
             listOf("BrowseMenus.kt", "BrowseScreen.kt", "ConflictDialog.kt",
-                   "FilePanes.kt", "MainActivity.kt", "SiteEditor.kt"),
+                   "FilePanes.kt", "MainActivity.kt", "OpenWith.kt", "SiteEditor.kt"),
             users,
         )
     }

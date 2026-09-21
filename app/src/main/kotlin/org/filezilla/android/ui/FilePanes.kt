@@ -47,7 +47,6 @@ import org.filezilla.android.files.FilePath
 @Composable
 fun FilePanes(
     model: MainViewModel,
-    options: BrowseOptions,
     onOpenLog: () -> Unit,
     onGrant: () -> Unit,
     onPickSite: () -> Unit,
@@ -138,8 +137,7 @@ fun FilePanes(
                             PaneBody(
                                 id = id,
                                 model = model,
-                                options = options,
-                                                    onOpenLog = onOpenLog,
+                                onOpenLog = onOpenLog,
                                 onGrant = onGrant,
                                 onPickSite = onPickSite,
                                 onDownload = onDownload,
@@ -157,7 +155,6 @@ fun FilePanes(
                     PaneBody(
                         id = id,
                         model = model,
-                        options = options,
                                     onOpenLog = onOpenLog,
                         onGrant = onGrant,
                         onPickSite = onPickSite,
@@ -387,7 +384,6 @@ private fun paneLabel(model: MainViewModel, id: PaneId): String {
 private fun PaneBody(
     id: PaneId,
     model: MainViewModel,
-    options: BrowseOptions,
     onOpenLog: () -> Unit,
     onGrant: () -> Unit,
     onPickSite: () -> Unit,
@@ -398,6 +394,16 @@ private fun PaneBody(
     onOpenScreen: (Screen) -> Unit,
 ) {
     val state = model.pane(id)
+
+    // Asked for once and used for all three of the header, the listing and
+    // the options dialog. It used to be a parameter as well, handed down
+    // from the screen above -- and when folders were given settings of
+    // their own, the header and the dialog were moved onto this and the
+    // listing was not. So the dialog showed the folder's own sort and the
+    // rows underneath stayed in the shared one, which is precisely what the
+    // user reported. There is nowhere for that to hide now: the parameter
+    // is gone, so a second source of settings would not compile.
+    val options = model.optionsFor(id)
 
     // Sorting and filtering the listing is the one piece of real work this
     // composable does, and a folder can hold thousands of rows. Keyed on
@@ -414,7 +420,7 @@ private fun PaneBody(
             model = model,
             // This pane's settings, which are the shared ones unless the
             // folder it is in has been given some of its own.
-            options = model.optionsFor(id),
+            options = options,
             onNewDirectory = onNewDirectory,
             onUpload = onUpload,
             onGrant = onGrant,
@@ -439,7 +445,7 @@ private fun PaneBody(
             else -> BrowseScreen(
                 state = state,
                 rows = rows,
-                options = model.optionsFor(id),
+                options = options,
                 onRefresh = { model.open(id) },
                 onOpenLog = onOpenLog,
                 onFilterChange = model::setFilter,

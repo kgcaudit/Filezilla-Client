@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.AppShortcut
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Description
@@ -63,6 +64,7 @@ fun BrowseOverflow(
     onSelectAll: () -> Unit,
     onToggleFilter: () -> Unit,
     onViewOptions: () -> Unit,
+    onAssociations: () -> Unit,
     onRefresh: () -> Unit,
     /** Null on a pane showing the phone, which makes folders with its own button. */
     onNewDirectory: (() -> Unit)? = null,
@@ -123,6 +125,15 @@ fun BrowseOverflow(
             Item(R.string.menu_view_options, Icons.Filled.Tune) {
                 open = false
                 onViewOptions()
+            }
+            // Where a remembered "always open .srt this way" is taken back.
+            // Here because this is the menu about files rather than about
+            // transfers, and because a choice that cannot be unmade is a
+            // trap: the wrong app picked once for a kind of file opened
+            // daily would be wrong for ever with nothing admitting it.
+            Item(R.string.menu_associations, Icons.Filled.AppShortcut) {
+                open = false
+                onAssociations()
             }
             HorizontalDivider()
             Item(R.string.browse_refresh, Icons.Filled.Refresh) {

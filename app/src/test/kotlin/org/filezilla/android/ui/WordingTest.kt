@@ -115,6 +115,10 @@ class WordingTest {
             // The share button's name and the title of the sheet it opens:
             // the sheet answers the button, same as queue_settings below.
             "action_share_selected",
+            // Our own "open with" sheet, and the system chooser it hands
+            // off to: the same question asked by two pieces of machinery,
+            // and it must read as one question.
+            "open_with_title",
             // The mark on whatever option is in force, read out wherever one
             // is shown -- a chip in view options, a row in a picker's list.
             // One word, one meaning, and it has to be the same word or the

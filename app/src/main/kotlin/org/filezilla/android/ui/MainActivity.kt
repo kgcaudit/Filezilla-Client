@@ -48,6 +48,7 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import org.filezilla.android.R
+import org.filezilla.android.files.FileAssociations
 import org.filezilla.android.files.OpenFile
 import org.filezilla.android.files.ShareFiles
 import org.filezilla.android.service.TransferService
@@ -112,6 +113,9 @@ private fun AppScreen(
         }
     }
     var queueMenuOpen by remember { mutableStateOf(false) }
+    // The file waiting on a decision about which app opens it.
+    var openingFile by remember { mutableStateOf<java.io.File?>(null) }
+    val associations = remember(context) { FileAssociations(context) }
     var editingSite by remember { mutableStateOf<SiteDraft?>(null) }
     var creatingDirectory by remember { mutableStateOf(false) }
 
@@ -439,7 +443,6 @@ private fun AppScreen(
             // for the Scaffold to inset it from.
             Screen.FILES -> FilePanes(
                 model = model,
-                options = model.options,
                 onNewDirectory = { creatingDirectory = true },
                 onUpload = {
                     requestNotifications()
@@ -451,17 +454,7 @@ private fun AppScreen(
                 onPickSite = { screen = Screen.SITES },
                 onDownload = ::startDownload,
                 onRequestNotifications = ::requestNotifications,
-                onOpenLocalFile = { path ->
-                    val intent = OpenFile.intentFor(context, java.io.File(path))
-                    val opened = intent != null && runCatching { context.startActivity(intent) }
-                        .isSuccess
-                    // Said rather than swallowed: a phone with nothing that
-                    // opens a .srt is a fair state, and silence from a tap
-                    // looks like the app ignoring it.
-                    if (!opened) {
-                        scope.launch { snackbars.showSnackbar(context.getString(R.string.open_no_app)) }
-                    }
-                },
+                onOpenLocalFile = { path -> openingFile = java.io.File(path) },
                 onShareLocal = { paths ->
                     val intent = ShareFiles.intentFor(context, paths.map { java.io.File(it) })
                     val chooser = intent?.let {
@@ -529,6 +522,68 @@ private fun AppScreen(
         )
     }
 
+
+    openingFile?.let { file ->
+        // The remembered choice first, and straight there: somebody who has
+        // said "always open .srt this way" has asked not to be asked.
+        val remembered = associations.appForFile(file.name)
+        val wentStraight = remembered != null && runCatching {
+            context.startActivity(OpenFile.intentFor(context, file, app = remembered))
+        }.isSuccess
+        if (wentStraight) {
+            openingFile = null
+        } else {
+            // A remembered app that will not start is one that has been
+            // uninstalled or renamed. Forgotten, so the user is asked again
+            // rather than left with a tap that does nothing for ever.
+            if (remembered != null) {
+                FileAssociations.extensionOf(file.name)?.let(associations::forget)
+            }
+            val candidates = remember(file) { OpenFile.candidatesFor(context, file) }
+            OpenWithSheet(
+                fileName = file.name,
+                candidates = candidates,
+                onPick = { candidate, keep ->
+                    if (keep) {
+                        FileAssociations.extensionOf(file.name)?.let { extension ->
+                            associations.remember(extension, candidate.component)
+                        }
+                    }
+                    val intent = OpenFile.intentFor(
+                        context,
+                        file,
+                        type = candidate.type,
+                        app = candidate.component,
+                    )
+                    val opened = intent != null &&
+                        runCatching { context.startActivity(intent) }.isSuccess
+                    if (!opened) {
+                        scope.launch {
+                            snackbars.showSnackbar(context.getString(R.string.open_no_app))
+                        }
+                    }
+                    openingFile = null
+                },
+                onSystemChooser = {
+                    // The widest possible ask, through the system's own
+                    // chooser: the last resort for a file nothing declared.
+                    val intent = OpenFile.intentFor(context, file, type = OpenFile.FALLBACK)
+                    val chooser = intent?.let {
+                        Intent.createChooser(it, context.getString(R.string.open_with_title))
+                    }
+                    val opened = chooser != null &&
+                        runCatching { context.startActivity(chooser) }.isSuccess
+                    if (!opened) {
+                        scope.launch {
+                            snackbars.showSnackbar(context.getString(R.string.open_no_app))
+                        }
+                    }
+                    openingFile = null
+                },
+                onDismiss = { openingFile = null },
+            )
+        }
+    }
 
     if (queueMenuOpen) {
         QueueSettingsSheet(

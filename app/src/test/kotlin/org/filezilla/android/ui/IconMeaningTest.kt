@@ -110,6 +110,8 @@ class IconMeaningTest {
         "CheckCircle" to setOf("menu_select"),
         "DoneAll" to setOf("menu_select_all"),
         "Tune" to setOf("menu_view_options"),
+        // Which app opens which kind of file.
+        "AppShortcut" to setOf("menu_associations"),
         "Share" to setOf("action_share_selected"),
         "Download" to setOf("action_download_selected"),
         "Search" to setOf("menu_filter"),

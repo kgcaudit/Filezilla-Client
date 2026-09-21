@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.filezilla.android.R
+import org.filezilla.android.files.FileAssociations
 
 /**
  * The chrome above one pane: what it is, where it is, and the way out of both.
@@ -58,6 +59,8 @@ fun PaneHeader(
     val state = model.pane(id)
     var storageOpen by remember { mutableStateOf(false) }
     var viewOptionsOpen by remember { mutableStateOf(false) }
+    var associationsOpen by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     /**
      * Every control here acts on the active pane, so pressing one has to make
@@ -147,6 +150,7 @@ fun PaneHeader(
                     onSelectAll = here(model::selectAll),
                     onToggleFilter = here(model::toggleFilter),
                     onViewOptions = here { viewOptionsOpen = true },
+                    onAssociations = here { associationsOpen = true },
                     onRefresh = here { model.open(id) },
                     // Making a folder and sending a file up belong to the
                     // server pane alone: on the phone the round button
@@ -165,6 +169,23 @@ fun PaneHeader(
             onGrant = onGrant,
             onOpenScreen = onOpenScreen,
             onDismiss = { storageOpen = false },
+        )
+    }
+
+    if (associationsOpen) {
+        val associations = remember { FileAssociations(context) }
+        // Read when the dialog opens and again after each removal, so a row
+        // taken away actually leaves the list.
+        var shown by remember { mutableStateOf(associations.all()) }
+        FileAssociationsDialog(
+            associations = shown.map { (extension, component) ->
+                extension to labelFor(context, component)
+            },
+            onForget = { extension ->
+                associations.forget(extension)
+                shown = associations.all()
+            },
+            onDismiss = { associationsOpen = false },
         )
     }
 
@@ -281,3 +302,21 @@ fun CapacityBar(usedFraction: Float, modifier: Modifier = Modifier) {
         )
     }
 }
+
+
+/**
+ * The name a component's app goes by on the home screen.
+ *
+ * Read from the package manager rather than shown as a package name: the
+ * user chose "MX Player", and telling them afterwards that .mkv is set to
+ * `com.mxtech.videoplayer.ad` is answering a different question. An app
+ * that has been uninstalled since has no label, and its package name is
+ * then the most honest thing left to show.
+ */
+private fun labelFor(context: android.content.Context, component: android.content.ComponentName): String =
+    runCatching {
+        val manager = context.packageManager
+        manager.getApplicationLabel(
+            manager.getApplicationInfo(component.packageName, 0),
+        ).toString()
+    }.getOrDefault(component.packageName)

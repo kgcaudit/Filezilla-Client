@@ -291,4 +291,13 @@
     <string name="sort_descending_short">↓ 내림차순</string>
     <string name="option_only_here">이 폴더만</string>
     <string name="option_only_here_detail">이 폴더에만 위 설정을 씁니다. 나머지 폴더는 공용 설정을 그대로 씁니다.</string>
+
+    <string name="open_with_title">연결 프로그램</string>
+    <string name="open_always">.%1$s 파일은 항상 이 앱으로 열기</string>
+    <string name="open_system_chooser">다른 앱 찾기…</string>
+    <string name="open_none_detail">이 형식을 열겠다는 앱이 이 기기에 없습니다. 시스템 선택기를 써 보세요.</string>
+    <string name="associations_title">기본 연결 프로그램</string>
+    <string name="associations_empty">아직 앱을 지정한 형식이 없습니다. 파일을 눌러 선택하세요.</string>
+    <string name="associations_forget">해제</string>
+    <string name="menu_associations">연결 프로그램</string>
 </resources>

@@ -727,7 +727,6 @@ class LayoutShotTest {
         shoot("two-panes", width = 2100, height = 1400) {
             FilePanes(
                 model = model,
-                options = model.options,
                 onOpenLog = {},
                 onGrant = {},
                 onPickSite = {},
