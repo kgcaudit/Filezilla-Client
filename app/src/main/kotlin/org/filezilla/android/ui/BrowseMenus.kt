@@ -342,6 +342,13 @@ fun PropertiesDialog(entry: DirectoryEntry, path: String, onDismiss: () -> Unit)
                 if (!entry.isDirectory) {
                     Field(R.string.props_size, formatSize(entry.size).ifBlank { unknown })
                 }
+                // The listing carries this and the dialog was throwing it
+                // away: a row said "link" and then would not say a link to
+                // what, which is the only thing anybody opens this to find
+                // out about one.
+                entry.linkTarget?.takeIf { it.isNotBlank() }?.let {
+                    Field(R.string.props_link_target, it)
+                }
                 Field(R.string.props_modified, formatEntryTime(entry).ifBlank { unknown })
 
                 // Who may do what with it, which is a different question

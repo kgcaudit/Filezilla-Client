@@ -20,6 +20,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.filezilla.android.AppGraph
 import org.filezilla.android.data.SiteEntity
+import org.filezilla.android.files.FileMode
 import org.filezilla.ftp.net.CertificateNotTrusted
 import org.filezilla.android.files.AccessRoute
 import org.filezilla.android.files.FilePath
@@ -1176,6 +1177,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             mutate(id) { it.rename(entry.name, newName) }
         }
+    }
+
+    /**
+     * The row whose permissions are being changed, if any.
+     *
+     * Only ever a row on a server. The phone's files are reached through
+     * the storage framework, which hands out documents rather than a
+     * filesystem and has no permission bits to set -- so this is offered
+     * where it means something and absent where it does not, rather than
+     * offered everywhere and refused.
+     */
+    var changingMode by mutableStateOf<Pair<PaneId, DirectoryEntry>?>(null)
+        private set
+
+    fun changeModeOf(id: PaneId, entry: DirectoryEntry) {
+        if (!pane(id).isLocal) changingMode = id to entry
+    }
+
+    fun dismissChangeMode() {
+        changingMode = null
+    }
+
+    /**
+     * Sets [entry]'s permissions to [mode], keeping any bit this cannot edit.
+     *
+     * [extra] is the setuid/setgid/sticky digit the server reported. It is
+     * sent back unchanged: `SITE CHMOD 777` on a sticky shared folder
+     * clears the bit that keeps people from deleting each other's files,
+     * and nobody editing "who may read this" is asking for that.
+     */
+    fun applyMode(id: PaneId, entry: DirectoryEntry, mode: FileMode, extra: String?) {
+        changingMode = null
+        mutate(id) { it.changeMode(entry.name, extra.orEmpty() + mode.toString()) }
     }
 
     /** Makes a folder in [id]'s current directory, wherever that is. */

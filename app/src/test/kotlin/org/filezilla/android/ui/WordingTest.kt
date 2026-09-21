@@ -120,6 +120,10 @@ class WordingTest {
             // The share button's name and the title of the sheet it opens:
             // the sheet answers the button, same as queue_settings below.
             "action_share_selected",
+            // Same again: the menu item and the title of the dialog it
+            // opens. A menu that says one thing and a dialog that says
+            // another reads as two features.
+            "action_change_mode",
             // Our own "open with" sheet, and the system chooser it hands
             // off to: the same question asked by two pieces of machinery,
             // and it must read as one question.

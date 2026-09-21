@@ -187,6 +187,33 @@ class FtpControlConnection(
             charset = StandardCharsets.UTF_8
             rebindStreams()
         }
+
+        askForTheFactsWeShow()
+    }
+
+    /**
+     * Turns on the `MLSD` facts the app displays but the server does not
+     * send by default.
+     *
+     * Permissions and owner are the ones that matter: both were shown as
+     * unknown on servers that had them, because `MLSD` sends a default set
+     * and nothing had ever asked for more. See [MlstFacts].
+     *
+     * A refusal is not a failure. The listing still arrives with whatever
+     * the server was already sending, which is what it sent before this
+     * existed -- so the capability is recorded and nothing else happens.
+     */
+    private fun askForTheFactsWeShow() {
+        val mlsd = capabilities.getValue(settings.serverKey, CapabilityName.MLSD_COMMAND)
+        if (mlsd.capability != Capability.YES) return
+        val asking = MlstFacts.optsArgumentFor(mlsd.textOption) ?: return
+
+        val reply = send("OPTS MLST $asking")
+        capabilities.set(
+            settings.serverKey,
+            CapabilityName.OPTS_MLST_COMMAND,
+            if (reply.isSuccess) Capability.YES else Capability.NO,
+        )
     }
 
     private fun queryFeatures() {

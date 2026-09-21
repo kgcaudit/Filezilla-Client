@@ -492,6 +492,7 @@ private fun PaneBody(
                     onOpenWith = { entry ->
                         onOpenLocalFileWith(FilePath.child(model.pane(id).path, entry.name))
                     },
+                    onChangeMode = { model.changeModeOf(id, it) },
                 ),
             )
         }

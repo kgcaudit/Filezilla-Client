@@ -705,6 +705,14 @@ private fun AppScreen(
         )
     }
 
+    model.changingMode?.let { (pane, entry) ->
+        PermissionsDialog(
+            entry = entry,
+            onApply = { mode, extra -> model.applyMode(pane, entry, mode, extra) },
+            onDismiss = model::dismissChangeMode,
+        )
+    }
+
     // A paste inside the phone asks the same question, for the same reason.
     // It did not: the file operations refuse to write over anything, so a
     // paste onto a name already there failed outright and the pane came back

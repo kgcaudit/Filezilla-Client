@@ -354,4 +354,16 @@
     <string name="fail_certificate">The server\'s certificate could not be verified.</string>
     <string name="cert_changed_short">The server\'s certificate has changed</string>
     <string name="fail_certificate_advice">Tap the server again to see the certificate and decide whether it is the right one.</string>
+    <string name="action_change_mode">Change permissions</string>
+    <string name="action_apply">Apply</string>
+    <string name="mode_owner">Owner</string>
+    <string name="mode_group">Group</string>
+    <string name="mode_everyone">Everyone</string>
+    <string name="mode_read">Read</string>
+    <string name="mode_write">Write</string>
+    <string name="mode_execute">Run</string>
+    <string name="mode_result">%1$s  ·  %2$s</string>
+    <string name="mode_unknown">The server did not say what the permissions are, so these start from what a new one would get.</string>
+    <string name="mode_special_kept">A special bit (%1$s) is set on this one. It is kept as it is; it cannot be changed here.</string>
+    <string name="props_link_target">Points to</string>
 </resources>

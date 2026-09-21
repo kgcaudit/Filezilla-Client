@@ -51,6 +51,13 @@ class FtpSession(
     fun rename(from: String, to: String) = writing { operations.rename(from, to) }
 
     /**
+     * `SITE CHMOD`, which most Unix servers accept even though no standard
+     * requires it. A server that does not answers with an error, which is
+     * the honest outcome -- there is nothing to fall back to.
+     */
+    fun changeMode(path: String, mode: String) = writing { operations.changeMode(path, mode) }
+
+    /**
      * How many times this session has been asked to change the server.
      *
      * [RemoteListings] holds what the server last said about a folder, and

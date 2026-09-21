@@ -76,6 +76,14 @@ class EntryActions(
      * round for "not that one, the other one".
      */
     val onOpenWith: (DirectoryEntry) -> Unit = {},
+    /**
+     * Changes a row's permissions, which only a server has.
+     *
+     * The phone's files are reached through the storage framework, which
+     * hands out documents rather than a filesystem: there are no bits to
+     * set, so the item is absent rather than present and refused.
+     */
+    val onChangeMode: (DirectoryEntry) -> Unit = {},
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -491,6 +499,19 @@ private fun EntryRow(
                             onRename()
                         },
                     )
+                    // Next to properties on purpose: the permissions are
+                    // what properties is usually opened to read, and being
+                    // able to read them and not change them is how somebody
+                    // ends up at a computer to fix a transfer that failed.
+                    if (!isLocal) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_change_mode)) },
+                            onClick = {
+                                menuOpen = false
+                                actions.onChangeMode(entry)
+                            },
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.action_delete)) },
                         onClick = {

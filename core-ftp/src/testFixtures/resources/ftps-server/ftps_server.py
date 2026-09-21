@@ -19,6 +19,7 @@ Env:
   STALL_TIMES         how many may stall      (default 0, all of them)
   FTPS_ENCODING       wire encoding for paths (default utf8)
   CWD_ECHOES_PATH     1 = name the path in the CWD reply (default 1)
+  MLSD_FULL_MODE      1 = unix.mode carries setuid/sticky   (default 1)
 """
 
 import os
@@ -81,6 +82,12 @@ ENCODING = os.environ.get("FTPS_ENCODING", "utf8")
 # only "Directory successfully changed", and a client that assumed otherwise
 # would be building its next path on nothing.
 CWD_ECHOES_PATH = os.environ.get("CWD_ECHOES_PATH", "1") == "1"
+
+# Whether unix.mode carries the setuid/setgid/sticky digit. pyftpdlib masks
+# the mode with 0o777 and so never reports one, which no real server does --
+# vsftpd, ProFTPD and every NAS send the whole thing. A client that only ever
+# sees three digits cannot be shown to preserve a fourth.
+MLSD_FULL_MODE = os.environ.get("MLSD_FULL_MODE", "1") == "1"
 
 _drops_remaining = DROP_TIMES
 _stalls_remaining = STALL_TIMES
@@ -215,6 +222,45 @@ class ReuseCheckingDTPHandler(TLS_DTPHandler):
             self.close()
 
 
+if MLSD_FULL_MODE:
+    from pyftpdlib.filesystems import AbstractedFS
+
+    _mlsx_without_special_bits = AbstractedFS.format_mlsx
+
+    def _mlsx_with_special_bits(self, basedir, listing, perms, facts, ignore_err=True):
+        """Puts the setuid/setgid/sticky digit back into unix.mode.
+
+        pyftpdlib formats the fact as st_mode & 0o777. Rather than copy its
+        whole line builder to change three characters, each line is fixed up
+        on the way out: the name is the last field, so the file it describes
+        can be stat'd again and the real mode substituted.
+
+        The lines are bytes, because they go straight onto the data channel.
+        """
+        marker = b"unix.mode="
+        for line in _mlsx_without_special_bits(
+            self, basedir, listing, perms, facts, ignore_err
+        ):
+            at = line.find(marker)
+            if at == -1:
+                yield line
+                continue
+            name = line.split(b"; ", 1)[-1].rstrip(b"\r\n")
+            try:
+                path = os.path.join(
+                    basedir if isinstance(basedir, bytes) else basedir.encode(ENCODING),
+                    name,
+                )
+                mode = os.lstat(path).st_mode & 0o7777
+            except OSError:
+                yield line
+                continue
+            end = line.index(b";", at)
+            yield line[:at] + marker + (b"%04o" % mode) + line[end:]
+
+    AbstractedFS.format_mlsx = _mlsx_with_special_bits
+
+
 class Handler(TLS_FTPHandler):
     dtp_handler = ReuseCheckingDTPHandler
     # Applied to every path on the control channel, in both directions.
@@ -319,6 +365,7 @@ def main():
         f"ignore_rest={IGNORE_REST} drop_after={DROP_AFTER_BYTES}x{DROP_TIMES} "
         f"stall_after={STALL_AFTER_BYTES}x{STALL_TIMES} "
         f"encoding={ENCODING} cwd_echoes={CWD_ECHOES_PATH} "
+        f"mlsd_full_mode={MLSD_FULL_MODE} "
         f"throttle={THROTTLE_BYTES} "
         f"root={ROOT}"
     )
