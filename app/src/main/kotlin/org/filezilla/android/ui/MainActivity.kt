@@ -469,11 +469,19 @@ private fun AppScreen(
                 onRequestNotifications = ::requestNotifications,
                 onOpenLocalFile = { path ->
                     val file = java.io.File(path)
-                    if (InstallApk.isPackage(file.name) && !InstallApk.allowed(context)) {
-                        installBlockedFor = file
-                    } else {
-                        askWhichApp = false
-                        openingFile = file
+                    // An archive opens here, the same as one tapped on a
+                    // server: the in-app list, not another app. A plain tap
+                    // means "let me see inside"; the overflow's "open with"
+                    // below is how the file still reaches ZArchiver.
+                    val archive = Archives.kindOf(file)
+                    when {
+                        archive != null -> model.openArchive(file, model.unpackInto(file))
+                        InstallApk.isPackage(file.name) && !InstallApk.allowed(context) ->
+                            installBlockedFor = file
+                        else -> {
+                            askWhichApp = false
+                            openingFile = file
+                        }
                     }
                 },
                 onOpenLocalFileWith = { path ->
