@@ -47,13 +47,21 @@ abstract class AppAgainstAServer {
     /** Where the server keeps what it was sent. */
     protected val onServer: File get() = server.root
 
+    /**
+     * What the server encodes filenames as, for the subclasses that care.
+     *
+     * Overridden rather than passed, because the server is started in
+     * [startServerAndApp] before any test method runs.
+     */
+    protected open val serverEncoding: String get() = "utf8"
+
     @Before
     fun startServerAndApp() {
         assumeTrue(
             "FTPS test server not set up; run core-ftp/src/testFixtures/resources/ftps-server/setup.sh",
             FtpsTestServer.isAvailable,
         )
-        server = FtpsTestServer()
+        server = FtpsTestServer(encoding = serverEncoding)
         server.start()
 
         // Before the graph is built, since it reads the cipher once.
@@ -93,7 +101,7 @@ abstract class AppAgainstAServer {
     }
 
     /** The test server, saved into the app's own database. */
-    protected fun savedSite(): SiteEntity {
+    protected fun savedSite(encoding: String? = null): SiteEntity {
         val graph = AppGraph.of(application)
         val entity = SiteEntity(
             id = "test-server",
@@ -106,6 +114,7 @@ abstract class AppAgainstAServer {
             transferMode = TransferMode.DEFAULT.name,
             trustAllCertificates = true,
             initialPath = null,
+            encoding = encoding,
         )
         kotlinx.coroutines.runBlocking { graph.database.sites().upsert(entity) }
         return entity

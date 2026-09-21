@@ -64,6 +64,15 @@ class FtpsTestServer(
      * the stall to work.
      */
     private val stallTimes: Int = 0,
+    /**
+     * What the server encodes filenames as on the control channel.
+     *
+     * A great many NAS boxes sold in Korea and Japan speak a legacy
+     * encoding rather than UTF-8, and leave `UTF8` out of `FEAT` to say so.
+     * That is the server the per-site encoding setting exists for, and
+     * nothing exercised it until this option did.
+     */
+    private val encoding: String = "utf8",
 ) {
     lateinit var root: File
         private set
@@ -101,6 +110,7 @@ class FtpsTestServer(
             put("THROTTLE_BYTES", throttleBytesPerSecond.toString())
             put("STALL_AFTER_BYTES", stallAfterBytes.toString())
             put("STALL_TIMES", stallTimes.toString())
+            put("FTPS_ENCODING", encoding)
         }
         builder.redirectErrorStream(false)
         val started = builder.start()

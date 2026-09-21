@@ -17,6 +17,7 @@ Env:
   TLS_MAX             "1.2" or "1.3"          (default 1.2)
   STALL_AFTER_BYTES   go silent after N bytes (default 0, never)
   STALL_TIMES         how many may stall      (default 0, all of them)
+  FTPS_ENCODING       wire encoding for paths (default utf8)
 """
 
 import os
@@ -66,6 +67,13 @@ STALL_AFTER_BYTES = int(os.environ.get("STALL_AFTER_BYTES", "0"))
 # the client to notice and reconnect needs the connection after the stall to
 # work, or it cannot tell a recovery from a second failure.
 STALL_TIMES = int(os.environ.get("STALL_TIMES", "0"))
+
+# What filenames are encoded as on the control channel. A great many NAS
+# boxes sold in Korea and Japan store and speak a legacy encoding rather than
+# UTF-8, and pyftpdlib leaves UTF8 out of FEAT when this is not utf8 -- which
+# is exactly the server the per-site encoding setting exists for. Nothing
+# tested it until this existed.
+ENCODING = os.environ.get("FTPS_ENCODING", "utf8")
 
 _drops_remaining = DROP_TIMES
 _stalls_remaining = STALL_TIMES
@@ -202,6 +210,12 @@ class ReuseCheckingDTPHandler(TLS_DTPHandler):
 
 class Handler(TLS_FTPHandler):
     dtp_handler = ReuseCheckingDTPHandler
+    # Applied to every path on the control channel, in both directions.
+    encoding = ENCODING
+    # Names that cannot be represented are an error rather than a silent
+    # substitution: a test that saw "???.mp3" and passed would be worse
+    # than one that failed.
+    unicode_errors = "strict"
 
     def ftp_FEAT(self, line):
         if not NO_REST_STREAM:
@@ -271,6 +285,7 @@ def main():
         f"require_ssl_reuse={REQUIRE_SSL_REUSE} tls_max={TLS_MAX} "
         f"ignore_rest={IGNORE_REST} drop_after={DROP_AFTER_BYTES}x{DROP_TIMES} "
         f"stall_after={STALL_AFTER_BYTES}x{STALL_TIMES} "
+        f"encoding={ENCODING} "
         f"throttle={THROTTLE_BYTES} "
         f"root={ROOT}"
     )
