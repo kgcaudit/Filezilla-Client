@@ -62,6 +62,47 @@ class EggArchiveTest {
     }
 
     @Test
+    fun `a real ALZip egg reads, posix header and all`() {
+        // Made by ALZip minutes before it was added here, and it turns out
+        // to carry the *posix* file information header -- mode, uid, gid,
+        // seconds since 1970 -- and no Windows one at all. unegg has no
+        // code for that header: its file-header loop has cases for the
+        // filename, the comment, the Windows information and the encrypt
+        // header, and everything else is ERROR_BAD_FORMAT, with the posix
+        // structure commented out in its own header file as "to be
+        // introduced after analysis". So ESTsoft's own extractor cannot
+        // read this file, and this app can only because the published
+        // specification describes the header that unegg does not.
+        EggArchive.open(fixture("alzip_plain.egg")).use { egg ->
+            val entry = egg.entries.single()
+            assertEquals("egg.txt", entry.path)
+            assertEquals(3L, entry.size)
+            assertFalse(entry.isDirectory)
+            assertFalse(entry.encrypted)
+            assertNull(entry.unreadable)
+            assertEquals("egg", contents(egg, "egg.txt"))
+            // 0x6AB125CC seconds, not FILETIME ticks: the posix header
+            // counts from 1970 and the windows one from 1601, and reading
+            // one as the other lands in the wrong millennium.
+            assertEquals(1789994444_000L, entry.modifiedMillis)
+        }
+    }
+
+    @Test
+    fun `a real ALZip egg with a korean folder keeps the name and grows the folder`() {
+        // The name is "느시/egg.txt" in UTF-8 with the code-page flag
+        // clear, and there is no folder entry: the folder exists only
+        // because a file's name mentions it.
+        EggArchive.open(fixture("alzip_korean.egg")).use { egg ->
+            assertEquals(listOf("느시/egg.txt"), egg.entries.map { it.path })
+            assertEquals("egg", contents(egg, "느시/egg.txt"))
+            val top = ArchiveBrowsing.rowsIn(egg.entries)
+            assertEquals(listOf("느시/"), top.map { it.path })
+            assertEquals(1, top.single().count)
+        }
+    }
+
+    @Test
     fun `a name with no code page is read as UTF-8`() {
         EggArchive.open(fixture("korean.egg")).use { egg ->
             assertEquals(listOf("한글이름.txt"), egg.entries.map { it.path })
