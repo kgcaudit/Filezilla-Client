@@ -120,16 +120,67 @@ class ArchiveWorkTest {
     }
 
     @Test
-    fun `a stopped extract stops between entries`() {
+    fun `a stopped extract keeps the files already finished`() {
         val into = temporary.newFolder("out")
         Archives.open(fixture("plain.egg")).use { archive ->
-            // Called off before the second entry, not before the first,
-            // so this is a stop part way rather than a stop before the
-            // start -- which is the case that has to leave one file.
-            var asked = 0
-            val result = ArchiveExtract.run(archive, into, cancelled = { asked++ >= 1 })
+            // Stop once the second file has been opened -- so the first is
+            // finished and kept, and the one caught mid-write is deleted
+            // rather than left half-formed.
+            val second = File(into, "stored.txt")
+            val result = ArchiveExtract.run(archive, into, cancelled = { second.exists() })
             assertTrue(result.cancelled)
-            assertEquals(1, result.written.size)
+            assertEquals(listOf("hello.txt"), result.written.map { it.name })
+            assertFalse("a half-written file was left behind", second.exists())
+        }
+    }
+
+    @Test
+    fun `progress is bytes, so one big file still moves the bar`() {
+        // The freeze this fixes: progress used to be a file count, so an
+        // archive of one large file sat at "0 of 1" for as long as it took
+        // to write, looking dead. Bytes climb as it is written.
+        val folder = temporary.newFolder("src")
+        val big = File(folder, "big.bin")
+        big.writeBytes(ByteArray(3_000_000) { (it % 251).toByte() })
+        val zip = File(temporary.root, "big.zip")
+        ArchiveWriter.zip(listOf(folder), zip)
+
+        val into = temporary.newFolder("out")
+        val seen = mutableListOf<Long>()
+        Archives.open(zip).use { archive ->
+            val result = ArchiveExtract.run(
+                archive, into,
+                onProgress = { done, total, _ ->
+                    seen += done
+                    assertTrue("done past total", done <= total)
+                },
+            )
+            assertTrue(result.skipped.isEmpty())
+            // More than the two end points: the bar moved while the single
+            // file was being written, not only before and after.
+            assertTrue("only $seen reported for a 3 MB file", seen.filter { it in 1..2_999_999 }.isNotEmpty())
+            assertEquals(3_000_000L, seen.last())
+        }
+    }
+
+    @Test
+    fun `a stop lands mid-file on a big one, and deletes what was written`() {
+        val folder = temporary.newFolder("src")
+        File(folder, "big.bin").writeBytes(ByteArray(4_000_000) { it.toByte() })
+        val zip = File(temporary.root, "big.zip")
+        ArchiveWriter.zip(listOf(folder), zip)
+
+        val into = temporary.newFolder("out")
+        Archives.open(zip).use { archive ->
+            // Stop after the first megabyte -- part way through the only
+            // file, which the old between-files check could never do.
+            val result = ArchiveExtract.run(
+                archive, into,
+                cancelled = { File(into, "src").resolve("big.bin").length() > 1_000_000 },
+            )
+            assertTrue(result.cancelled)
+            assertTrue(result.written.isEmpty())
+            assertFalse(File(into, "src/big.bin").exists())
         }
     }
 

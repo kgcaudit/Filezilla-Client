@@ -1943,8 +1943,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         archiveBusy = ArchiveBusy(
             getApplication<android.app.Application>().getString(R.string.archive_extracting),
-            name, 0, 0,
-        ) {}
+            name, 0L, 0L, {},
+        )
         viewModelScope.launch {
             val opened = withContext(Dispatchers.IO) {
                 runCatching {
@@ -2056,7 +2056,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val root = unpackInto(session.file)
         val stop = java.util.concurrent.atomic.AtomicBoolean(false)
         val extracting = getApplication<android.app.Application>().getString(R.string.archive_extracting)
-        archiveBusy = ArchiveBusy(extracting, "", 0, 0) { stop.set(true) }
+        archiveBusy = ArchiveBusy(extracting, "", 0L, 0L, { stop.set(true) }, bytes = true)
 
         viewModelScope.launch {
             val outcome = withContext(Dispatchers.IO) {
@@ -2123,7 +2123,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val stop = java.util.concurrent.atomic.AtomicBoolean(false)
         val compressing = getApplication<android.app.Application>()
             .getString(R.string.archive_compressing)
-        archiveBusy = ArchiveBusy(compressing, "", 0, 0) { stop.set(true) }
+        archiveBusy = ArchiveBusy(compressing, "", 0L, 0L, onStop = { stop.set(true) }, bytes = true)
 
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {

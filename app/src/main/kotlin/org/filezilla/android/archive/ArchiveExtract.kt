@@ -43,9 +43,17 @@ data class ExtractResult(
  */
 object ArchiveExtract {
 
-    /** Told the entry about to be read and how many are done. */
+    /**
+     * How far the unpack has got, in bytes, and the file being written now.
+     *
+     * Bytes rather than a file count: an archive can be one enormous file,
+     * and a count that reads "0 of 1" for the ten minutes it takes to write
+     * a four-gigabyte video is a progress bar that looks frozen. Total is 0
+     * when the archive does not say its sizes, and the bar is left
+     * indeterminate rather than made up.
+     */
     fun interface Progress {
-        fun at(done: Int, total: Int, path: String)
+        fun at(doneBytes: Long, totalBytes: Long, path: String)
     }
 
     /**
@@ -83,9 +91,15 @@ object ArchiveExtract {
         }
 
         val files = wanted.filterNot { it.isDirectory }
-        for ((done, entry) in files.withIndex()) {
+        val totalBytes = files.sumOf { it.size.coerceAtLeast(0) }
+        var doneBytes = 0L
+
+        for (entry in files) {
+            // Between files, and again inside the copy below: a four-gigabyte
+            // file must be stoppable before it finishes, or "stop" is a
+            // button that does nothing for ten minutes.
             if (cancelled()) return ExtractResult(written, skipped, cancelled = true)
-            onProgress.at(done, files.size, entry.path)
+            onProgress.at(doneBytes, totalBytes, entry.path)
 
             if (entry.unreadable != null) {
                 skipped += ExtractResult.Skipped(entry.path, ExtractResult.Reason.UNREADABLE)
@@ -98,10 +112,36 @@ object ArchiveExtract {
             }
             target.parentFile?.mkdirs()
 
+            var stoppedHere = false
+            val startedAt = doneBytes
             val outcome = runCatching {
                 archive.open(entry, password).use { source ->
-                    target.outputStream().use { sink -> source.copyTo(sink) }
+                    target.outputStream().use { sink ->
+                        val buffer = ByteArray(64 * 1024)
+                        // Report at most every megabyte, not every buffer: a
+                        // four-gigabyte file is sixty thousand buffers, and
+                        // pushing state that often would drop frames doing it.
+                        var sinceReport = 0L
+                        while (true) {
+                            if (cancelled()) { stoppedHere = true; break }
+                            val n = source.read(buffer)
+                            if (n < 0) break
+                            sink.write(buffer, 0, n)
+                            doneBytes += n
+                            sinceReport += n
+                            if (sinceReport >= 1_000_000L) {
+                                onProgress.at(doneBytes, totalBytes, entry.path)
+                                sinceReport = 0L
+                            }
+                        }
+                    }
                 }
+            }
+            if (stoppedHere) {
+                // A file the stop caught mid-write is not a file: delete it,
+                // and do not count the bytes that did land.
+                runCatching { target.delete() }
+                return ExtractResult(written, skipped, cancelled = true)
             }
             outcome.onSuccess {
                 written += target
@@ -110,6 +150,7 @@ object ArchiveExtract {
                 // A file half written is worse than no file: it opens, and
                 // it is wrong.
                 runCatching { target.delete() }
+                doneBytes = startedAt
                 skipped += ExtractResult.Skipped(
                     entry.path,
                     if (failure is WrongPassword) ExtractResult.Reason.PASSWORD
@@ -117,7 +158,7 @@ object ArchiveExtract {
                 )
             }
         }
-        onProgress.at(files.size, files.size, "")
+        onProgress.at(totalBytes, totalBytes, "")
         return ExtractResult(written, skipped)
     }
 

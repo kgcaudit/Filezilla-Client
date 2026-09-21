@@ -31,9 +31,16 @@ data class WriteResult(
  */
 object ArchiveWriter {
 
-    /** Told the file about to be written and how many are done. */
+    /**
+     * How far the archive has got, in bytes, and the file being added now.
+     *
+     * Bytes, for the same reason unpacking counts them: a folder can be one
+     * huge file, and a file count sits at "0 of 1" the whole time it is
+     * written. Total is 0 when nothing has a size, and the bar is left
+     * indeterminate.
+     */
     fun interface Progress {
-        fun at(done: Int, total: Int, name: String)
+        fun at(doneBytes: Long, totalBytes: Long, name: String)
     }
 
     /**
@@ -52,7 +59,9 @@ object ArchiveWriter {
         val target = into.canonicalFile
         val planned = sources.flatMap { source -> walk(source, target) }
         val skipped = mutableListOf<String>()
+        val totalBytes = planned.sumOf { (file, _) -> if (file.isDirectory) 0L else file.length().coerceAtLeast(0) }
         var done = 0
+        var doneBytes = 0L
 
         ZipOutputStream(into.outputStream().buffered()).use { zip ->
             zip.setLevel(Deflater.BEST_COMPRESSION)
@@ -60,21 +69,41 @@ object ArchiveWriter {
                 if (cancelled()) {
                     return WriteResult(done, cancelled = true, skipped = skipped)
                 }
-                onProgress.at(done, planned.size, name)
+                onProgress.at(doneBytes, totalBytes, name)
+                var stoppedHere = false
                 val written = runCatching {
                     if (file.isDirectory) {
                         zip.putNextEntry(ZipEntry("$name/").also { it.time = file.lastModified() })
                         zip.closeEntry()
                     } else {
                         zip.putNextEntry(ZipEntry(name).also { it.time = file.lastModified() })
-                        file.inputStream().use { it.copyTo(zip) }
+                        file.inputStream().use { source ->
+                            val buffer = ByteArray(64 * 1024)
+                            var sinceReport = 0L
+                            while (true) {
+                                if (cancelled()) { stoppedHere = true; break }
+                                val n = source.read(buffer)
+                                if (n < 0) break
+                                zip.write(buffer, 0, n)
+                                doneBytes += n
+                                sinceReport += n
+                                if (sinceReport >= 1_000_000L) {
+                                    onProgress.at(doneBytes, totalBytes, name)
+                                    sinceReport = 0L
+                                }
+                            }
+                        }
                         zip.closeEntry()
                     }
                 }
-                if (written.isSuccess) done++ else skipped += name
+                when {
+                    stoppedHere -> return WriteResult(done, cancelled = true, skipped = skipped)
+                    written.isSuccess -> done++
+                    else -> skipped += name
+                }
             }
         }
-        onProgress.at(planned.size, planned.size, "")
+        onProgress.at(totalBytes, totalBytes, "")
         return WriteResult(done, skipped = skipped)
     }
 

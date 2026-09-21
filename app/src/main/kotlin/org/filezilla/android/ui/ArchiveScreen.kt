@@ -28,9 +28,12 @@ import org.filezilla.android.R
 data class ArchiveBusy(
     val title: String,
     val path: String,
-    val done: Int,
-    val total: Int,
+    /** Bytes done, or a file count when [bytes] is false. */
+    val done: Long,
+    val total: Long,
     val onStop: () -> Unit,
+    /** True when [done]/[total] are bytes, so the line reads as a size. */
+    val bytes: Boolean = false,
 )
 
 /**
@@ -98,12 +101,21 @@ fun ArchiveWorkDialog(busy: ArchiveBusy) {
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                Text(
-                    stringResource(R.string.work_counted, busy.done, busy.total),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (busy.total > 0) {
+                    Text(
+                        if (busy.bytes) {
+                            "${formatSize(busy.done)} / ${formatSize(busy.total)}"
+                        } else {
+                            stringResource(R.string.work_counted, busy.done.toInt(), busy.total.toInt())
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 LinearProgressIndicator(
+                    // Determinate when a total is known -- so a single huge
+                    // file's bar creeps rather than sitting at zero -- and
+                    // indeterminate when the archive did not say its sizes.
                     progress = { if (busy.total > 0) busy.done.toFloat() / busy.total else 0f },
                     modifier = Modifier.fillMaxWidth(),
                 )
