@@ -95,4 +95,53 @@ class RealAlzipTest {
         assertEquals(plain.compressedSize, secret.compressedSize)
         assertEquals(plain.modifiedMillis, secret.modifiedMillis)
     }
+    @Test
+    fun `a korean name alzip wrote reads as korean`() {
+        // The bytes on disk are be cb c1 fd, which is CP949 for 알집 and
+        // nothing at all in UTF-8. ALZ carries no flag to say which, so
+        // there is nothing to detect -- unalz says the format is CP949 and
+        // only CP949, and this is that claim meeting a real file.
+        AlzArchive.open(fixture("alzip_korean.alz")).use { alz ->
+            assertEquals("알집.txt", alz.entries.single().path)
+            assertEquals("알집.txt", alz.entries.single().name)
+        }
+    }
+
+    @Test
+    fun `a korean named entry comes out with its contents`() {
+        AlzArchive.open(fixture("alzip_korean.alz")).use { alz ->
+            val out = alz.open(alz.entries.single()).use { it.readBytes() }
+            // Six bytes: two Korean syllables in UTF-8, which is what the
+            // file held rather than anything about the archive's own
+            // encoding. The two are separate questions and this keeps them
+            // apart -- a name read as CP949, contents passed through.
+            assertEquals(6, out.size)
+            assertEquals("알집", String(out, Charsets.UTF_8))
+        }
+    }
+
+    @Test
+    fun `a korean name survives a password too`() {
+        AlzArchive.open(fixture("alzip_korean_pass.alz")).use { alz ->
+            val entry = alz.entries.single()
+            assertEquals("알집.txt", entry.path)
+            assertTrue(entry.encrypted)
+
+            val out = alz.open(entry, "1234".toCharArray()).use { it.readBytes() }
+            assertEquals("알집", String(out, Charsets.UTF_8))
+        }
+    }
+
+    @Test
+    fun `a numeric password is read as its characters`() {
+        // "1234" is four characters, not a number, and the key schedule
+        // eats bytes. Worth a test of its own because it is exactly the
+        // kind of password somebody sets.
+        AlzArchive.open(fixture("alzip_korean_pass.alz")).use { alz ->
+            assertThrows(WrongPassword::class.java) {
+                alz.open(alz.entries.single(), "4321".toCharArray()).use { it.readBytes() }
+            }
+        }
+    }
+
 }
