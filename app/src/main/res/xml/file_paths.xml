@@ -2,11 +2,18 @@
 <!--
     What the app may hand to another app.
 
-    Shared storage only: the phone's own files are what a file manager opens,
-    and nothing here exposes the app's private directory, which holds the
-    partial downloads and the database.
+    Shared storage, plus one folder inside the app's own cache and nothing
+    else of it. The private directory holds the partial downloads and the
+    database, and none of that is any other app's business; the viewing
+    folder holds copies of server files fetched so they can be opened, which
+    is the whole reason another app is being handed one.
+
+    Named rather than given as the whole cache directory. A broader path
+    would work today and would quietly start exposing whatever anything
+    else decided to cache later.
 -->
 <paths>
     <external-path name="external_storage" path="." />
     <root-path name="volumes" path="/storage/" />
+    <cache-path name="viewing" path="viewing/" />
 </paths>

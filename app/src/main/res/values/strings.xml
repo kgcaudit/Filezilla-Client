@@ -366,4 +366,13 @@
     <string name="mode_unknown">The server did not say what the permissions are, so these start from what a new one would get.</string>
     <string name="mode_special_kept">A special bit (%1$s) is set on this one. It is kept as it is; it cannot be changed here.</string>
     <string name="props_link_target">Points to</string>
+    <string name="viewing_title">Fetching to open</string>
+    <string name="viewing_progress">%1$s of %2$s</string>
+    <string name="viewing_progress_unknown">%1$s so far</string>
+    <string name="viewing_read_only_title">Opening is looking, not editing</string>
+    <string name="viewing_read_only_detail">A file opened from a server is a copy kept on this phone. Changes you save in another app stay in that copy — the server keeps what it has. To change a file on the server, download it, change it, and send it back.</string>
+    <string name="action_got_it">Got it</string>
+    <string name="setting_view_cache">Files kept for opening</string>
+    <string name="setting_view_cache_detail">%1$s in use. These are copies of server files, kept so opening the same one again is instant. They can go at any time.</string>
+    <string name="setting_view_cache_clear">Empty</string>
 </resources>

@@ -19,6 +19,7 @@ import org.filezilla.android.data.SiteEntity
 import org.filezilla.android.storage.ConflictChoice
 import org.filezilla.android.storage.DownloadDestination
 import org.filezilla.android.storage.PartialFiles
+import java.io.File
 import org.filezilla.android.storage.SafStorage
 import org.filezilla.ftp.io.asTransferWriter
 import org.filezilla.ftp.journal.JournalledTransfer
@@ -1051,6 +1052,55 @@ class TransferManager(
                 if (session.writes != before) listings.forget(site)
             }
         }
+    }
+
+    /**
+     * Fetches one file into [into] so it can be looked at, and nothing else.
+     *
+     * Not through the queue, deliberately. The queue is for things the user
+     * asked to keep: it journals them, survives a restart, retries across
+     * sessions and finally delivers into a folder they chose. None of that
+     * is wanted here -- this is a copy of something still on the server,
+     * wanted now, and abandoned the moment they back out. A record of it in
+     * the transfer list would be a row the user did not put there.
+     *
+     * On its own connection rather than the pooled browse one, which is
+     * held by a single caller at a time: a film coming down it would freeze
+     * the pane it was tapped from.
+     */
+    suspend fun fetchForViewing(
+        site: SiteEntity,
+        remotePath: String,
+        into: File,
+        abort: TransferAbort,
+        progress: (bytes: Long, total: Long?) -> Unit,
+    ): Unit = withContext(io) {
+        val settings = site.toSettings(passwords)
+        WorkerConnection(capabilities, log).use { connection ->
+            connection.settings = settings
+            runInterruptible {
+                ResilientTransfer(
+                    settings = settings,
+                    capabilities = capabilities,
+                    retryPolicy = RetryPolicy(maxAttempts = settings.maxRetries),
+                    logger = log,
+                    sleep = { millis -> networkGate.waitBeforeRetry(millis) { abort.isStopped } },
+                    connections = connection,
+                    abort = abort,
+                ).download(
+                    remoteFile = remotePath,
+                    // Always from the beginning. A half-fetched copy from a
+                    // cancelled look is not something to resume onto: the
+                    // file may have changed since, and the only thing worse
+                    // than fetching it again is opening two halves of two
+                    // different files spliced together.
+                    forcedResumeOffset = 0,
+                    progress = { transferred, _, total -> progress(transferred, total) },
+                    writerFactory = { into.asTransferWriter() },
+                )
+            }
+        }
+        Unit
     }
 
     /** Lets go of a server's kept connection, for one edited or deleted. */

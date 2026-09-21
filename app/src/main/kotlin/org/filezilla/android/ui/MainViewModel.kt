@@ -21,6 +21,8 @@ import kotlinx.coroutines.launch
 import org.filezilla.android.AppGraph
 import org.filezilla.android.data.SiteEntity
 import org.filezilla.android.files.FileMode
+import org.filezilla.ftp.transfer.TransferAbort
+import org.filezilla.android.storage.ViewCache
 import org.filezilla.ftp.net.CertificateNotTrusted
 import org.filezilla.android.files.AccessRoute
 import org.filezilla.android.files.FilePath
@@ -1477,6 +1479,133 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * held. Navigation leaves it off -- walking back up a tree is where
      * every cache hit comes from -- and refresh turns it on.
      */
+    // -------------------------------------------------- opening a server file
+
+    /**
+     * A server file on its way to being looked at.
+     *
+     * Tapping a row on a server used to queue a download, which meant a
+     * destination folder had to be chosen before anything could be read --
+     * so looking at a text file began with deciding where to keep it. The
+     * download button beside the row still does that, because that is what
+     * it is for; the tap now fetches a copy and opens it.
+     */
+    data class Viewing(
+        val name: String,
+        val bytes: Long,
+        val total: Long?,
+        private val abort: TransferAbort,
+    ) {
+        fun stop() = abort.stop()
+    }
+
+    var viewing by mutableStateOf<Viewing?>(null)
+        private set
+
+    /**
+     * The fetched copy, waiting for the screen to open it.
+     *
+     * Handed over rather than opened here: which app opens a file, whether
+     * it is an APK that needs permission first, and what the chooser looks
+     * like are all the screen's business and all already written for files
+     * on the phone. This is the same file by the time it gets there.
+     */
+    var readyToOpen by mutableStateOf<java.io.File?>(null)
+        private set
+
+    /** Said once, before the first server file is ever opened. */
+    var warnReadOnly by mutableStateOf(false)
+        private set
+
+    var viewingFailure by mutableStateOf<ConnectionFailure?>(null)
+        private set
+
+    fun openedReady() {
+        readyToOpen = null
+    }
+
+    fun dismissViewingFailure() {
+        viewingFailure = null
+    }
+
+    /**
+     * How much the viewing cache is holding, recounted when it is looked at.
+     *
+     * Not kept as state: it changes when files are fetched and when Android
+     * decides it wants the space back, and the second of those happens
+     * without this app being told.
+     */
+    fun viewCacheBytes(): Long = graph.viewCache.totalBytes()
+
+    fun emptyViewCache() = graph.viewCache.clear()
+
+    fun acknowledgeReadOnly() {
+        graph.preferences.warnedThatViewingIsReadOnly = true
+        warnReadOnly = false
+    }
+
+    fun cancelViewing() {
+        viewing?.stop()
+        viewing = null
+    }
+
+    /**
+     * Fetches [entry] from [id]'s server and hands it to the screen to open.
+     *
+     * A copy already held is used as it is -- that is the whole point of
+     * holding it -- but only when it is a copy of *this* version: the cache
+     * is keyed on the size and the modification time as well as the path,
+     * so a file edited on the server is fetched again rather than shown as
+     * it used to be.
+     */
+    fun viewOnServer(id: PaneId, entry: DirectoryEntry) {
+        if (pane(id).isLocal || entry.isDirectory) return
+        val site = pane(id).site ?: return
+        val remotePath = FilePath.child(pane(id).path, entry.name)
+
+        val key = ViewCache.Key(
+            serverKey = listOf(site.host, site.port.toString(), site.user).joinToString("\u0000"),
+            path = remotePath,
+            name = entry.name,
+            size = entry.size,
+            modifiedMillis = entry.time?.epochMillis ?: 0,
+        )
+
+        graph.viewCache.readyFile(key)?.let { held ->
+            graph.viewCache.touch(held)
+            offerToOpen(held)
+            return
+        }
+
+        val abort = TransferAbort()
+        viewing = Viewing(entry.name, 0, entry.size.takeIf { it >= 0 }, abort)
+        val into = graph.viewCache.fileFor(key)
+
+        viewModelScope.launch {
+            runCatching {
+                graph.transfers.fetchForViewing(site, remotePath, into, abort) { bytes, total ->
+                    viewing = viewing?.copy(bytes = bytes, total = total ?: viewing?.total)
+                }
+            }.onSuccess {
+                viewing = null
+                graph.viewCache.evictDownTo(keep = into)
+                offerToOpen(into)
+            }.onFailure { error ->
+                viewing = null
+                // Half a file is not a file. Left behind it would be found
+                // by the next tap, which checks the length -- but only when
+                // the server said what the length was.
+                into.delete()
+                if (!abort.isStopped) viewingFailure = failureOn(site, error)
+            }
+        }
+    }
+
+    private fun offerToOpen(file: java.io.File) {
+        if (!graph.preferences.warnedThatViewingIsReadOnly) warnReadOnly = true
+        readyToOpen = file
+    }
+
     // ------------------------------------------------- the server's certificate
 
     /**

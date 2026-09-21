@@ -124,6 +124,11 @@ class WordingTest {
             // opens. A menu that says one thing and a dialog that says
             // another reads as two features.
             "action_change_mode",
+            // What stops something that is running. The notification's
+            // button and the button on the fetch-to-open dialog do the
+            // same thing to the same kind of thing, so they say it the
+            // same way.
+            "action_stop",
             // Our own "open with" sheet, and the system chooser it hands
             // off to: the same question asked by two pieces of machinery,
             // and it must read as one question.

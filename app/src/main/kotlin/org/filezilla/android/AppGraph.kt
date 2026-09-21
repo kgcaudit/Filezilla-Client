@@ -11,6 +11,7 @@ import org.filezilla.android.files.LocalFileSource
 import org.filezilla.android.files.StorageAccess
 import org.filezilla.android.files.StorageVolumes
 import org.filezilla.android.storage.PartialFiles
+import org.filezilla.android.storage.ViewCache
 import org.filezilla.android.storage.SafStorage
 import org.filezilla.android.transfer.AppLog
 import org.filezilla.android.transfer.NetworkGate
@@ -49,6 +50,16 @@ class AppGraph private constructor(context: Context) {
 
     private val partials = PartialFiles(app)
     val storage = SafStorage(app)
+
+    /**
+     * Copies of server files fetched so they can be looked at.
+     *
+     * Its own thing rather than part of [PartialFiles]: a partial file is
+     * half of something the user asked to keep, and one of these is a copy
+     * of something still on the server, thrown away as soon as the space is
+     * wanted. See [ViewCache].
+     */
+    val viewCache = ViewCache(app)
 
     /** Whether the file panes can see the device's storage, and how to ask. */
     val storageAccess = StorageAccess(app)

@@ -474,15 +474,21 @@ private fun PaneBody(
                 onOpenHit = { model.openHit(id, it) },
                 actions = EntryActions(
                     onOpen = { model.openChild(id, it.name) },
-                    // On the phone a tap opens the file; on a server it
-                    // fetches it. Tapping a local file used to start a
-                    // download of a file that was already here, and with no
-                    // download folder chosen that opened the folder picker.
-                    onDownload = { entry ->
+                    // The button beside a server row, and nothing else. It
+                    // means "keep a copy", which is a different act from
+                    // looking at the file -- the two shared this call, and
+                    // that is why reading a text file on a server began by
+                    // choosing where to save it.
+                    onDownload = onDownload,
+                    // A tap, on either side. On the phone the file is here;
+                    // on a server a copy is fetched first and then opened
+                    // the same way, by whichever app the extension is
+                    // remembered against.
+                    onOpenFile = { entry ->
                         if (state.isLocal) {
                             onOpenLocalFile(FilePath.child(model.pane(id).path, entry.name))
                         } else {
-                            onDownload(entry)
+                            model.viewOnServer(id, entry)
                         }
                     },
                     onDelete = model::delete,

@@ -633,9 +633,18 @@ private fun AppScreen(
     }
 
     if (queueSettingsOpen) {
+        // Counted when the sheet opens rather than watched: it changes
+        // when a file is fetched and when Android takes the space back,
+        // and nothing tells the app about the second.
+        var cacheBytes by remember { mutableStateOf(model.viewCacheBytes()) }
         QueueSettingsSheet(
             wifiOnly = model.wifiOnly,
             onWifiOnly = model::applyWifiOnly,
+            cacheBytes = cacheBytes,
+            onEmptyCache = {
+                model.emptyViewCache()
+                cacheBytes = model.viewCacheBytes()
+            },
             onDismiss = { queueSettingsOpen = false },
         )
     }
@@ -703,6 +712,33 @@ private fun AppScreen(
             onTrust = model::trustCertificate,
             onDismiss = model::dismissCertificateQuestion,
         )
+    }
+
+    model.viewing?.let { ViewingDialog(it, onCancel = model::cancelViewing) }
+
+    model.viewingFailure?.let {
+        ViewingFailureDialog(it, onDismiss = model::dismissViewingFailure)
+    }
+
+    // Before the file opens, not after: once another app has it, the moment
+    // to say what opening means has gone.
+    if (model.warnReadOnly) {
+        ReadOnlyNotice(onAcknowledge = model::acknowledgeReadOnly)
+    }
+
+    // The same door the phone's own files go through, so the remembered
+    // app, the chooser and the APK guard are all the ones already written.
+    val ready = model.readyToOpen
+    LaunchedEffect(ready, model.warnReadOnly) {
+        if (ready != null && !model.warnReadOnly) {
+            model.openedReady()
+            if (InstallApk.isPackage(ready.name) && !InstallApk.allowed(context)) {
+                installBlockedFor = ready
+            } else {
+                askWhichApp = false
+                openingFile = ready
+            }
+        }
     }
 
     model.changingMode?.let { (pane, entry) ->

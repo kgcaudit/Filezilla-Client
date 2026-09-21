@@ -58,6 +58,20 @@ class AppPreferences(context: Context) {
         get() = if (wifiOnly) NetworkPolicy.UNMETERED else NetworkPolicy.ANY
 
     /**
+     * Whether the person has been told that opening a server file is
+     * looking at it, not working on it.
+     *
+     * Said once and then not again. Opening a text file, editing it and
+     * saving is a thing somebody will do, and what they save is a copy in
+     * this app's cache -- so the one moment it can be said usefully is
+     * before the first file ever opens. Saying it every time would train
+     * them to dismiss it, which is the same as not saying it.
+     */
+    var warnedThatViewingIsReadOnly: Boolean
+        get() = prefs.getBoolean(KEY_READ_ONLY_WARNED, false)
+        set(value) = prefs.edit().putBoolean(KEY_READ_ONLY_WARNED, value).apply()
+
+    /**
      * The folder a pane was last looking at, and the server it was on.
      *
      * Per pane rather than one for the app: the two sides are used for
@@ -217,6 +231,7 @@ class AppPreferences(context: Context) {
         const val KEY_SHOW_HIDDEN = "browse_show_hidden"
         const val KEY_VIEW = "browse_view"
         const val KEY_WIFI_ONLY = "wifi_only"
+        const val KEY_READ_ONLY_WARNED = "viewing_read_only_warned"
         const val KEY_MOVE_CLEANUP = "move_cleanup"
         const val KEY_FOLDER_OPTIONS = "folder_options_"
         const val KEY_FOLDER_OPTION_KEYS = "folder_options_keys"

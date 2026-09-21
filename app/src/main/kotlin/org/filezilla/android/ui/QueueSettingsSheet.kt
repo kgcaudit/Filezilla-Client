@@ -10,6 +10,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -41,11 +42,18 @@ import org.filezilla.android.ui.theme.tiles
 fun QueueSettingsSheet(
     wifiOnly: Boolean,
     onWifiOnly: (Boolean) -> Unit,
+    cacheBytes: Long,
+    onEmptyCache: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
-        QueueSettings(wifiOnly = wifiOnly, onWifiOnly = onWifiOnly)
+        QueueSettings(
+            wifiOnly = wifiOnly,
+            onWifiOnly = onWifiOnly,
+            cacheBytes = cacheBytes,
+            onEmptyCache = onEmptyCache,
+        )
     }
 }
 
@@ -57,7 +65,12 @@ fun QueueSettingsSheet(
  * inside one.
  */
 @Composable
-fun QueueSettings(wifiOnly: Boolean, onWifiOnly: (Boolean) -> Unit) {
+fun QueueSettings(
+    wifiOnly: Boolean,
+    onWifiOnly: (Boolean) -> Unit,
+    cacheBytes: Long = 0,
+    onEmptyCache: () -> Unit = {},
+) {
     Column(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
         Text(
             stringResource(R.string.queue_settings),
@@ -94,6 +107,44 @@ fun QueueSettings(wifiOnly: Boolean, onWifiOnly: (Boolean) -> Unit) {
                 )
             }
             Switch(checked = wifiOnly, onCheckedChange = onWifiOnly)
+        }
+
+        // Opening a server file leaves a copy behind so the next tap is
+        // instant. Held to a limit and thrown away oldest first, but a few
+        // hundred megabytes that nothing accounts for is the kind of thing
+        // nobody can trace back to its cause -- so it says how much, here,
+        // and offers to let it go.
+        if (cacheBytes > 0) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TileIcon(
+                    glyph = R.drawable.ic_tile_document,
+                    colour = MaterialTheme.tiles.document,
+                    contentDescription = null,
+                    size = 38.dp,
+                    cornerRadius = 11.dp,
+                )
+                Column(modifier = Modifier.weight(1f).padding(start = 14.dp, end = 12.dp)) {
+                    Text(
+                        stringResource(R.string.setting_view_cache),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(
+                        stringResource(R.string.setting_view_cache_detail, formatSize(cacheBytes)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+                TextButton(onClick = onEmptyCache) {
+                    Text(stringResource(R.string.setting_view_cache_clear))
+                }
+            }
         }
 
         // Which build this is, where somebody holding the phone can read

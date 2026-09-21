@@ -77,6 +77,11 @@ class EntryActions(
      */
     val onOpenWith: (DirectoryEntry) -> Unit = {},
     /**
+     * Looks at a file: opens it on the phone, fetches and opens it on a
+     * server. What the download button does not do.
+     */
+    val onOpenFile: (DirectoryEntry) -> Unit = {},
+    /**
      * Changes a row's permissions, which only a server has.
      *
      * The phone's files are reached through the storage framework, which
@@ -365,7 +370,11 @@ private fun EntryRow(
                 when {
                     selecting -> actions.onToggleSelected(entry)
                     entry.isDirectory -> actions.onOpen(entry)
-                    else -> actions.onDownload(entry)
+                    // A tap is "let me see this", and the download button
+                    // beside it is "keep a copy". They used to be the same
+                    // call, so reading a text file on a server began by
+                    // choosing a folder to save it into.
+                    else -> actions.onOpenFile(entry)
                 }
             }
             .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -545,7 +554,7 @@ private fun GridTile(
                 when {
                     selecting -> actions.onToggleSelected(entry)
                     entry.isDirectory -> actions.onOpen(entry)
-                    else -> actions.onDownload(entry)
+                    else -> actions.onOpenFile(entry)
                 }
             }
             .padding(10.dp),
