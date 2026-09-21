@@ -99,7 +99,11 @@ int CALLBACK extractCallback(UINT msg, LPARAM userData, LPARAM p1, LPARAM p2) {
             if (st->sinceReport >= 1000000L) {
                 st->sinceReport = 0;
                 jstring name = st->env->NewStringUTF(st->currentName.c_str());
-                st->env->CallVoidMethod(st->sink, st->onProgress, st->doneBytes, st->totalBytes, name);
+                jvalue args[3];
+                args[0].j = st->doneBytes;
+                args[1].j = st->totalBytes;
+                args[2].l = name;
+                st->env->CallVoidMethodA(st->sink, st->onProgress, args);
                 st->env->DeleteLocalRef(name);
                 if (st->env->CallBooleanMethod(st->sink, st->isCancelled)) {
                     st->cancelled = true;
@@ -171,7 +175,13 @@ Java_org_filezilla_android_archive_RarNative_nativeList(
 
     RARHeaderDataEx header;
     int result;
-    while ((result = RARReadHeaderEx(h, &header)) == ERAR_SUCCESS) {
+    // The header must be zeroed before every read: CmtBuf and RedirName are
+    // pointers unrar writes into when an entry has a comment or is a link,
+    // and left as stack garbage the first such write is a crash. This was
+    // the crash on opening a rar -- the same fix nativeExtract already had.
+    for (memset(&header, 0, sizeof(header));
+         (result = RARReadHeaderEx(h, &header)) == ERAR_SUCCESS;
+         memset(&header, 0, sizeof(header))) {
         // RAR 5 stores names as UTF-8, which unrar hands back in FileName
         // as-is. FileNameW goes through the C locale and comes back mangled
         // on a build with no UTF-8 locale, so the char field is the true one.
@@ -182,7 +192,15 @@ Java_org_filezilla_android_archive_RarNative_nativeList(
         bool encrypted = (header.Flags & RHDF_ENCRYPTED) != 0;
         jlong mtime = ticksToMillis(header.MtimeLow, header.MtimeHigh);
         jstring jname = env->NewStringUTF(name.c_str());
-        env->CallVoidMethod(sink, entry, jname, size, (jboolean)isDir, mtime, (jboolean)encrypted);
+        // CallVoidMethodA, not the varargs form: mixing jlong and jboolean
+        // through C varargs is where a JNI call goes wrong on arm64.
+        jvalue args[5];
+        args[0].l = jname;
+        args[1].j = size;
+        args[2].z = (jboolean)isDir;
+        args[3].j = mtime;
+        args[4].z = (jboolean)encrypted;
+        env->CallVoidMethodA(sink, entry, args);
         env->DeleteLocalRef(jname);
         if (RARProcessFile(h, RAR_SKIP, nullptr, nullptr) != ERAR_SUCCESS) break;
     }
