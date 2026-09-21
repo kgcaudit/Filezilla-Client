@@ -1012,18 +1012,24 @@ class TransferManager(
         Unit
     }
 
+    private val browseConnections = BrowseConnections.forServers(capabilities, passwords, log)
+
     /**
      * A blocking browse, run so that coroutine cancellation interrupts the
      * socket rather than leaving it parked on a read.
      */
     suspend fun <T> browse(site: SiteEntity, block: (FtpSession) -> T): T = withContext(io) {
-        runInterruptible {
-            FtpSession(site.toSettings(passwords), capabilities, log).use { session ->
-                session.connect()
-                block(session)
-            }
+        // Through the pool, so a folder tap is one command rather than a
+        // whole login. See BrowseConnections for what makes reusing one
+        // safe; the short version is that it is held one caller at a time
+        // and retried once when the server has silently hung up.
+        browseConnections.withSession(site) { session ->
+            runInterruptible { block(session) }
         }
     }
+
+    /** Lets go of a server's kept connection, for one edited or deleted. */
+    suspend fun forget(site: SiteEntity) = browseConnections.close(site)
 }
 
 /**

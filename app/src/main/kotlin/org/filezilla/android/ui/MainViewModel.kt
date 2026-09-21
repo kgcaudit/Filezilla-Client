@@ -1371,8 +1371,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val dao = graph.database.sites()
             // A site being edited keeps where the user put it. Only a new one
             // needs a place, and its place is the end -- see [SiteDao.nextPosition].
-            val position = dao.byId(draft.id)?.position ?: dao.nextPosition()
+            val before = dao.byId(draft.id)
+            val position = before?.position ?: dao.nextPosition()
             dao.upsert(draft.toEntity(graph.passwords).copy(position = position))
+            // The kept browsing connection was opened against the old
+            // settings. An edited host, port or encoding would otherwise
+            // go on being talked to for as long as the connection is
+            // considered fresh.
+            before?.let { graph.transfers.forget(it) }
         }
     }
 
@@ -1394,6 +1400,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteSite(site: SiteEntity) {
         viewModelScope.launch {
             graph.database.sites().delete(site)
+            graph.transfers.forget(site)
             if (browse.site?.id == site.id) browse = BrowseState()
         }
     }
