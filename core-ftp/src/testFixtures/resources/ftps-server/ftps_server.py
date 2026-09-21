@@ -18,6 +18,7 @@ Env:
   STALL_AFTER_BYTES   go silent after N bytes (default 0, never)
   STALL_TIMES         how many may stall      (default 0, all of them)
   FTPS_ENCODING       wire encoding for paths (default utf8)
+  CWD_ECHOES_PATH     1 = name the path in the CWD reply (default 1)
 """
 
 import os
@@ -74,6 +75,12 @@ STALL_TIMES = int(os.environ.get("STALL_TIMES", "0"))
 # is exactly the server the per-site encoding setting exists for. Nothing
 # tested it until this existed.
 ENCODING = os.environ.get("FTPS_ENCODING", "utf8")
+# Whether the CWD reply names the directory it landed in. pyftpdlib does,
+# and so do FileZilla Server and a good many NAS firmwares, which lets a
+# client skip the PWD that would otherwise follow. vsftpd and ProFTPD reply
+# only "Directory successfully changed", and a client that assumed otherwise
+# would be building its next path on nothing.
+CWD_ECHOES_PATH = os.environ.get("CWD_ECHOES_PATH", "1") == "1"
 
 _drops_remaining = DROP_TIMES
 _stalls_remaining = STALL_TIMES
@@ -234,6 +241,32 @@ class Handler(TLS_FTPHandler):
             self.push(" %s\r\n" % feat)
         self.respond("211 End FEAT.")
 
+    def ftp_CWD(self, line):
+        """CWD, optionally without naming where it landed.
+
+        pyftpdlib always names it. vsftpd and ProFTPD reply only
+        "Directory successfully changed", and a client that skipped its PWD
+        on the strength of a reply like that would be building its next
+        path on nothing. The reply is rewritten on its way out rather than
+        the command reimplemented, so everything else about CWD stays
+        pyftpdlib's.
+        """
+        if CWD_ECHOES_PATH:
+            return super().ftp_CWD(line)
+
+        original = self.respond
+
+        def terse(resp, *args, **kwargs):
+            if resp.startswith("250 ") and '"' in resp:
+                resp = "250 Directory successfully changed."
+            return original(resp, *args, **kwargs)
+
+        self.respond = terse
+        try:
+            return super().ftp_CWD(line)
+        finally:
+            self.respond = original
+
     def ftp_REST(self, line):
         super().ftp_REST(line)
         if IGNORE_REST and self._restart_position:
@@ -285,7 +318,7 @@ def main():
         f"require_ssl_reuse={REQUIRE_SSL_REUSE} tls_max={TLS_MAX} "
         f"ignore_rest={IGNORE_REST} drop_after={DROP_AFTER_BYTES}x{DROP_TIMES} "
         f"stall_after={STALL_AFTER_BYTES}x{STALL_TIMES} "
-        f"encoding={ENCODING} "
+        f"encoding={ENCODING} cwd_echoes={CWD_ECHOES_PATH} "
         f"throttle={THROTTLE_BYTES} "
         f"root={ROOT}"
     )

@@ -73,6 +73,16 @@ class FtpsTestServer(
      * nothing exercised it until this option did.
      */
     private val encoding: String = "utf8",
+    /**
+     * Whether the `CWD` reply names the directory it landed in.
+     *
+     * pyftpdlib does, as do FileZilla Server and a good many NAS
+     * firmwares, which lets a client skip the `PWD` that would otherwise
+     * follow. vsftpd and ProFTPD reply only "Directory successfully
+     * changed"; a client that assumed otherwise would build its next path
+     * on nothing, so both shapes need a server to try against.
+     */
+    private val cwdEchoesPath: Boolean = true,
 ) {
     lateinit var root: File
         private set
@@ -111,6 +121,7 @@ class FtpsTestServer(
             put("STALL_AFTER_BYTES", stallAfterBytes.toString())
             put("STALL_TIMES", stallTimes.toString())
             put("FTPS_ENCODING", encoding)
+            put("CWD_ECHOES_PATH", if (cwdEchoesPath) "1" else "0")
         }
         builder.redirectErrorStream(false)
         val started = builder.start()

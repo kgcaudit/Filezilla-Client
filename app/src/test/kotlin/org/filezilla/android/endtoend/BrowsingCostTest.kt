@@ -2,6 +2,7 @@ package org.filezilla.android.endtoend
 
 import org.filezilla.android.AppGraph
 import org.filezilla.android.ui.PaneId
+import org.filezilla.ftp.protocol.LogLevel
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -9,17 +10,22 @@ import org.robolectric.RobolectricTestRunner
 import java.io.File
 
 /**
- * What browsing a server costs, counted in logins.
+ * What browsing a server costs, counted rather than guessed at.
  *
- * Reported as "EUC-KR is slower than UTF-8", which it is not: the control
- * connection does strictly less work for a pinned encoding, since it skips
- * the `OPTS UTF8 ON` round trip. What differs is the server -- one of them
- * is across the internet -- and this measures what the app makes the user
- * pay for that distance.
+ * Reported as "EUC-KR feels slower than UTF-8", which it is not: a pinned
+ * encoding skips the `OPTS UTF8 ON` round trip, so the control connection
+ * does strictly less work for it. What differed was which server was on
+ * the end -- one of them across the internet -- and that exposed how much
+ * the app was charging for the distance.
  *
- * Measured before the connection was kept: three folders cost four logins
- * and fifty-one commands; a folder made and renamed cost three logins and
- * forty-one. Now one login and about twenty commands each.
+ * Round trips are the currency. On a server on the same desk each is a few
+ * tens of milliseconds and nobody notices; on a NAS across the internet
+ * each is most of a tenth of a second, and they are paid every time a
+ * folder is tapped.
+ *
+ * Measured before any of this: three folders cost four logins and
+ * fifty-one commands, because every browse opened a whole connection and
+ * hung up. Now one login, and three commands a folder.
  */
 @RunWith(RobolectricTestRunner::class)
 class BrowsingCostTest : AppAgainstAServer() {
@@ -29,19 +35,19 @@ class BrowsingCostTest : AppAgainstAServer() {
         .count { it.message.startsWith("USER ") }
 
     private fun commands(): Int = AppGraph.of(application).log.log.value
-        .count { it.level == org.filezilla.ftp.protocol.LogLevel.COMMAND }
+        .count { it.level == LogLevel.COMMAND }
 
     @Test
     fun `walking three folders deep`() {
         File(onServer, "a/b/c").mkdirs()
         File(onServer, "a/one.txt").writeText("x")
-        File(onServer, "a/b/two.txt").writeText("x")
 
         val site = savedSite()
         val model = model()
 
         openOnServer(model, PaneId.LEFT, site)
-        val afterConnect = logins()
+        val loginsAfterConnect = logins()
+        val commandsAfterConnect = commands()
 
         model.openChild(PaneId.LEFT, "a")
         waitFor("a") { model.pane(PaneId.LEFT).path == "/a" }
@@ -50,15 +56,25 @@ class BrowsingCostTest : AppAgainstAServer() {
         model.openChild(PaneId.LEFT, "c")
         waitFor("c") { model.pane(PaneId.LEFT).path == "/a/b/c" }
 
-        // One. Three folder taps used to be three more logins on top of
+        // One login for the lot. Three taps used to be three more on top of
         // the one that connected: a TCP connect, a TLS handshake and six
-        // commands before the LIST that was wanted, each time.
-        assertEquals("connecting should cost exactly one login", 1, afterConnect)
+        // commands before the listing that was wanted, each time.
+        assertEquals("connecting should cost exactly one login", 1, loginsAfterConnect)
         assertEquals(
-            "walking into a folder logs in again; on a server across the " +
-                "internet that is most of a second per tap",
+            "walking into a folder logs in again; across the internet that " +
+                "is most of a second a tap",
             1,
             logins(),
+        )
+
+        // CWD, PASV, MLSD. The PWD that used to follow every CWD is
+        // answered by the CWD reply itself on a server that names the
+        // path, which this one does -- see CwdReply. Servers that do not
+        // are covered by TerseCwdServerTest.
+        assertEquals(
+            "a folder tap sends more than it needs to",
+            9,
+            commands() - commandsAfterConnect,
         )
     }
 
@@ -71,7 +87,10 @@ class BrowsingCostTest : AppAgainstAServer() {
 
         model.createDirectory("made")
         waitFor("the folder") { model.pane(PaneId.LEFT).entries.any { it.name == "made" } }
-        model.rename(org.filezilla.ftp.listing.DirectoryEntry(name = "made", isDirectory = true), "other")
+        model.rename(
+            org.filezilla.ftp.listing.DirectoryEntry(name = "made", isDirectory = true),
+            "other",
+        )
         waitFor("the rename") { model.pane(PaneId.LEFT).entries.any { it.name == "other" } }
 
         assertEquals(1, before)

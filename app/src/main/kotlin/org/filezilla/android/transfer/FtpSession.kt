@@ -35,7 +35,8 @@ class FtpSession(
 
     fun currentDirectory(): String = operations.currentDirectory()
 
-    fun changeDirectory(path: String) = operations.changeDirectory(path)
+    /** Returns where the server says that landed, or null if it did not say. */
+    fun changeDirectory(path: String): String? = operations.changeDirectory(path)
 
     fun changeToParent() = operations.changeToParentDirectory()
 

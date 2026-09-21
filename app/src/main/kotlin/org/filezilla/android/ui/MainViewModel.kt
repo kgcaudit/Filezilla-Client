@@ -1436,12 +1436,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             runCatching {
                 graph.transfers.browse(site) { session ->
-                    if (path != null) session.changeDirectory(path)
-                    // PWD rather than the path that was asked for: the server
-                    // decides where a relative or symlinked path landed, and
-                    // building the next path on a guess is how a browser ends
-                    // up listing the wrong directory.
-                    val here = session.currentDirectory()
+                    // Where the server says we are, never the path that was
+                    // asked for: it may have been relative or a symbolic
+                    // link, and building the next path on a guess is how a
+                    // browser ends up listing the wrong directory.
+                    //
+                    // Many servers answer that in the CWD reply itself, and
+                    // taking it there saves a round trip on every folder
+                    // opened -- a quarter of the cost, on a server far
+                    // enough away to notice. The ones that do not get asked.
+                    val moved = if (path != null) session.changeDirectory(path) else null
+                    val here = moved ?: session.currentDirectory()
                     here to session.list()
                 }
             }.onSuccess { (here, entries) ->

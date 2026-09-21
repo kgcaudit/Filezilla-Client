@@ -55,13 +55,16 @@ abstract class AppAgainstAServer {
      */
     protected open val serverEncoding: String get() = "utf8"
 
+    /** Whether the server names the directory in its `CWD` reply. */
+    protected open val cwdEchoesPath: Boolean get() = true
+
     @Before
     fun startServerAndApp() {
         assumeTrue(
             "FTPS test server not set up; run core-ftp/src/testFixtures/resources/ftps-server/setup.sh",
             FtpsTestServer.isAvailable,
         )
-        server = FtpsTestServer(encoding = serverEncoding)
+        server = FtpsTestServer(encoding = serverEncoding, cwdEchoesPath = cwdEchoesPath)
         server.start()
 
         // Before the graph is built, since it reads the cipher once.
