@@ -177,4 +177,70 @@ class ViewCacheTest {
     fun `an empty cache is not a negative number`() {
         assertEquals(0, cache.totalBytes())
     }
+    @Test
+    fun `a fetch in flight is not mistaken for a copy`() {
+        val key = key(size = 10)
+        val partial = cache.partialFor(key)
+        write(partial, 4)
+
+        // The next tap must not find this and open four bytes of a film.
+        assertNull(cache.readyFile(key))
+        // Nor should it be counted as storage held for opening, or offered
+        // to eviction while it is still being written.
+        assertEquals(0, cache.totalBytes())
+    }
+
+    @Test
+    fun `two fetches of the same file do not write over each other`() {
+        val key = key()
+
+        assertNotEquals(cache.partialFor(key), cache.partialFor(key))
+    }
+
+    @Test
+    fun `a stopped fetch cannot delete what the retry is writing`() {
+        val key = key(size = 10)
+        val stopped = cache.partialFor(key)
+        val retry = cache.partialFor(key)
+        write(stopped, 4)
+        write(retry, 10)
+
+        // What a cancelled fetch does on its way out.
+        stopped.delete()
+
+        assertTrue("the second attempt's file was taken with the first", retry.isFile)
+        assertEquals(10, retry.length())
+    }
+
+    @Test
+    fun `finishing puts the copy in place, whole`() {
+        val key = key(size = 10)
+        val partial = cache.partialFor(key)
+        write(partial, 10)
+
+        val held = cache.finish(partial, key)
+
+        assertEquals(cache.fileFor(key), held)
+        assertEquals(held, cache.readyFile(key))
+        assertFalse("the working file should be gone", partial.exists())
+    }
+
+    @Test
+    fun `a finished copy is counted as just used, whatever time it carries`() {
+        // The transfer engine puts the *server's* modification time on what
+        // it wrote. Left alone, a file fetched a moment ago from a year-old
+        // original would be first in the queue to be thrown away.
+        val key = key(size = 10)
+        val partial = cache.partialFor(key)
+        write(partial, 10)
+        partial.setLastModified(1_000)
+
+        val held = cache.finish(partial, key)!!
+
+        assertTrue(
+            "a copy just fetched looks like the oldest thing here",
+            held.lastModified() > 1_000,
+        )
+    }
+
 }

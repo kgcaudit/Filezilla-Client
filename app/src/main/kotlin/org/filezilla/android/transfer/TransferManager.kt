@@ -559,7 +559,10 @@ class TransferManager(
      * carries on: the file has arrived, and a server that will not let go of
      * it is not a reason to stop moving everything else.
      */
-    private fun removeRemoteSource(record: TransferRecord, connection: WorkerConnection) {
+    private fun removeRemoteSource(
+        record: TransferRecord,
+        connection: WorkerConnection,
+    ) = changingTheServer(record) {
         val name = record.remotePath.substringAfterLast('/')
         val removed = runCatching {
             onWorkerConnection(connection) { control ->
@@ -644,7 +647,7 @@ class TransferManager(
         settings: FtpSettings,
         connection: WorkerConnection,
         abort: TransferAbort,
-    ) {
+    ) = changingTheServer(record) {
         val source = Uri.parse(record.localPath)
         var running = record.copy(
             state = TransferState.RUNNING,
@@ -678,12 +681,6 @@ class TransferManager(
             updatedAtMillis = System.currentTimeMillis(),
         )
         journal.put(running)
-
-        // A file has appeared on the server, so whatever this app was
-        // holding about the folder it landed in no longer describes it. The
-        // queue has its own connections and never borrows a browse session,
-        // so the write counter above cannot see this one.
-        listings.forgetServer(record.host, record.port, record.user)
 
         // After the record says COMPLETED and not before. If the process
         // dies between the two, the file is still on the phone and the
@@ -1101,6 +1098,26 @@ class TransferManager(
             }
         }
         Unit
+    }
+
+    /**
+     * Runs work that changes the server, and drops what was held about it.
+     *
+     * The browse pool notices its own writes by counting them on
+     * [FtpSession]. The queue cannot: it has its own connections, and the
+     * delete that finishes a move goes straight at the file operations. So
+     * the two places in this class that change a server say so here, and
+     * say it whatever the outcome -- an upload that failed part way has
+     * still put bytes there, and a delete that threw may still have
+     * deleted.
+     *
+     * One re-listing is the whole cost of being wrong in this direction.
+     * Being wrong the other way shows somebody a file they deleted.
+     */
+    private inline fun <T> changingTheServer(record: TransferRecord, block: () -> T): T = try {
+        block()
+    } finally {
+        listings.forgetServer(record.host, record.port, record.user)
     }
 
     /** Lets go of a server's kept connection, for one edited or deleted. */

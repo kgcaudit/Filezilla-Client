@@ -4,6 +4,7 @@ import org.filezilla.android.AppGraph
 import org.filezilla.android.ui.PaneId
 import org.filezilla.ftp.protocol.LogLevel
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -173,4 +174,56 @@ class CachedBrowsingTest : AppAgainstAServer() {
         )
         assertTrue("the file is on the server", File(onServer, "drop/sent.txt").isFile)
     }
+    @Test
+    fun `a file moved off the server stops being listed`() {
+        File(onServer, "outbox").mkdirs()
+        File(onServer, "outbox/leaving.txt").writeText("x")
+        // Something stays, so the folder is not emptied. An emptied folder
+        // is swept away afterwards through a browse session, whose writes
+        // the cache already notices -- and that sweep would clear the
+        // listing whether or not the delete below said anything.
+        File(onServer, "outbox/staying.txt").writeText("y")
+        val landing = phone.newFolder("landing")
+
+        val site = savedSite()
+        val model = model()
+        val listings = AppGraph.of(application).transfers.listings
+
+        openOnServer(model, PaneId.LEFT, site)
+        model.openChild(PaneId.LEFT, "outbox")
+        waitFor("outbox") { model.pane(PaneId.LEFT).path == "/outbox" }
+
+        openOnPhone(model, PaneId.RIGHT, landing)
+        model.focusPane(PaneId.LEFT)
+        model.toggleSelected("leaving.txt")
+        model.cutSelection(PaneId.LEFT)
+        model.pasteAcross(PaneId.RIGHT) { }
+        waitFor("the queue") { model.transfers.value.isNotEmpty() }
+
+        assertTrue(
+            "nothing was held about the folder, so this proves nothing",
+            listings.recall(site, "/outbox") != null,
+        )
+
+        // The queue alone, without the sweep that follows it. The sweep
+        // tries to remove the folder a move emptied, and an attempt is
+        // enough to clear the cache even when the folder turns out not to
+        // be empty -- so running it here would clear the listing whether
+        // or not the delete below said anything.
+        kotlinx.coroutines.runBlocking {
+            AppGraph.of(application).transfers.runQueue()
+        }
+
+        // The delete that finishes a move goes straight at the file
+        // operations on a worker connection -- nothing the browse pool
+        // counts can see it. Read before the looper is pumped, so the
+        // app's own post-transfer refresh cannot be what clears it.
+        assertNull(
+            "a file moved off the server was still in the held listing",
+            listings.recall(site, "/outbox"),
+        )
+        assertTrue("it did arrive", File(landing, "leaving.txt").isFile)
+        assertFalse("it should be gone from the server", File(onServer, "outbox/leaving.txt").exists())
+    }
+
 }

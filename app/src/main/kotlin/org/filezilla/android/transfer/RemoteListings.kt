@@ -49,6 +49,21 @@ class RemoteListings(private val now: () -> Long = System::currentTimeMillis) {
     private var rows = 0
 
     /**
+     * Bumped every time a server is forgotten.
+     *
+     * A listing is fetched, and only then remembered -- and in between,
+     * something else may have written to that server and emptied this. The
+     * caller reads this before it asks and hands it back with the answer,
+     * so an answer older than the write is dropped instead of putting the
+     * pre-write listing back.
+     *
+     * One counter for everything rather than one per server: forgetting is
+     * rare, the cost of a false miss is one re-listing, and a counter per
+     * server is a second map to keep in step with the first.
+     */
+    private var forgettings = 0L
+
+    /**
      * What the server said [asked] held, or null if that is not worth
      * believing any more.
      */
@@ -64,6 +79,13 @@ class RemoteListings(private val now: () -> Long = System::currentTimeMillis) {
     }
 
     /**
+     * What has been forgotten so far, to be handed back to [remember].
+     *
+     * Read before a listing is asked for. See [forgettings].
+     */
+    fun asOf(): Long = synchronized(lock) { forgettings }
+
+    /**
      * Keeps what the server said, under the path that was asked for.
      *
      * [asked] and [resolved] are both carried because they need not match:
@@ -75,7 +97,14 @@ class RemoteListings(private val now: () -> Long = System::currentTimeMillis) {
         asked: String,
         resolved: String,
         entries: List<DirectoryEntry>,
+        /**
+         * What [asOf] said before this listing was asked for. A listing
+         * that set out before a write is not an answer about what is
+         * there now.
+         */
+        asOf: Long = -1,
     ) = synchronized(lock) {
+        if (asOf >= 0 && asOf != forgettings) return@synchronized
         val key = keyFor(site, asked)
         held.remove(key)?.let { rows -= it.listing.entries.size }
         held[key] = Held(Listing(resolved, entries), now())
@@ -96,11 +125,13 @@ class RemoteListings(private val now: () -> Long = System::currentTimeMillis) {
      */
     fun forgetServer(host: String, port: Int, user: String) = synchronized(lock) {
         val prefix = serverKey(host, port, user) + SEPARATOR
+        forgettings++
         val going = held.keys.filter { it.startsWith(prefix) }
         for (key in going) held.remove(key)?.let { rows -= it.listing.entries.size }
     }
 
     fun forgetEverything() = synchronized(lock) {
+        forgettings++
         held.clear()
         rows = 0
     }

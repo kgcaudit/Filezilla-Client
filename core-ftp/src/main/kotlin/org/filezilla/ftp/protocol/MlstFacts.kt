@@ -28,10 +28,16 @@ object MlstFacts {
     /**
      * What is worth asking for, in the order FileZilla asks.
      *
-     * `unix.mode` is the permissions. The owner and group come under two
-     * spellings each -- the name and the numeric id -- and servers differ
-     * in which they have, so both are asked for and whichever arrives is
-     * shown.
+     * `unix.mode` is the permissions. The owner and group are spelt
+     * several ways -- a name, an account, a numeric id -- and servers
+     * differ in which they have, so every spelling [MlsdParser] reads is
+     * asked for.
+     *
+     * Every one of them, and that is the point rather than thoroughness.
+     * A server switches off whatever this command does not name, so a list
+     * missing `unix.ownername` would turn off the very fact the listing
+     * prefers on a server that already had it on -- asking for more owner
+     * information and getting a number back instead of a name.
      */
     val WANTED = listOf(
         "type",
@@ -39,8 +45,11 @@ object MlstFacts {
         "modify",
         "perm",
         "unix.mode",
+        "unix.ownername",
+        "unix.groupname",
         "unix.owner",
         "unix.group",
+        "unix.user",
         "unix.uid",
         "unix.gid",
     )

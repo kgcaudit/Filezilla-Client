@@ -144,7 +144,7 @@ class FtpControlConnection(
     private fun handshake(plain: Socket): javax.net.ssl.SSLSocket = try {
         tlsFactory.upgradeControl(plain, settings.host, settings.port)
     } catch (failed: IOException) {
-        val refused = tlsFactory.trust.refusal ?: throw failed
+        val refused = tlsFactory.trust.refusalFor(failed) ?: throw failed
         logger.log(
             LogLevel.ERROR,
             if (refused.changed) {

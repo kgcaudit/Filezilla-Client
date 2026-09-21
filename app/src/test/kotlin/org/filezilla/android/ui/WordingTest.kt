@@ -155,4 +155,46 @@ class WordingTest {
 
         assertEquals(allowed, shared)
     }
+    /**
+     * That no Korean particle is attached straight to a name the app does
+     * not choose.
+     *
+     * Korean picks the particle from the last letter of the word before
+     * it: a name ending in a vowel takes 가, one ending in a consonant
+     * takes 이. A server called "나스" reads correctly as "나스의"; one
+     * called "집" written the same way reads "집가", which is simply
+     * wrong, and the app cannot know which it will be because the name is
+     * the user's.
+     *
+     * Two ways out, and both are allowed here: write a particle that does
+     * not change (의, 에, 도), or write both (을(를)), which is what a
+     * form does when it has no choice. What is not allowed is one bare
+     * changing particle, because that is right half the time.
+     */
+    @Test
+    fun `no name is followed by a particle that depends on its last letter`() {
+        val changing = "가|이|을|를|은|는|과|와|아|야"
+        // Escaped: a bare dollar in a regex is the end of a line. Two
+        // earlier versions of this guard read "a digit, then end of line",
+        // matched nothing, and passed on the very strings they exist to
+        // catch -- which is why the rule below was checked by putting one
+        // back and watching it fail.
+        val placeholder = Regex.escape("$")
+        // A bracket after the particle means the both-forms spelling,
+        // "%1${'$'}s을(를)", which is correct.
+        val risky = Regex("""%\d$placeholder[sd]($changing)(?![가-힣(])""")
+
+        val found = strings("values-ko")
+            .filter { (_, text) -> risky.containsMatchIn(text) }
+            .map { (name, text) -> "$name: " + risky.find(text)!!.value }
+            .sorted()
+
+        assertEquals(
+            "a server or file name is followed by a particle chosen for it; " +
+                "it will read wrongly for half the names somebody gives",
+            emptyList<String>(),
+            found,
+        )
+    }
+
 }

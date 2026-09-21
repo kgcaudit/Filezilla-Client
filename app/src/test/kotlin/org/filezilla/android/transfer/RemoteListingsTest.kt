@@ -167,4 +167,49 @@ class RemoteListingsTest {
 
         assertEquals(1, cache.recall(site(), "/a/b/")?.entries?.size)
     }
+    @Test
+    fun `a listing that set out before a write is not put back afterwards`() {
+        // The order that does the damage: the pane asks for a listing, an
+        // upload lands and empties the cache, and then the listing -- taken
+        // before the upload -- arrives and is remembered. Without this the
+        // folder goes on not showing the file that was just put in it.
+        val asOf = cache.asOf()
+
+        cache.forget(site())
+        cache.remember(site(), "/a", "/a", rows("stale.txt"), asOf)
+
+        assertNull(cache.recall(site(), "/a"))
+    }
+
+    @Test
+    fun `a listing taken after the write is kept`() {
+        cache.forget(site())
+        val asOf = cache.asOf()
+
+        cache.remember(site(), "/a", "/a", rows("fresh.txt"), asOf)
+
+        assertEquals(listOf("fresh.txt"), cache.recall(site(), "/a")?.entries?.map { it.name })
+    }
+
+    @Test
+    fun `a write to another server does not throw this listing away`() {
+        val asOf = cache.asOf()
+        cache.forget(site(id = "other", host = "elsewhere.test"))
+
+        cache.remember(site(), "/a", "/a", rows("one.txt"), asOf)
+
+        // One counter for every server means a write anywhere costs a
+        // re-listing here. That is the trade, and it is the safe direction
+        // -- but it must not be so blunt that nothing is ever cached.
+        assertNull(cache.recall(site(), "/a"))
+        assertEquals(
+            "a second listing, taken after that write, should be kept",
+            1,
+            cache.let {
+                it.remember(site(), "/a", "/a", rows("one.txt"), it.asOf())
+                it.recall(site(), "/a")?.entries?.size
+            },
+        )
+    }
+
 }

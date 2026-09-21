@@ -1579,23 +1579,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         val abort = TransferAbort()
         viewing = Viewing(entry.name, 0, entry.size.takeIf { it >= 0 }, abort)
-        val into = graph.viewCache.fileFor(key)
+        // Written under a name of its own and renamed into place once it
+        // has all arrived. A stopped fetch then cannot delete what a second
+        // attempt is writing, and one killed with the app cannot leave a
+        // piece behind for the next tap to open as though it were whole.
+        val partial = graph.viewCache.partialFor(key)
 
         viewModelScope.launch {
             runCatching {
-                graph.transfers.fetchForViewing(site, remotePath, into, abort) { bytes, total ->
+                graph.transfers.fetchForViewing(site, remotePath, partial, abort) { bytes, total ->
                     viewing = viewing?.copy(bytes = bytes, total = total ?: viewing?.total)
                 }
             }.onSuccess {
                 viewing = null
-                graph.viewCache.evictDownTo(keep = into)
-                offerToOpen(into)
+                val held = graph.viewCache.finish(partial, key)
+                if (held == null) {
+                    viewingFailure = describeFailure(
+                        java.io.IOException("the copy could not be put in place"),
+                        graph.networkGate.currentlyOnline(),
+                    )
+                    return@launch
+                }
+                graph.viewCache.evictDownTo(keep = held)
+                offerToOpen(held)
             }.onFailure { error ->
                 viewing = null
-                // Half a file is not a file. Left behind it would be found
-                // by the next tap, which checks the length -- but only when
-                // the server said what the length was.
-                into.delete()
+                partial.delete()
                 if (!abort.isStopped) viewingFailure = failureOn(site, error)
             }
         }
@@ -1708,6 +1717,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         update(id) { it.copy(source = PaneSource.Remote(site), loading = true, error = null) }
+        // Read before the question is asked, handed back with the answer.
+        // A write that lands while this listing is in flight empties the
+        // cache, and without this the answer -- taken before the write --
+        // would be put back in afterwards.
+        val asOf = graph.transfers.listings.asOf()
         viewModelScope.launch {
             runCatching {
                 graph.transfers.browse(site) { session ->
@@ -1729,7 +1743,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 // Kept under the path that was asked for, not under the one
                 // the server resolved it to: the next visit will ask by the
                 // same name this one did.
-                if (path != null) graph.transfers.listings.remember(site, path, here, entries)
+                if (path != null) graph.transfers.listings.remember(site, path, here, entries, asOf)
                 graph.preferences.setPanePath(id.name, siteSourceKey(site), here)
                 update(id) {
                     it.copy(

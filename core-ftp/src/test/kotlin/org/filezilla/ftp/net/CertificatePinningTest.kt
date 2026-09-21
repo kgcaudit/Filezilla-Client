@@ -9,6 +9,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.BeforeEach
@@ -120,5 +121,64 @@ class CertificatePinningTest {
             val listed = org.filezilla.ftp.transfer.FtpTransferEngine(it, ServerCapabilities()).list()
             assertTrue("one.bin" in listed.map { entry -> entry.name })
         }
+    }
+}
+
+/**
+ * Which handshake failures are a question about identity.
+ *
+ * The host check runs in the socket, after this trust manager has already
+ * said the chain is fine, so its failure arrives as a bare handshake error
+ * with nothing attached. Turning that into a dead end is exactly what the
+ * removed "accept any certificate" switch used to prevent -- a server with
+ * a real certificate for a name it is not reached by would have been
+ * unusable with no way to say otherwise.
+ */
+class RefusalKindTest {
+
+    private fun seen() = ServerCertificate("AA:BB", "CN=nas", "CN=nas", 0, 1)
+
+    private fun managerHavingSeen(certificate: ServerCertificate): PinningTrustManager {
+        val manager = PinningTrustManager(pinned = null)
+        // The field is set by the handshake; this stands in for one having
+        // happened, which is the state the question depends on.
+        val field = PinningTrustManager::class.java.getDeclaredField("lastSeen")
+        field.isAccessible = true
+        field.set(manager, certificate)
+        return manager
+    }
+
+    @org.junit.jupiter.api.Test
+    fun `a failure about the certificate becomes a question`() {
+        val manager = managerHavingSeen(seen())
+        val hostMismatch = javax.net.ssl.SSLHandshakeException("handshake failed").apply {
+            initCause(java.security.cert.CertificateException("No subject alternative names matching IP"))
+        }
+
+        val raised = manager.refusalFor(hostMismatch)
+
+        assertEquals("AA:BB", raised?.certificate?.fingerprint)
+        assertFalse(raised!!.changed, "nothing was pinned, so nothing changed")
+    }
+
+    @org.junit.jupiter.api.Test
+    fun `a failure about anything else is left alone`() {
+        val manager = managerHavingSeen(seen())
+
+        // No shared protocol or cipher. Putting a fingerprint in front of
+        // somebody for this would teach them to accept fingerprints.
+        val noCommonProtocol = javax.net.ssl.SSLHandshakeException("no protocols in common")
+
+        assertNull(manager.refusalFor(noCommonProtocol))
+    }
+
+    @org.junit.jupiter.api.Test
+    fun `a handshake that never got a certificate has nothing to ask about`() {
+        val manager = PinningTrustManager(pinned = null)
+        val failure = javax.net.ssl.SSLHandshakeException("connection closed").apply {
+            initCause(java.security.cert.CertificateException("nothing"))
+        }
+
+        assertNull(manager.refusalFor(failure))
     }
 }

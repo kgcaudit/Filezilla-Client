@@ -80,4 +80,33 @@ class MlstFactsTest {
             MlstFacts.optsArgumentFor(" Type*; Size*; Modify*; Perm*; UNIX.mode; "),
         )
     }
+    @Test
+    fun `every spelling the listing reads is asked for`() {
+        // A server switches off whatever this command does not name. So a
+        // fact the parser prefers, left out of the list, is turned off on
+        // a server that already had it on -- which is how asking for more
+        // owner information gets a number back where a name was arriving.
+        val readByTheParser = listOf(
+            "unix.mode", "unix.owner", "unix.ownername", "unix.group",
+            "unix.groupname", "unix.user", "unix.uid", "unix.gid",
+        )
+
+        assertTrue(
+            MlstFacts.WANTED.containsAll(readByTheParser),
+            "these are read from a listing but never asked for: " +
+                readByTheParser.filterNot { it in MlstFacts.WANTED },
+        )
+    }
+
+    @Test
+    fun `a name already on is not switched off by asking for the mode`() {
+        val asking = MlstFacts.optsArgumentFor(
+            "type*;size*;modify*;perm*;unix.ownername*;unix.groupname*;unix.mode;",
+        )
+
+        assertTrue(asking!!.contains("unix.ownername"), "asking for the mode dropped the owner name")
+        assertTrue(asking.contains("unix.groupname"))
+        assertTrue(asking.contains("unix.mode"))
+    }
+
 }

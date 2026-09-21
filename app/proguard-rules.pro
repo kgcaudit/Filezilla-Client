@@ -31,3 +31,10 @@
 # and the name is what ends up in a log the user sends.
 -keep class org.filezilla.ftp.net.CertificateNotTrusted { *; }
 -keep class org.filezilla.ftp.net.ServerCertificate { *; }
+
+# When a failure carries no message of its own, the app shows the
+# exception's class name instead -- it is the only thing left that says
+# what went wrong, and it ends up in the log a user sends. Renamed, it
+# says "a.b.c". Names only: these still get shrunk away if nothing throws
+# them, and the platform's own exceptions were never renamed anyway.
+-keepnames class * extends java.lang.Throwable

@@ -3,6 +3,7 @@ package org.filezilla.ftp.net
 import java.security.KeyStore
 import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
+import javax.net.ssl.SSLPeerUnverifiedException
 import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
 
@@ -91,6 +92,34 @@ class PinningTrustManager(
         val refused = CertificateNotTrusted(seen, previouslyTrusted, cause)
         refusal = refused
         throw CertificateException(refused.message, refused)
+    }
+
+    /**
+     * What to raise for a handshake that failed, if anything.
+     *
+     * [refusal] covers what this class turned down itself. It does not
+     * cover the check that the certificate is *for this host*, which the
+     * socket performs after the trust manager has already said yes -- so a
+     * certificate signed by a real authority, for a name this server is
+     * not reached by, threw a bare handshake failure and left nothing to
+     * show. With the "accept any certificate" switch gone, that was a
+     * server nobody could connect to and no dialog to say why.
+     *
+     * A certificate was seen and something about the certificate was
+     * wrong: that is the same question as any other unrecognised one, and
+     * accepting it pins it -- which also turns the host check off, because
+     * the pin is a stricter identity than the name.
+     *
+     * Narrow on purpose. A handshake that fails over protocol versions or
+     * ciphers is not a question about identity, and putting a fingerprint
+     * in front of somebody for one would teach them to accept fingerprints.
+     */
+    fun refusalFor(failure: Throwable): CertificateNotTrusted? {
+        refusal?.let { return it }
+        val seen = lastSeen ?: return null
+        val aboutTheCertificate = generateSequence(failure) { it.cause }
+            .any { it is CertificateException || it is SSLPeerUnverifiedException }
+        return if (aboutTheCertificate) CertificateNotTrusted(seen, null, failure) else null
     }
 
     override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) =

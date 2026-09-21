@@ -330,11 +330,11 @@
     <string name="queue_clear_all_confirm">Empty</string>
 
     <string name="install_blocked_title">Allow installing apps</string>
-    <string name="install_blocked_detail">To install %1$s, this app has to be allowed as a source of apps. Android asks for that on a settings screen of its own; without it the installer turns the app away without saying so.</string>
+    <string name="install_blocked_detail">To install %1$s this app has to be allowed as an install source. Android asks for that in its own settings, and until it is on the install screen closes without a word.</string>
     <string name="install_blocked_settings">Open settings</string>
     <string name="app_build">Build %1$s</string>
     <string name="cert_none_title">Certificate not yet accepted</string>
-    <string name="cert_none_detail">You will be shown this server\'s certificate the first time you connect, and asked whether it is the right one.</string>
+    <string name="cert_none_detail">The first time you connect, this server\'s certificate is shown for you to check.</string>
     <string name="cert_pinned_title">This server\'s certificate is accepted</string>
     <string name="cert_forget">Forget</string>
     <string name="cert_fingerprint">Fingerprint (SHA-256)</string>
@@ -345,10 +345,10 @@
     <string name="cert_valid_range">%1$s to %2$s</string>
     <string name="cert_valid_expired">%1$s to %2$s — outside this period today</string>
     <string name="cert_ask_title">Is this %1$s?</string>
-    <string name="cert_ask_detail">No authority vouches for this certificate, which is normal for a server you run yourself. Compare the fingerprint with the one your server shows. Accept it only if they match: anything else on the network could be answering instead.</string>
+    <string name="cert_ask_detail">No authority vouches for this certificate, which is normal for a server you run yourself. Compare the fingerprint with the one your server shows, and accept it only if they match. If they differ, something else may be answering in its place.</string>
     <string name="cert_accept">This is my server</string>
-    <string name="cert_changed_title">%1$s is presenting a different certificate</string>
-    <string name="cert_changed_detail">The certificate accepted before has been replaced. A renewed certificate looks exactly like somebody intercepting the connection, and only you can tell which this is. Do not accept it unless you know the server changed.</string>
+    <string name="cert_changed_title">%1$s is not showing the certificate you accepted</string>
+    <string name="cert_changed_detail">A renewed certificate and an intercepted connection look the same from here. Only you know which this is. Do not accept it unless you changed the server yourself.</string>
     <string name="cert_changed_was">Accepted before: %1$s</string>
     <string name="cert_accept_changed">Accept the new certificate</string>
     <string name="fail_certificate">The server\'s certificate could not be verified.</string>
@@ -364,15 +364,15 @@
     <string name="mode_execute">Run</string>
     <string name="mode_result">%1$s  ·  %2$s</string>
     <string name="mode_unknown">The server did not say what the permissions are, so these start from what a new one would get.</string>
-    <string name="mode_special_kept">A special bit (%1$s) is set on this one. It is kept as it is; it cannot be changed here.</string>
+    <string name="mode_special_kept">A special bit (%1$s) is set. It is kept as it is and cannot be changed here.</string>
     <string name="props_link_target">Points to</string>
     <string name="viewing_title">Fetching to open</string>
     <string name="viewing_progress">%1$s of %2$s</string>
     <string name="viewing_progress_unknown">%1$s so far</string>
-    <string name="viewing_read_only_title">Opening is looking, not editing</string>
-    <string name="viewing_read_only_detail">A file opened from a server is a copy kept on this phone. Changes you save in another app stay in that copy — the server keeps what it has. To change a file on the server, download it, change it, and send it back.</string>
+    <string name="viewing_read_only_title">Edits do not reach the server</string>
+    <string name="viewing_read_only_detail">A file opened from a server is a copy kept on this phone. Editing it in another app changes only that copy. To change the file on the server, download it, edit it, and send it back.</string>
     <string name="action_got_it">Got it</string>
     <string name="setting_view_cache">Files kept for opening</string>
-    <string name="setting_view_cache_detail">%1$s in use. These are copies of server files, kept so opening the same one again is instant. They can go at any time.</string>
+    <string name="setting_view_cache_detail">%1$s in use. Copies of server files, kept so opening the same one again is instant. They go when the space is wanted.</string>
     <string name="setting_view_cache_clear">Empty</string>
 </resources>

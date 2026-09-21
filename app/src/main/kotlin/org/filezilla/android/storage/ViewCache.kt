@@ -56,6 +56,39 @@ class ViewCache(
         return File(root, if (extension == null) digest else "$digest.$extension")
     }
 
+    /**
+     * Somewhere to write a copy that is not yet a copy.
+     *
+     * A fetch writes here and is renamed into place only once it has all
+     * arrived, which settles three things at once. A stopped fetch cannot
+     * delete the file a second attempt is writing, because the two have
+     * different names. A fetch killed with the app cannot leave a piece
+     * behind that the next tap opens as though it were whole. And two taps
+     * on the same file cannot write over each other.
+     */
+    fun partialFor(key: Key): File = File(fileFor(key).path + PARTIAL_SUFFIX + "." + java.util.UUID.randomUUID())
+
+    /**
+     * Puts a finished fetch in its place.
+     *
+     * The rename is what makes the file real, and it is one operation: the
+     * name either holds a whole copy or does not exist. The timestamp is
+     * set afterwards because the transfer engine puts the server's
+     * modification time on what it wrote, and this cache orders by when a
+     * file was last *used* -- left alone, an old file fetched a moment ago
+     * would be first in line to be thrown away.
+     */
+    fun finish(partial: File, key: Key): File? {
+        val destination = fileFor(key)
+        destination.delete()
+        if (!partial.renameTo(destination)) {
+            partial.delete()
+            return null
+        }
+        touch(destination)
+        return destination
+    }
+
     /** The copy, if this exact version is already here and whole. */
     fun readyFile(key: Key): File? =
         fileFor(key).takeIf { it.isFile && (key.size < 0 || it.length() == key.size) }
@@ -79,7 +112,10 @@ class ViewCache(
      * fetching it again immediately.
      */
     fun evictDownTo(keep: File? = null) {
-        val files = root.listFiles()?.filter { it.isFile }?.sortedBy { it.lastModified() } ?: return
+        val files = root.listFiles()
+            ?.filter { it.isFile && !it.name.contains(PARTIAL_SUFFIX) }
+            ?.sortedBy { it.lastModified() }
+            ?: return
         var total = files.sumOf { it.length() }
         for (file in files) {
             if (total <= limitBytes) return
@@ -89,7 +125,17 @@ class ViewCache(
         }
     }
 
-    fun totalBytes(): Long = root.listFiles()?.filter { it.isFile }?.sumOf { it.length() } ?: 0
+    /**
+     * How much is held, not counting fetches still running.
+     *
+     * A number shown to somebody has to be about files they could use. A
+     * fetch in flight is on its way to being one or on its way to being
+     * deleted, and either way it is not what "kept for opening" means.
+     */
+    fun totalBytes(): Long = root.listFiles()
+        ?.filter { it.isFile && !it.name.contains(PARTIAL_SUFFIX) }
+        ?.sumOf { it.length() }
+        ?: 0
 
     /** Throws the lot away, for a person who wants their storage back. */
     fun clear() {
@@ -122,5 +168,9 @@ class ViewCache(
          * act on.
          */
         const val DEFAULT_LIMIT_BYTES = 512L * 1024 * 1024
+
+        /** Marks a file that is still arriving. Never a whole copy. */
+        private const val PARTIAL_SUFFIX = ".fetching"
+
     }
 }
