@@ -28,6 +28,7 @@ import org.filezilla.android.archive.ArchiveEntry
 import org.filezilla.android.archive.ArchiveExtract
 import org.filezilla.android.archive.ArchiveWriter
 import org.filezilla.android.archive.Archives
+import org.filezilla.android.archive.RarNative
 import org.filezilla.android.archive.ExtractResult
 import org.filezilla.android.data.SiteEntity
 import org.filezilla.android.files.FileMode
@@ -2046,6 +2047,78 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun runRarExtract(
+        id: PaneId,
+        session: ArchiveSession,
+        picks: Set<String>,
+        password: CharArray?,
+        onDone: () -> Unit,
+    ) {
+        val root = unpackInto(session.file)
+        val stop = java.util.concurrent.atomic.AtomicBoolean(false)
+        val extracting = getApplication<android.app.Application>().getString(R.string.archive_extracting)
+        archiveBusy = ArchiveBusy(extracting, "", 0L, 0L, { stop.set(true) }, bytes = true)
+
+        val covered = if (picks.isEmpty()) null else picks
+        val total = session.entries
+            .filter { !it.isDirectory && (covered == null || it.path in ArchiveBrowsing.expand(session.entries, picks)) }
+            .sumOf { it.size.coerceAtLeast(0) }
+
+        viewModelScope.launch {
+            val outcome = withContext(Dispatchers.IO) {
+                runCatching {
+                    val into = java.io.File(root, freeNameIn(root.path, Archives.folderNameFor(session.name)))
+                    into.mkdirs()
+                    val result = RarNative.extract(
+                        session.file, into,
+                        covered?.let { ArchiveBrowsing.expand(session.entries, it) },
+                        password, total,
+                        object : RarNative.Sink {
+                            override fun entry(name: String, size: Long, isDirectory: Boolean, modifiedMillis: Long, encrypted: Boolean) = Unit
+                            override fun progress(doneBytes: Long, totalBytes: Long, name: String) {
+                                archiveBusy = archiveBusy?.copy(done = doneBytes, total = totalBytes, path = name)
+                            }
+                            override fun cancelled() = stop.get()
+                        },
+                    )
+                    result to into
+                }
+            }
+            archiveBusy = null
+
+            outcome.onSuccess { (result, into) ->
+                when (result) {
+                    RarNative.Result.WRONG_PASSWORD -> {
+                        runCatching { into.deleteRecursively() }
+                        pendingPassword = PendingPassword.Extract(id, session, picks)
+                        archivePasswordAsked = true
+                        archivePasswordWrong = true
+                        return@onSuccess
+                    }
+                    RarNative.Result.CANCELLED -> {
+                        archivePasswordWrong = false
+                        val written = into.walkTopDown().count { it.isFile }
+                        archiveOutcome = ArchiveOutcome(R.string.archive_extract_stopped, listOf(written))
+                    }
+                    else -> {
+                        archivePasswordWrong = false
+                        val written = into.walkTopDown().count { it.isFile }
+                        archiveOutcome = when {
+                            written == 0 -> ArchiveOutcome(R.string.archive_extract_none)
+                            result == RarNative.Result.FAILED ->
+                                ArchiveOutcome(R.string.archive_extracted_some, listOf(written, 0))
+                            else -> ArchiveOutcome(R.string.archive_extracted, listOf(written, into.name))
+                        }
+                    }
+                }
+                relistLocalPanes()
+                onDone()
+            }.onFailure {
+                archiveOutcome = ArchiveOutcome(R.string.archive_not_readable)
+            }
+        }
+    }
+
     private fun runExtract(
         id: PaneId,
         session: ArchiveSession,
@@ -2053,6 +2126,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         password: CharArray?,
         onDone: () -> Unit = {},
     ) {
+        // RAR is unpacked by the native reader in one call rather than
+        // entry by entry: a solid archive would otherwise decompress
+        // everything before it once per file. It reports and stops the
+        // same way, so the bar and the stop button are unchanged.
+        if (Archives.kindOf(session.file) == Archives.Kind.RAR) {
+            runRarExtract(id, session, picks, password, onDone)
+            return
+        }
         val root = unpackInto(session.file)
         val stop = java.util.concurrent.atomic.AtomicBoolean(false)
         val extracting = getApplication<android.app.Application>().getString(R.string.archive_extracting)

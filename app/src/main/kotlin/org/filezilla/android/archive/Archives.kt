@@ -18,6 +18,7 @@ object Archives {
         ZIP(listOf("zip")),
         ALZ(listOf("alz")),
         EGG(listOf("egg")),
+        RAR(listOf("rar")),
     }
 
     /**
@@ -27,6 +28,7 @@ object Archives {
         ZipArchive.looksLikeZip(file) -> Kind.ZIP
         AlzArchive.looksLikeAlz(file) -> Kind.ALZ
         EggArchive.looksLikeEgg(file) -> Kind.EGG
+        RarArchive.looksLikeRar(file) && RarNative.available -> Kind.RAR
         else -> null
     }
 
@@ -46,6 +48,7 @@ object Archives {
         Kind.ZIP -> ZipArchive.open(file)
         Kind.ALZ -> AlzArchive.open(file)
         Kind.EGG -> EggArchive.open(file)
+        Kind.RAR -> RarArchive.open(file)
         null -> throw NotAnArchive("${file.name} is not an archive this app reads")
     }
 

@@ -38,3 +38,13 @@
 # says "a.b.c". Names only: these still get shrunk away if nothing throws
 # them, and the platform's own exceptions were never renamed anyway.
 -keepnames class * extends java.lang.Throwable
+
+# The RAR bridge is called across JNI by name: the native library resolves
+# Java_..._RarNative_nativeList and friends by their exact names, and the
+# native code looks up Sink's methods with GetMethodID. R8 renaming any of
+# them turns into an UnsatisfiedLinkError or a missing-method crash at run
+# time, only in release. So the bridge and its callback interface are kept
+# whole.
+-keep class org.filezilla.android.archive.RarNative { *; }
+-keep interface org.filezilla.android.archive.RarNative$Sink { *; }
+-keepclassmembers class * implements org.filezilla.android.archive.RarNative$Sink { *; }

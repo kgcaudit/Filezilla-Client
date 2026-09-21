@@ -65,11 +65,23 @@ val keystoreFile = keystoreProperties.getProperty("storeFile")
 android {
     namespace = "org.filezilla.android"
     compileSdk = 35
+    ndkVersion = "27.0.12077973"
 
     defaultConfig {
         applicationId = "org.filezilla.android"
         minSdk = 26
         targetSdk = 35
+        // RAR reading is native (the reference UnRAR decoder); arm64 only,
+        // which is every phone this app is put on. A 32-bit-only device
+        // would open everything but rar.
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
+        externalNativeBuild {
+            cmake {
+                arguments += "-DANDROID_STL=c++_static"
+            }
+        }
         // The commit count: it only ever goes up, and it goes up by itself.
         // Android refuses to install a lower one over a higher one, which
         // is the behaviour wanted -- an older build should not quietly
@@ -116,6 +128,13 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     buildFeatures {
