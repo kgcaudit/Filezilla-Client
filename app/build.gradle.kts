@@ -1,3 +1,4 @@
+import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -34,6 +35,33 @@ val commitCount = git("rev-list", "--count", "HEAD")?.toIntOrNull() ?: 0
 val commitHash = git("rev-parse", "--short", "HEAD") ?: "unknown"
 val workingTreeDirty = git("status", "--porcelain")?.isNotEmpty() == true
 
+/**
+ * The signing key, when whoever is building has it.
+ *
+ * Android installs a build over another only when the two signatures
+ * match, so the key is what makes an upgrade an upgrade rather than an
+ * uninstall. Left to itself the debug build uses a key Android generates
+ * per machine and keeps in a home directory: fine for one build, and
+ * useless the moment the machine changes, because every phone with the app
+ * on it then has to uninstall -- taking its saved servers, their passwords
+ * and the transfer journal with it.
+ *
+ * So the key is named in `keystore.properties`, which is not in the
+ * repository and neither is the key: a key in a repository is a key anyone
+ * with the repository can sign as this app with. See the .example beside
+ * it.
+ *
+ * Absent, the build carries on unsigned rather than failing. A checkout
+ * that only wants to run the tests should not need a key at all.
+ */
+val keystoreProperties = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.isFile) file.inputStream().use { load(it) }
+}
+val keystoreFile = keystoreProperties.getProperty("storeFile")
+    ?.let { rootProject.file(it) }
+    ?.takeIf { it.isFile }
+
 android {
     namespace = "org.filezilla.android"
     compileSdk = 35
@@ -54,8 +82,28 @@ android {
         versionName = "0.1.$commitCount ($commitHash${if (workingTreeDirty) "+" else ""})"
     }
 
+    signingConfigs {
+        if (keystoreFile != null) {
+            create("olo") {
+                storeFile = keystoreFile
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
+        // Both build types, deliberately. The phone is handed debug builds
+        // while this is being worked on and would be handed release ones
+        // later, and if those carry different signatures the switch costs
+        // an uninstall -- which is the thing the key exists to avoid.
+        val olo = signingConfigs.findByName("olo")
+        debug {
+            olo?.let { signingConfig = it }
+        }
         release {
+            olo?.let { signingConfig = it }
             // No shrinking yet: the engine is reached reflection-free, but the
             // release build is not part of any phase that has been verified,
             // and shipping an untested shrink configuration would be worse

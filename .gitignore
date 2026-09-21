@@ -16,6 +16,21 @@ local.properties
 *.aab
 .cxx/
 
+# The signing key and its password.
+#
+# Every build of this app is signed with one key, and Android will only
+# install a build over another if the two signatures match -- so losing it
+# means every phone with this app on it has to uninstall, and uninstalling
+# takes the saved servers, their passwords and the transfer journal with
+# it. It is kept by the person who owns the app, not in the repository:
+# a key in a repository is a key that anyone with the repository can sign
+# as this app with.
+#
+# See keystore.properties.example.
+*.jks
+*.keystore
+keystore.properties
+
 # IDE
 .idea/
 *.iml
