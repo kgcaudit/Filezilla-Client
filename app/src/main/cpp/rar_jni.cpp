@@ -167,6 +167,7 @@ Java_org_filezilla_android_archive_RarNative_nativeList(
 
     jclass sinkClass = env->GetObjectClass(sink);
     jmethodID entry = env->GetMethodID(sinkClass, "entry", "(Ljava/lang/String;JZJZ)V");
+    if (entry == nullptr) { env->ExceptionClear(); RARCloseArchive(h); return -100; }
 
     RARHeaderDataEx header;
     int result;
@@ -215,6 +216,7 @@ Java_org_filezilla_android_archive_RarNative_nativeExtract(
     jclass sinkClass = env->GetObjectClass(sink);
     st.onProgress = env->GetMethodID(sinkClass, "progress", "(JJLjava/lang/String;)V");
     st.isCancelled = env->GetMethodID(sinkClass, "cancelled", "()Z");
+    if (st.onProgress == nullptr || st.isCancelled == nullptr) { env->ExceptionClear(); return -100; }
     st.doneBytes = 0;
     st.totalBytes = jtotalBytes;
     st.cancelled = false;
@@ -241,7 +243,9 @@ Java_org_filezilla_android_archive_RarNative_nativeExtract(
     RARHeaderDataEx header;
     int result;
     jint outcome = 0;
-    while ((result = RARReadHeaderEx(h, &header)) == ERAR_SUCCESS) {
+    for (memset(&header, 0, sizeof(header));
+         (result = RARReadHeaderEx(h, &header)) == ERAR_SUCCESS;
+         memset(&header, 0, sizeof(header))) {
         std::string name = header.FileName;
         for (auto& c : name) if (c == '\\') c = '/';
         bool take = !(header.Flags & RHDF_DIRECTORY) && wantsEntry(name, picks);
