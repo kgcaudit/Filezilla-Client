@@ -104,11 +104,12 @@ android {
         }
         release {
             olo?.let { signingConfig = it }
-            // No shrinking yet: the engine is reached reflection-free, but the
-            // release build is not part of any phase that has been verified,
-            // and shipping an untested shrink configuration would be worse
-            // than shipping none.
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 
