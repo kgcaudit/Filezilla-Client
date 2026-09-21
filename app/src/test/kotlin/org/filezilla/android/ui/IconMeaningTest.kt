@@ -88,16 +88,17 @@ class IconMeaningTest {
         // Taking something out for good.
         "Cancel" to setOf("queue_remove"),
         "Delete" to setOf("action_delete_selected", "sites_delete"),
-        // Clearing a list of what is finished with.
-        "DeleteSweep" to setOf("log_clear", "queue_clear_finished"),
-        // Making transfers go, whether from a stop or from the start.
-        "PlayArrow" to setOf("queue_resume", "queue_start"),
-        "Pause" to setOf("queue_pause"),
+        // Clearing a list of what is finished with. The transfer list says
+        // this in words now -- three kinds of clearing no three pictures
+        // would tell apart -- so the broom is the log screen's alone.
+        "DeleteSweep" to setOf("log_clear"),
+        // Making transfers go, whether one of them or all of them.
+        "PlayArrow" to setOf("queue_resume", "queue_start_all"),
+        "Pause" to setOf("queue_pause", "queue_pause_all"),
         "Refresh" to setOf("queue_retry_now", "browse_refresh"),
         // A menu of choices. Not the settings sheet, which is a gear: a ⋮
         // that opens a panel with one switch in it is a promise unkept.
         "MoreVert" to setOf("browse_more", "menu_more"),
-        "Settings" to setOf("queue_settings"),
         // Chosen: a row, an option, either way the same idea.
         "Check" to setOf("browse_select", "chosen"),
         // Renaming a file and editing a server are the same act on
@@ -158,23 +159,32 @@ class IconMeaningTest {
     fun `the transfer list's buttons say what they do`() {
         val byAction = pairings().associate { (glyph, name) -> name to glyph }
 
-        assertEquals(
-            "clearing the finished rows is not a list",
-            "DeleteSweep",
-            byAction["queue_clear_finished"],
-        )
-        assertEquals("clearing the log is the same verb", "DeleteSweep", byAction["log_clear"])
-        assertEquals("starting is not sorting", "PlayArrow", byAction["queue_start"])
+        assertEquals("clearing the log is not a list", "DeleteSweep", byAction["log_clear"])
+        assertEquals("starting is not sorting", "PlayArrow", byAction["queue_start_all"])
+        assertEquals("stopping everything is the pause glyph", "Pause", byAction["queue_pause_all"])
         assertEquals(
             "taking a transfer out of the queue is not a closing",
             "Cancel",
             byAction["queue_remove"],
         )
-        assertEquals(
-            "a menu icon for a panel with one switch in it",
-            "Settings",
-            byAction["queue_settings"],
-        )
+    }
+
+    /**
+     * The tidying actions are words, and stay words.
+     *
+     * Three kinds of clearing -- the finished ones, the failed ones, the
+     * whole list -- are three different acts that no three pictures would
+     * tell apart. The old bar tried, with a broom, and the user could not
+     * read it. A glyph appearing against any of them means somebody went
+     * back to guessing.
+     */
+    @Test
+    fun `emptying the transfer list is said in words`() {
+        val byAction = pairings().associate { (glyph, name) -> name to glyph }
+
+        for (named in listOf("queue_clear_finished", "queue_clear_failed", "queue_clear_all")) {
+            assertEquals("$named was given an icon", null, byAction[named])
+        }
     }
 
     /** And the scan is really reading the app, or the above passes on nothing. */

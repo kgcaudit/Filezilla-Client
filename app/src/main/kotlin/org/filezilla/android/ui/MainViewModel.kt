@@ -2020,6 +2020,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearCompleted() = viewModelScope.launch { graph.transfers.clearCompleted() }.let { }
 
+    fun pauseAll() = viewModelScope.launch { graph.transfers.pauseAll() }.let { }
+
+    /**
+     * Sets everything outstanding going again.
+     *
+     * [onReady] runs once the journal has been written, and starts the
+     * service. Ordered, because a service that drains the queue before the
+     * records say PENDING drains an empty one and stops.
+     */
+    fun startAll(onReady: () -> Unit) = viewModelScope.launch {
+        graph.transfers.startAll()
+        onReady()
+    }.let { }
+
+    fun clearFailed() = viewModelScope.launch { graph.transfers.clearFailed() }.let { }
+
+    fun clearAllTransfers() = viewModelScope.launch { graph.transfers.clearAll() }.let { }
+
     fun clearLog() = graph.log.clear()
 
     /**

@@ -151,7 +151,6 @@
     <string name="queue_still_waiting_wifi">Still on mobile data; it will continue when Wi‑Fi is back</string>
     <string name="queue_remove">Remove from list</string>
     <string name="queue_clear_finished">Remove finished</string>
-    <string name="queue_start">Start the queue</string>
     <string name="queue_settings">Transfer settings</string>
     <string name="setting_wifi_only">Wi‑Fi only</string>
     <string name="setting_wifi_only_detail">Pause on mobile data, continue on Wi‑Fi</string>
@@ -323,4 +322,12 @@
     <string name="action_create">Create</string>
     <string name="action_change">Change</string>
     <string name="browse_open_with">Open with…</string>
+
+    <string name="queue_pause_all">Pause everything</string>
+    <string name="queue_start_all">Start everything</string>
+    <string name="queue_clear_failed">Remove the failed ones</string>
+    <string name="queue_clear_all">Empty the list</string>
+    <string name="queue_clear_all_title">Empty the transfer list?</string>
+    <string name="queue_clear_all_detail">Transfers still running are stopped, and what they had already fetched is thrown away. Files already saved are not touched.</string>
+    <string name="queue_clear_all_confirm">Empty</string>
 </resources>

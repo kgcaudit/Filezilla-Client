@@ -942,6 +942,66 @@ class TransferManager(
         Unit
     }
 
+    /**
+     * Stops everything that is going, and holds it.
+     *
+     * One at a time through [pause], deliberately: a running transfer
+     * cannot simply be marked PAUSED -- the copy JournalledTransfer holds
+     * is written back every megabyte and would put the record straight
+     * back -- and pause already knows that. Doing it again in bulk here
+     * would be a second implementation of the awkward part.
+     */
+    suspend fun pauseAll() = withContext(io) {
+        for (record in journal.all()) {
+            if (record.state == TransferState.RUNNING ||
+                record.state == TransferState.PENDING ||
+                record.state == TransferState.INTERRUPTED ||
+                record.state == TransferState.WAITING_FOR_NETWORK
+            ) {
+                pause(record.id)
+            }
+        }
+    }
+
+    /**
+     * Puts everything outstanding back on its feet.
+     *
+     * Failures included, and that is the point: [resume] gives a record a
+     * fresh retry budget, so this is the one action that can set a list of
+     * nothing but failures going again. Starting the service is the
+     * caller's job -- it needs a context, and this layer has none.
+     */
+    suspend fun startAll() = withContext(io) {
+        for (record in journal.all()) {
+            if (record.state == TransferState.PAUSED ||
+                record.state == TransferState.FAILED ||
+                record.state == TransferState.INTERRUPTED ||
+                record.state == TransferState.WAITING_FOR_NETWORK
+            ) {
+                resume(record.id)
+            }
+        }
+    }
+
+    /** Takes the failures out of the list. Their partial bytes go with them. */
+    suspend fun clearFailed() = withContext(io) {
+        for (record in journal.all().filter { it.state == TransferState.FAILED }) {
+            journal.remove(record.id)
+            partials.delete(record.id)
+        }
+    }
+
+    /**
+     * Empties the list, stopping whatever is running on the way.
+     *
+     * Through [cancel] for the same reason pauseAll goes through pause:
+     * a running transfer throws itself away as it unwinds, and the journal
+     * cannot simply be emptied underneath it.
+     */
+    suspend fun clearAll() = withContext(io) {
+        for (record in journal.all()) cancel(record.id)
+    }
+
     suspend fun clearCompleted() = withContext(io) {
         val completed = journal.all().filter { it.state == TransferState.COMPLETED }
         for (record in completed) {

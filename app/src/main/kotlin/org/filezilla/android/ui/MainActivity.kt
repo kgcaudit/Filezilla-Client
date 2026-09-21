@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -112,7 +112,8 @@ private fun AppScreen(
             openAt.value = null
         }
     }
-    var queueMenuOpen by remember { mutableStateOf(false) }
+    var queueSettingsOpen by remember { mutableStateOf(false) }
+    var emptyingQueue by remember { mutableStateOf(false) }
     // The file waiting on a decision about which app opens it, and whether
     // the remembered choice counts. "Open with" is the way back from a
     // choice made once, so it has to ignore it.
@@ -361,39 +362,42 @@ private fun AppScreen(
                     actions = {
                         when (screen) {
                             Screen.QUEUE -> {
-                            // A broom, not a list. This removes the
-                            // finished rows, and a plain list icon read as
-                            // "show the list" -- on a screen that is
-                            // already the list -- for something that
-                            // cannot be undone.
-                            IconButton(onClick = { model.clearCompleted() }) {
-                                Icon(
-                                    Icons.Filled.DeleteSweep,
-                                    contentDescription = stringResource(R.string.queue_clear_finished),
-                                )
+                            // Two families, two slots. Running the queue is
+                            // one thing at a time, so it is one button
+                            // whose face says which; tidying it is several
+                            // things that each need a word rather than a
+                            // glyph, so they are a menu. See QueueActions.
+                            val queue = queueActionsFor(transfers)
+                            if (queue.canPause) {
+                                IconButton(onClick = { model.pauseAll() }) {
+                                    Icon(
+                                        Icons.Filled.Pause,
+                                        contentDescription = stringResource(R.string.queue_pause_all),
+                                    )
+                                }
+                            } else if (queue.canStart) {
+                                // The same arrow as a card's "resume",
+                                // because it is the same idea: make the
+                                // transfers go.
+                                IconButton(
+                                    onClick = {
+                                        requestNotifications()
+                                        model.startAll { TransferService.start(context) }
+                                    },
+                                ) {
+                                    Icon(
+                                        Icons.Filled.PlayArrow,
+                                        contentDescription = stringResource(R.string.queue_start_all),
+                                    )
+                                }
                             }
-                            // The same arrow as a card's "resume", because
-                            // it is the same idea: make the transfers go.
-                            // It was SwapVert, which is Material's glyph for
-                            // sorting and has nothing to do with starting.
-                            IconButton(onClick = { TransferService.start(context) }) {
-                                Icon(
-                                    Icons.Filled.PlayArrow,
-                                    contentDescription = stringResource(R.string.queue_start),
-                                )
-                            }
-                            // A gear, because this opens the settings
-                            // sheet and nothing else. A ⋮ promises a menu
-                            // of choices, and pressing it produced a panel
-                            // with one switch in it -- so the button was
-                            // the third on this bar whose picture and job
-                            // did not match.
-                            IconButton(onClick = { queueMenuOpen = true }) {
-                                Icon(
-                                    Icons.Filled.Settings,
-                                    contentDescription = stringResource(R.string.queue_settings),
-                                )
-                            }
+                            QueueOverflow(
+                                actions = queue,
+                                onClearFinished = model::clearCompleted,
+                                onClearFailed = model::clearFailed,
+                                onClearAll = { emptyingQueue = true },
+                                onSettings = { queueSettingsOpen = true },
+                            )
                         }
                         // The same broom as above: one glyph for one verb,
                         // wherever it is. These were both the list icon,
@@ -595,11 +599,26 @@ private fun AppScreen(
         }
     }
 
-    if (queueMenuOpen) {
+    if (queueSettingsOpen) {
         QueueSettingsSheet(
             wifiOnly = model.wifiOnly,
             onWifiOnly = model::applyWifiOnly,
-            onDismiss = { queueMenuOpen = false },
+            onDismiss = { queueSettingsOpen = false },
+        )
+    }
+
+    if (emptyingQueue) {
+        // Asked, because it reaches the transfers that are still running
+        // and the partial bytes they have already paid for.
+        OloConfirmDialog(
+            title = stringResource(R.string.queue_clear_all_title),
+            detail = stringResource(R.string.queue_clear_all_detail),
+            confirmLabel = stringResource(R.string.queue_clear_all_confirm),
+            onDismiss = { emptyingQueue = false },
+            onConfirm = {
+                model.clearAllTransfers()
+                emptyingQueue = false
+            },
         )
     }
 

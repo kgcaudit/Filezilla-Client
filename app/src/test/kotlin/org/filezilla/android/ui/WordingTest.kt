@@ -129,7 +129,12 @@ class WordingTest {
             // One word, one meaning, and it has to be the same word or the
             // two controls would claim to mean different things.
             "chosen",
-            "menu_filter", "new_folder_detail", "new_folder_title", "pane_no_source",
+            "menu_filter",
+            // Every ⋮ in the app is read out the same way. There are three
+            // now -- a file row, a pane, the transfer list -- and they are
+            // one control, so they are one word.
+            "menu_more",
+            "new_folder_detail", "new_folder_title", "pane_no_source",
             // The button that opens the transfer settings and the heading of
             // the sheet it opens: one name for one place, said twice on
             // purpose so the sheet answers the button.
