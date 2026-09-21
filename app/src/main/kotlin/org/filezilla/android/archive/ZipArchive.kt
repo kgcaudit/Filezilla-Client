@@ -76,6 +76,14 @@ class ZipArchive private constructor(
         private const val LOCAL_FILE_HEADER = 0x04034B50
         private const val CENTRAL_FILE_HEADER = 0x02014B50
         private const val END_OF_CENTRAL_DIRECTORY = 0x06054B50
+        private const val ZIP64_END_RECORD = 0x06064B50
+        private const val ZIP64_LOCATOR = 0x07064B50
+
+        /** The zip64 locator is a fixed 20 bytes; its bytes 8..15 are the record's offset. */
+        private const val ZIP64_LOCATOR_LENGTH = 20
+
+        /** Enough of the zip64 end record to reach the count (byte 32) and offset (byte 48). */
+        private const val ZIP64_END_LENGTH = 56
         private const val LOCAL_HEADER_LENGTH = 30
         private const val CENTRAL_HEADER_LENGTH = 46
 
@@ -147,8 +155,30 @@ class ZipArchive private constructor(
             }
             if (end < 0) throw NotAnArchive("no end-of-central-directory record")
 
-            val count = tail.shortAt(end + 10)
-            val start = tail.intAt(end + 16).toLong() and 0xFFFFFFFFL
+            var count = tail.shortAt(end + 10)
+            var start = tail.intAt(end + 16).toLong() and 0xFFFFFFFFL
+
+            // A zip over four gigabytes -- or one a tool chose to write in
+            // the newer form -- puts 0xFFFF and 0xFFFFFFFF here and the
+            // real figures in the zip64 end record. Its locator sits just
+            // before this record and points at it. Without this the
+            // placeholder reads as an offset past the end of the file, and
+            // a big comic zip opens onto nothing.
+            if (count == 0xFFFF || start == NEEDS_ZIP64) {
+                val locator = end - ZIP64_LOCATOR_LENGTH
+                if (locator >= 0 && tail.intAt(locator) == ZIP64_LOCATOR) {
+                    val z64 = tail.longAt(locator + 8)
+                    val header = ByteArray(ZIP64_END_LENGTH)
+                    if (z64 >= 0 && z64 + ZIP64_END_LENGTH <= length) {
+                        raw.seek(z64)
+                        raw.readFully(header)
+                        if (header.intAt(0) == ZIP64_END_RECORD) {
+                            count = header.longAt(32).toInt()
+                            start = header.longAt(48)
+                        }
+                    }
+                }
+            }
             if (start >= length) throw NotAnArchive("the central directory is outside the file")
 
             val entries = mutableListOf<ArchiveEntry>()

@@ -48,3 +48,43 @@ if __name__ == "__main__":
     for f in ("korean_cp949.zip", "korean_utf8.zip", "plain.zip"):
         raw = open(f"{out}/{f}", "rb").read()
         print(f"  {f}: {len(raw)} bytes, UTF-8 flag {'on' if struct.unpack('<H', raw[6:8])[0] & 0x800 else 'off'}")
+
+
+def make_zip64():
+    """A hand-built Zip64 archive: the tail a zip over 4 GB has, without
+    the gigabytes. The ordinary end record carries the 0xFFFFFFFF
+    placeholder for the central-directory offset, and the real offset is
+    in the Zip64 end record that the locator points at. A reader that
+    stops at the ordinary record reads the placeholder as an offset and
+    calls the central directory out of bounds -- a big comic zip that
+    opened onto nothing."""
+    import struct, zlib
+    name = b'page.txt'
+    content = b'hello from a zip64 archive\n' * 3
+    packer = zlib.compressobj(9, zlib.DEFLATED, -15)
+    data = packer.compress(content) + packer.flush()
+    crc = zlib.crc32(content) & 0xFFFFFFFF
+
+    out = bytearray()
+    lfh_off = len(out)
+    out += struct.pack('<IHHHHHIIIHH', 0x04034B50, 20, 0, 8, 0, 0,
+                       crc, len(data), len(content), len(name), 0)
+    out += name + data
+
+    cd_off = len(out)
+    out += struct.pack('<IHHHHHHIIIHHHHHII', 0x02014B50, 20, 20, 0, 8, 0, 0,
+                       crc, len(data), len(content), len(name), 0, 0, 0, 0, 0, lfh_off)
+    out += name
+    cd_size = len(out) - cd_off
+
+    z64 = len(out)
+    out += struct.pack('<IQHHIIQQQQ', 0x06064B50, 44, 45, 45, 0, 0, 1, 1, cd_size, cd_off)
+    out += struct.pack('<IIQI', 0x07064B50, 0, z64, 1)
+    out += struct.pack('<IHHHHIIH', 0x06054B50, 0, 0, 0xFFFF, 0xFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0)
+
+    with open('zip64.zip', 'wb') as handle:
+        handle.write(out)
+    print('zip64.zip  %d bytes' % len(out))
+
+
+make_zip64()

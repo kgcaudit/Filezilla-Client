@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -381,4 +382,39 @@ fun ArchiveWorkDialog(busy: ArchiveBusy) {
             TextButton(onClick = busy.onStop) { Text(stringResource(R.string.action_stop)) }
         },
     )
+}
+
+
+/**
+ * The wait while an archive's index is read.
+ *
+ * Not dismissable and with no button: it is gone the instant the list is
+ * ready or the failure is shown, and a cancel here would race the open
+ * for no gain -- reading an index is quick even when it is not instant.
+ */
+@Composable
+fun ArchiveOpeningDialog(name: String) {
+    Dialog(onDismissRequest = {}) {
+        Surface(
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Row(
+                modifier = Modifier.padding(24.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 3.dp,
+                )
+                Text(
+                    stringResource(R.string.archive_opening, name),
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = 16.dp),
+                )
+            }
+        }
+    }
 }

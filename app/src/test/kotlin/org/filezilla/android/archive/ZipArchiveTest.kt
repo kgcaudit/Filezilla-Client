@@ -26,6 +26,24 @@ class ZipArchiveTest {
         archive.open(archive.entries.first { it.path == path }).use { String(it.readBytes()) }
 
     @Test
+    fun `a zip64 archive opens through its zip64 end record`() {
+        // The tail a zip over four gigabytes has: the ordinary end record
+        // carries 0xFFFFFFFF where the central directory offset would be,
+        // and the real offset is in the zip64 end record the locator
+        // points at. A reader that stops at the ordinary record reads the
+        // placeholder as an offset and calls the central directory
+        // out-of-bounds -- which is the tap on a big comic zip that showed
+        // nothing.
+        ZipArchive.open(fixture("zip64.zip")).use { zip ->
+            assertEquals(listOf("page.txt"), zip.entries.map { it.path })
+            assertEquals(
+                "hello from a zip64 archive\n".repeat(3),
+                contents(zip, "page.txt"),
+            )
+        }
+    }
+
+    @Test
     fun `a zip is recognised by its first four bytes`() {
         assertTrue(ZipArchive.looksLikeZip(fixture("plain.zip")))
         assertFalse(ZipArchive.looksLikeZip(fixture("plain.alz")))

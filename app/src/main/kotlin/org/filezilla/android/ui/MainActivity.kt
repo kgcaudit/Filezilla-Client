@@ -810,6 +810,11 @@ private fun AppScreen(
         model.archiveBusy?.let { busy -> ArchiveWorkDialog(busy) }
     }
 
+    // While an archive's index is being read. A large one on slow storage
+    // takes a moment, and without this a tap on it shows nothing until it
+    // is done -- which reads as a tap that did nothing.
+    model.archiveOpening?.let { name -> ArchiveOpeningDialog(name) }
+
     model.archiveOutcome?.let { outcome ->
         LaunchedEffect(outcome) {
             model.archiveOutcomeShown()

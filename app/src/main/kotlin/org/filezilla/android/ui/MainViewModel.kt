@@ -1720,6 +1720,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var archiveBusy by mutableStateOf<ArchiveBusy?>(null)
         private set
 
+    /**
+     * The name of an archive being opened, while its index is read.
+     *
+     * Reading the index is usually instant, but a large archive on slow
+     * storage is not, and a tap that shows nothing for two seconds looks
+     * like a tap that did nothing. So this is set the moment the tap
+     * lands, on the same frame, and a spinner rides on it.
+     */
+    var archiveOpening by mutableStateOf<String?>(null)
+        private set
+
     var archiveOutcome by mutableStateOf<ArchiveOutcome?>(null)
         private set
 
@@ -1758,16 +1769,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * of this app already follows.
      */
     fun openArchive(file: java.io.File, into: java.io.File) {
+        // Set here rather than inside the coroutine, so the spinner is up
+        // on the frame the tap lands rather than after the read.
+        archiveOpening = file.name
         viewModelScope.launch {
             val opened = withContext(Dispatchers.IO) {
                 runCatching { Archives.open(file).use { it.entries } }
             }
+            archiveOpening = null
             opened.onSuccess { entries ->
                 archiveFile = file
                 archiveInto = into
                 archive = ArchiveView(name = file.name, entries = entries)
-            }.onFailure {
-                archiveOutcome = ArchiveOutcome(R.string.archive_not_readable)
+            }.onFailure { failure ->
+                // The reason, not a bare "cannot read": a truncated
+                // download, an unsupported variant and a file that is not
+                // an archive at all are different problems, and the one
+                // word that tells them apart is the exception's own.
+                archiveOutcome = ArchiveOutcome(
+                    R.string.archive_open_failed,
+                    listOf(file.name, failure.message ?: failure.javaClass.simpleName),
+                )
             }
         }
     }

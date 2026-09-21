@@ -405,4 +405,6 @@
     <string name="archive_compressed">Made %1$s from %2$d files</string>
     <string name="archive_compress_stopped">Stopped; %1$s is unfinished</string>
     <string name="archive_open">Open</string>
+    <string name="archive_opening">Opening %1$s…</string>
+    <string name="archive_open_failed">Could not open %1$s: %2$s</string>
 </resources>
