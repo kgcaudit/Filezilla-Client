@@ -1,6 +1,9 @@
 package org.filezilla.android.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -60,7 +63,12 @@ fun OpenWithSheet(
         title = stringResource(R.string.open_with_title),
         onDismiss = onDismiss,
         content = {
-            Column {
+            // Bounded, and the list is the only part that gives. The fixed
+            // rows under it -- the box that says "always" and the way to
+            // look further -- are measured first and keep their space;
+            // whatever is left is the list's. Capped only, so three apps
+            // make a short dialog rather than a tall one with a gap.
+            Column(modifier = Modifier.heightIn(max = 420.dp)) {
                 Text(
                     fileName,
                     style = MaterialTheme.typography.bodySmall,
@@ -77,6 +85,17 @@ fun OpenWithSheet(
                         modifier = Modifier.padding(vertical = 8.dp),
                     )
                 } else {
+                    // Scrolled, and capped. A dialog's height is clamped by
+                    // the screen, and a phone that offers ten apps pushed
+                    // the box that says "always" and the way to look
+                    // further right off the bottom, where neither could be
+                    // reached at all. Only the list scrolls; the two things
+                    // underneath stay put.
+                    Column(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
                     for (candidate in candidates) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -94,6 +113,7 @@ fun OpenWithSheet(
                             )
                         }
                         HorizontalDivider()
+                    }
                     }
 
                     // Only where there is an extension to remember it

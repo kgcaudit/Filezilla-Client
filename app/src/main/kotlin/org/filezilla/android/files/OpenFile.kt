@@ -88,21 +88,32 @@ object OpenFile {
     }
 
     /**
-     * Who can open a file called [fileName], most specific offer first.
+     * Who can open a file called [fileName].
      *
-     * Pure, so the order and the de-duplication can be tested exactly;
-     * [offering] is where the package manager goes. An app found under two
-     * types is listed once, under the most specific of them, so the obvious
-     * answer is the first row rather than an also-ran behind a wildcard.
+     * Widening stops at the first question that gets an answer. That is the
+     * point of widening: it is what you do *because* nothing was found, not
+     * a net to drag everything up in. Asked all three ways regardless, an
+     * `.apk` -- which exactly one app on the phone installs -- came back
+     * with the installer, a certificate wizard, Chrome, an HTML viewer,
+     * Photos, Gmail twice, Google and PASS, because the last question was
+     * "anything at all?" and nine apps said yes.
+     *
+     * One row per app, not per activity. Gmail appeared twice because it
+     * declares two, and to the person reading the list that is one app
+     * offered twice with no way to tell the rows apart.
+     *
+     * Pure, so both of those can be tested exactly; [offering] is where the
+     * package manager goes.
      */
     fun candidatesFor(fileName: String, offering: AppsOffering): List<Candidate> {
-        val found = LinkedHashMap<ComponentName, Candidate>()
         for (type in typesToAsk(fileName)) {
+            val found = LinkedHashMap<String, Candidate>()
             for (candidate in offering.forType(type)) {
-                found.getOrPut(candidate.component) { candidate.copy(type = type) }
+                found.getOrPut(candidate.component.packageName) { candidate.copy(type = type) }
             }
+            if (found.isNotEmpty()) return found.values.toList()
         }
-        return found.values.toList()
+        return emptyList()
     }
 
     /**

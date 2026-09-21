@@ -1,11 +1,16 @@
 package org.filezilla.android.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -14,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.filezilla.android.R
 import org.filezilla.android.storage.ConflictChoice
@@ -38,8 +44,19 @@ fun ConflictDialog(
         content = {
             Column(
                 // Capped so a long list scrolls inside the dialog instead of
-                // pushing the buttons off the screen.
-                modifier = Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
+                // pushing the buttons off the screen -- but only when there
+                // is a list. One file is four short lines, and the cap was
+                // cutting the last of them in half: the line that says
+                // whether the two are the same file, which is the one the
+                // choice below actually turns on.
+                modifier = Modifier
+                    .then(
+                        if (conflicts.size == 1) {
+                            Modifier
+                        } else {
+                            Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())
+                        },
+                    ),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 // One file gets the full comparison, which is what makes the
@@ -75,22 +92,38 @@ fun ConflictDialog(
         dismissLabel = null,
         action = {
             // Three choices do not fit across a dialog in Korean, so they
-            // stack. Keep-both is first because it is the only one that
-            // cannot lose a file.
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.End,
-            ) {
-                TextButton(onClick = { onChoose(ConflictChoice.KEEP_BOTH) }) {
-                    Text(stringResource(R.string.conflict_keep_both))
-                }
-                TextButton(onClick = { onChoose(ConflictChoice.OVERWRITE) }) {
-                    Text(stringResource(R.string.conflict_overwrite))
-                }
-                TextButton(onClick = { onChoose(ConflictChoice.SKIP) }) {
-                    Text(stringResource(R.string.conflict_skip))
-                }
-                TextButton(onClick = onDismiss) {
+            // stack. They were four identical clay words flush right, and
+            // one of them replaces a file that cannot be got back -- which
+            // looked exactly like the one that does nothing.
+            //
+            // Full width, each with a line under it saying what it does to
+            // the file, and the destructive one in the danger colour. Read
+            // top to bottom the order is safest first.
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Choice(
+                    label = R.string.conflict_keep_both,
+                    detail = R.string.conflict_keep_both_detail,
+                    onClick = { onChoose(ConflictChoice.KEEP_BOTH) },
+                )
+                Choice(
+                    label = R.string.conflict_skip,
+                    detail = R.string.conflict_skip_detail,
+                    onClick = { onChoose(ConflictChoice.SKIP) },
+                )
+                Choice(
+                    label = R.string.conflict_overwrite,
+                    detail = R.string.conflict_overwrite_detail,
+                    destructive = true,
+                    onClick = { onChoose(ConflictChoice.OVERWRITE) },
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                TextButton(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                    modifier = Modifier.align(Alignment.End),
+                ) {
                     Text(stringResource(R.string.action_cancel))
                 }
             }
@@ -98,9 +131,50 @@ fun ConflictDialog(
     )
 }
 
+/**
+ * One answer, with the sentence that says what it costs.
+ *
+ * The word alone is not enough here. "Overwrite" and "Skip" are both four
+ * letters of clay on the same line, and the difference between them is a
+ * file the user may never get back -- so each one says, underneath, what
+ * happens to the file.
+ */
+@Composable
+private fun Choice(
+    label: Int,
+    detail: Int,
+    onClick: () -> Unit,
+    destructive: Boolean = false,
+) {
+    val ink = if (destructive) {
+        MaterialTheme.colorScheme.error
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp),
+    ) {
+        Text(
+            stringResource(label),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = ink,
+        )
+        Text(
+            stringResource(detail),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 @Composable
 private fun ConflictDetail(conflict: DownloadConflict) {
-    Text(conflict.displayName, style = MaterialTheme.typography.bodyLarge)
+    // The file it is about, as the listing draws it.
+    FileHeading(conflict.displayName, isDirectory = false)
     Text(
         stringResource(
             R.string.conflict_remote,

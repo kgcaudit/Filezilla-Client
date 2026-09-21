@@ -267,6 +267,7 @@ fun BrowseScreen(
     renaming?.let { entry ->
         OloPromptDialog(
             title = R.string.prompt_rename_title,
+            confirmLabel = R.string.action_change,
             titleArg = entry.name,
             detail = R.string.rename_detail,
             label = R.string.prompt_new_name,

@@ -596,6 +596,7 @@ private fun AppScreen(
     if (creatingDirectory) {
         OloPromptDialog(
             title = R.string.new_folder_title,
+            confirmLabel = R.string.action_create,
             detail = R.string.new_folder_detail,
             label = R.string.prompt_name,
             onDismiss = { creatingDirectory = false },

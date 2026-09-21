@@ -152,10 +152,17 @@ fun PaneHeader(
                     onViewOptions = here { viewOptionsOpen = true },
                     onAssociations = here { associationsOpen = true },
                     onRefresh = here { model.open(id) },
-                    // Making a folder and sending a file up belong to the
-                    // server pane alone: on the phone the round button
-                    // makes folders, and "up" is what the other pane is.
-                    onNewDirectory = if (state.site != null) here(onNewDirectory) else null,
+                    // Sending a file up belongs to the server pane alone --
+                    // on the phone, "up" is what the other pane is. Making
+                    // a folder belongs to both: the round button does it on
+                    // the phone, but that button is hidden whenever a
+                    // selection or a paste bar is up, which is exactly when
+                    // somewhere new to put things is wanted.
+                    onNewDirectory = if (state.source is PaneSource.Empty) {
+                        null
+                    } else {
+                        here(onNewDirectory)
+                    },
                     onUpload = if (state.site != null) here(onUpload) else null,
                 )
             }

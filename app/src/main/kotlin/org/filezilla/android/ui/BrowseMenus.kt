@@ -190,7 +190,7 @@ fun ViewOptionsDialog(
         onDismiss = onDismiss,
         content = {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Label(R.string.view_mode)
+                SectionLabel(R.string.view_mode)
                 Row(modifier = Modifier.fillMaxWidth()) {
                     OptionTile(
                         label = stringResource(R.string.view_list),
@@ -212,7 +212,7 @@ fun ViewOptionsDialog(
                     Spacer(modifier = Modifier.weight(2f))
                 }
 
-                Label(R.string.sort_mode)
+                SectionLabel(R.string.sort_mode)
                 Row(modifier = Modifier.fillMaxWidth()) {
                     // A different picture for each, which is the whole
                     // point: an A-to-Z, a calendar, a set of bars and a
@@ -223,7 +223,7 @@ fun ViewOptionsDialog(
                     SortTile(R.string.sort_type, Icons.Filled.Description, SortKey.TYPE, options, onApply)
                 }
 
-                Label(R.string.menu_folder_options)
+                SectionLabel(R.string.menu_folder_options)
                 Toggle(R.string.option_folders_first, options.foldersFirst) {
                     onApply(options.copy(foldersFirst = it))
                 }
@@ -245,17 +245,6 @@ fun ViewOptionsDialog(
                 }
             }
         },
-    )
-}
-
-@Composable
-private fun Label(res: Int) {
-    Text(
-        stringResource(res),
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(top = 10.dp, bottom = 2.dp),
     )
 }
 
@@ -333,7 +322,13 @@ fun PropertiesDialog(entry: DirectoryEntry, path: String, onDismiss: () -> Unit)
         onDismiss = onDismiss,
         content = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Field(R.string.props_name, entry.name)
+                // The row this was opened from, so the dialog says which
+                // file before it says anything about it. The name was the
+                // first of seven identical label-and-value pairs, which
+                // asks the reader to find it.
+                FileHeading(entry.name, entry.isDirectory)
+
+                SectionLabel(R.string.props_section_what)
                 Field(
                     R.string.props_kind,
                     stringResource(
@@ -348,8 +343,15 @@ fun PropertiesDialog(entry: DirectoryEntry, path: String, onDismiss: () -> Unit)
                     Field(R.string.props_size, formatSize(entry.size).ifBlank { unknown })
                 }
                 Field(R.string.props_modified, formatEntryTime(entry).ifBlank { unknown })
+
+                // Who may do what with it, which is a different question
+                // from what it is -- and the one that is usually being
+                // looked up when a transfer has just been refused.
+                SectionLabel(R.string.props_section_access)
                 Field(R.string.props_permissions, entry.permissions ?: unknown)
                 Field(R.string.props_owner, entry.ownerGroup ?: unknown)
+
+                SectionLabel(R.string.props_section_where)
                 Field(R.string.props_path, remotePathOf(path, entry.name))
             }
         },

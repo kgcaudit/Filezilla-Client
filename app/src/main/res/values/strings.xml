@@ -89,7 +89,6 @@
     <string name="filter_clear">Clear filter</string>
     <string name="filter_none">Nothing matches "%1$s"</string>
     <string name="props_title">Properties</string>
-    <string name="props_name">Name</string>
     <string name="props_kind">Kind</string>
     <string name="props_kind_folder">Folder</string>
     <string name="props_kind_file">File</string>
@@ -308,4 +307,20 @@
     <string name="associations_empty">No file type has been given an app yet. Tap a file and choose one.</string>
     <string name="associations_forget">Clear</string>
     <string name="menu_associations">Default apps</string>
+
+    <string name="props_section_what">What it is</string>
+    <string name="props_section_access">Who may use it</string>
+    <string name="props_section_where">Where it is</string>
+
+    <string name="conflict_keep_both_detail">Both files are kept; the new one is numbered.</string>
+    <string name="conflict_skip_detail">The file already here is kept. Nothing is transferred.</string>
+    <string name="conflict_overwrite_detail">The file already here is replaced and cannot be got back.</string>
+
+    <string name="site_section_server">The server</string>
+    <string name="site_section_connection">How to connect</string>
+    <string name="site_section_login">Signing in</string>
+    <string name="site_section_extra">Other</string>
+
+    <string name="action_create">Create</string>
+    <string name="action_change">Change</string>
 </resources>

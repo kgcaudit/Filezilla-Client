@@ -105,7 +105,10 @@ class IconMeaningTest {
         "Edit" to setOf("action_rename_selected", "sites_edit"),
         "ContentCut" to setOf("action_cut"),
         "ContentCopy" to setOf("action_copy"),
-        "CreateNewFolder" to setOf("new_folder_title"),
+        // Making a folder, from the menu and from the paste bar. Two
+        // routes to one act, and the bar's exists because the round button
+        // that usually does it is hidden while the bar is up.
+        "CreateNewFolder" to setOf("new_folder_title", "fab_new_folder"),
         "Upload" to setOf("browse_upload"),
         "CheckCircle" to setOf("menu_select"),
         "DoneAll" to setOf("menu_select_all"),

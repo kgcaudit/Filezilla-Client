@@ -235,6 +235,16 @@ fun PasteBar(
     cut: Boolean,
     onPaste: () -> Unit,
     onCancel: () -> Unit,
+    /**
+     * Makes a folder here, without putting the clipboard down first.
+     *
+     * The bar's own words are "open the folder to move them into", and
+     * until now there was no way to make one: the round button that makes
+     * folders is hidden while a bar is up, because it floats over exactly
+     * where the paste button sits. So "copy, then make somewhere to put it"
+     * meant cancelling the copy, making the folder, and starting again.
+     */
+    onNewFolder: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -258,6 +268,14 @@ fun PasteBar(
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f).padding(start = 4.dp),
             )
+            onNewFolder?.let { make ->
+                IconButton(onClick = make) {
+                    Icon(
+                        Icons.Filled.CreateNewFolder,
+                        contentDescription = stringResource(R.string.fab_new_folder),
+                    )
+                }
+            }
             // Named rather than an icon alone: it is the one thing this bar
             // is for, and a clipboard glyph is not a word anybody reads.
             if (refusal == null) {

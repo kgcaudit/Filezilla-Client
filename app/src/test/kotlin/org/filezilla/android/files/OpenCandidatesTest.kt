@@ -95,32 +95,55 @@ class OpenCandidatesTest {
         assertTrue("com.example.anything" in opening("thing.qqqzzz", phone))
     }
 
-    /** Most specific first, so the obvious answer is the first row. */
+    /**
+     * The widening stops as soon as it has an answer.
+     *
+     * The user's second report, and the reason this matters: an `.apk`,
+     * which exactly one app installs, came back offering the installer, a
+     * certificate wizard, Chrome, an HTML viewer, Photos, Gmail twice,
+     * Google and PASS -- because the last question asked was "anything at
+     * all?" and nine apps said yes. Widening is what you do *because*
+     * nothing was found, not a net to drag everything up in.
+     */
     @Test
-    fun `the exact match is offered before the wildcard`() {
+    fun `an exact answer is not padded out with everything else`() {
         val phone = phoneWith(
             "com.example.anything" to listOf("*/*"),
-            "com.example.player" to listOf("video/x-matroska"),
+            "com.example.installer" to listOf("video/x-matroska"),
         )
 
-        assertEquals(
-            listOf("com.example.player", "com.example.anything"),
-            opening("film.mkv", phone),
-        )
+        assertEquals(listOf("com.example.installer"), opening("film.mkv", phone))
     }
 
-    /** An app declaring two of the three is one row, not two. */
+    /** And it widens when, and only when, there is nothing to report. */
     @Test
-    fun `an app found twice is offered once`() {
-        val phone = phoneWith("com.example.player" to listOf("video/x-matroska", "*/*"))
+    fun `it widens when the narrower question finds nobody`() {
+        val phone = phoneWith("com.example.anything" to listOf("*/*"))
 
-        assertEquals(listOf("com.example.player"), opening("film.mkv", phone))
+        assertEquals(listOf("com.example.anything"), opening("film.mkv", phone))
     }
 
-    /** And it is launched with the most specific type it declared. */
+    /**
+     * One app, one row. Gmail appeared twice because it declares two
+     * activities, and to the reader that is one app offered twice with
+     * nothing to tell the rows apart.
+     */
     @Test
-    fun `a candidate carries the narrowest type it was found under`() {
-        val phone = phoneWith("com.example.player" to listOf("video/x-matroska", "*/*"))
+    fun `an app with two activities is offered once`() {
+        val phone = OpenFile.AppsOffering { type ->
+            if (type != "video/x-matroska") emptyList() else listOf(
+                OpenFile.Candidate(ComponentName("com.example.mail", "a.One"), "Mail", type),
+                OpenFile.Candidate(ComponentName("com.example.mail", "a.Two"), "Mail", type),
+            )
+        }
+
+        assertEquals(listOf("com.example.mail"), opening("film.mkv", phone))
+    }
+
+    /** It is launched with the type its answer came from. */
+    @Test
+    fun `a candidate carries the type it was found under`() {
+        val phone = phoneWith("com.example.player" to listOf("video/x-matroska"))
 
         assertEquals(
             "video/x-matroska",

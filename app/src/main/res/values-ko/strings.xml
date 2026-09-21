@@ -88,7 +88,6 @@
     <string name="filter_clear">필터 해제</string>
     <string name="filter_none">"%1$s"과(와) 일치하는 항목이 없습니다</string>
     <string name="props_title">속성</string>
-    <string name="props_name">이름</string>
     <string name="props_kind">종류</string>
     <string name="props_kind_folder">폴더</string>
     <string name="props_kind_file">파일</string>
@@ -300,4 +299,20 @@
     <string name="associations_empty">아직 앱을 지정한 형식이 없습니다. 파일을 눌러 선택하세요.</string>
     <string name="associations_forget">해제</string>
     <string name="menu_associations">연결 프로그램</string>
+
+    <string name="props_section_what">종류</string>
+    <string name="props_section_access">권한</string>
+    <string name="props_section_where">위치</string>
+
+    <string name="conflict_keep_both_detail">둘 다 남기고, 새로 받는 쪽에 번호를 붙입니다.</string>
+    <string name="conflict_skip_detail">여기 있는 파일을 그대로 둡니다. 전송하지 않습니다.</string>
+    <string name="conflict_overwrite_detail">여기 있는 파일을 덮어씁니다. 되돌릴 수 없습니다.</string>
+
+    <string name="site_section_server">서버</string>
+    <string name="site_section_connection">연결 방식</string>
+    <string name="site_section_login">로그인</string>
+    <string name="site_section_extra">기타</string>
+
+    <string name="action_create">만들기</string>
+    <string name="action_change">변경</string>
 </resources>

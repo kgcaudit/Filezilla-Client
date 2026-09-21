@@ -221,6 +221,14 @@ fun FilePanes(
                             }
                         },
                         onCancel = model::clearClipboard,
+                        // Only where a folder can be made: the phone always,
+                        // a server once it is connected. An empty pane has
+                        // nowhere to make one.
+                        onNewFolder = if (state.source is PaneSource.Empty) {
+                            null
+                        } else {
+                            { naming = NewThing.FOLDER }
+                        },
                     )
                 }
             }
@@ -248,6 +256,10 @@ fun FilePanes(
         val folder = thing == NewThing.FOLDER
         OloPromptDialog(
             title = if (folder) R.string.new_folder_title else R.string.new_file_title,
+            // The verb of the title, not "OK". A button labelled with an
+            // acknowledgement says nothing about what pressing it does,
+            // and every other action in the app names itself.
+            confirmLabel = R.string.action_create,
             detail = if (folder) R.string.new_folder_detail else R.string.new_file_detail,
             label = R.string.prompt_name,
             onDismiss = { naming = null },
@@ -275,6 +287,7 @@ fun FilePanes(
                 // item's own label, so a dialog asking about one file was
                 // titled with the button that had opened it.
                 title = R.string.prompt_rename_title,
+                confirmLabel = R.string.action_change,
                 titleArg = entry.name,
                 detail = R.string.rename_detail,
                 label = R.string.prompt_new_name,

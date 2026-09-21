@@ -112,6 +112,11 @@ class WordingTest {
         // three questions the panes and the old browser both ask.
         val allowed = listOf(
             "action_cancel", "action_delete", "confirm_delete_detail", "filter_clear",
+            // The verb a prompt's button carries. Two prompts each make
+            // something and two each rename something, and they have to
+            // say it the same way -- which is the whole reason the button
+            // stopped saying "OK".
+            "action_create", "action_change",
             // The share button's name and the title of the sheet it opens:
             // the sheet answers the button, same as queue_settings below.
             "action_share_selected",

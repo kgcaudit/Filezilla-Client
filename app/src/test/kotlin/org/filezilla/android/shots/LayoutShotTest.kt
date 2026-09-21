@@ -47,6 +47,11 @@ import org.filezilla.android.ui.MainViewModel
 import org.filezilla.android.ui.PaneHeader
 import org.filezilla.android.ui.PaneId
 import org.filezilla.android.ui.PaneSource
+import org.filezilla.android.files.OpenFile
+import org.filezilla.android.ui.FileAssociationsDialog
+import org.filezilla.android.ui.OpenWithSheet
+import org.filezilla.android.ui.PasteBar
+import org.filezilla.android.ui.PasteKind
 import org.filezilla.android.ui.SearchDeeperRow
 import org.filezilla.android.ui.SearchHit
 import org.filezilla.android.ui.SearchResults
@@ -299,6 +304,7 @@ class LayoutShotTest {
                 title = R.string.new_folder_title,
                 detail = R.string.new_folder_detail,
                 label = R.string.prompt_name,
+                confirmLabel = R.string.action_create,
                 onDismiss = {},
                 onConfirm = {},
             )
@@ -327,6 +333,7 @@ class LayoutShotTest {
                 title = R.string.new_folder_title,
                 detail = R.string.new_folder_detail,
                 label = R.string.prompt_name,
+                confirmLabel = R.string.action_create,
                 onDismiss = {},
                 onConfirm = {},
             )
@@ -391,6 +398,39 @@ class LayoutShotTest {
         }
     }
 
+    @Test
+    fun `the open with sheet`() {
+        shootDialog("dialog-open-with", height = 1200) {
+            OpenWithSheet(
+                fileName = "A.Big.Bold.Beautiful.Journey.2025.1080p.ko.srt",
+                // Ten of them, which is what overflowed the dialog on the
+                // user's phone and pushed the checkbox and the way out off
+                // the bottom of the screen.
+                candidates = (1..10).map {
+                    OpenFile.Candidate(
+                        android.content.ComponentName("app$it", "app$it.Main"),
+                        "앱 이름 $it",
+                        "text/*",
+                    )
+                },
+                onPick = { _, _ -> },
+                onSystemChooser = {},
+                onDismiss = {},
+            )
+        }
+    }
+
+    @Test
+    fun `the default apps list`() {
+        shootDialog("dialog-associations", height = 900) {
+            FileAssociationsDialog(
+                associations = listOf("mkv" to "MX Player", "srt" to "Subtitle Editor"),
+                onForget = {},
+                onDismiss = {},
+            )
+        }
+    }
+
     /** The search results, and the offer that leads to them. */
     @Test
     fun `a deep search`() {
@@ -448,6 +488,22 @@ class LayoutShotTest {
                 onClear = {},
                 onShare = {},
                 canShare = true,
+            )
+        }
+    }
+
+    /** The bar that says "open the folder to move them into". */
+    @Test
+    fun `the paste bar`() {
+        shoot("bar-paste", height = 160) {
+            PasteBar(
+                count = 3,
+                refusal = null,
+                kind = PasteKind.FILE_OPERATION,
+                cut = true,
+                onPaste = {},
+                onCancel = {},
+                onNewFolder = {},
             )
         }
     }

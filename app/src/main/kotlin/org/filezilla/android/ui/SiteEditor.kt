@@ -97,6 +97,12 @@ fun SiteEditor(
                     .padding(top = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                // Nine fields ran together in one stack with nothing to
+                // say that three of them are about where the server is,
+                // three about how to talk to it, and two about who you are
+                // on it. The headings are the same ones the view options
+                // and the sheets use.
+                SectionLabel(R.string.site_section_server)
                 OloTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -121,6 +127,7 @@ fun SiteEditor(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
+                SectionLabel(R.string.site_section_connection)
                 Picker(
                     label = stringResource(R.string.field_encryption),
                     selected = securityLabel(security),
@@ -151,6 +158,7 @@ fun SiteEditor(
                     Hint(stringResource(R.string.encoding_note))
                 }
 
+                SectionLabel(R.string.site_section_login)
                 OloTextField(
                     value = user,
                     onValueChange = { user = it },
@@ -174,6 +182,7 @@ fun SiteEditor(
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                SectionLabel(R.string.site_section_extra)
                 OloTextField(
                     value = initialPath,
                     onValueChange = { initialPath = it },
@@ -201,7 +210,8 @@ fun SiteEditor(
             }
         },
         action = {
-            TextButton(
+            ConfirmButton(
+                text = stringResource(R.string.action_save),
                 enabled = host.isNotBlank() && port.isNotBlank(),
                 onClick = {
                     onSave(
@@ -219,7 +229,7 @@ fun SiteEditor(
                         ),
                     )
                 },
-            ) { Text(stringResource(R.string.action_save)) }
+            )
         },
     )
 }
