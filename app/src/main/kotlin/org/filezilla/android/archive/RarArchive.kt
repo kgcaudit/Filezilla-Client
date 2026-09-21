@@ -57,12 +57,8 @@ class RarArchive private constructor(
         /** `Rar!\x1A\x07\x00` (RAR 4) and `Rar!\x1A\x07\x01\x00` (RAR 5). */
         private val SIGNATURE = byteArrayOf(0x52, 0x61, 0x72, 0x21, 0x1A, 0x07)
 
-        fun looksLikeRar(file: File): Boolean = runCatching {
-            file.inputStream().use { source ->
-                val head = ByteArray(6)
-                source.read(head) == 6 && head.contentEquals(SIGNATURE)
-            }
-        }.getOrDefault(false)
+        fun looksLikeRar(file: File): Boolean =
+            firstBytes(file, 6).contentEquals(SIGNATURE)
 
         fun open(file: File): RarArchive {
             if (!RarNative.available) throw NotAnArchive("this device has no rar reader")

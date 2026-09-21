@@ -5,7 +5,6 @@ import java.io.InputStream
 import java.io.RandomAccessFile
 import java.nio.charset.Charset
 import java.util.zip.Inflater
-import java.util.zip.InflaterInputStream
 
 /**
  * ALZ, read from the format rather than from a library.
@@ -66,7 +65,7 @@ class AlzArchive private constructor(
 
         return when (record.method) {
             METHOD_STORE -> plain
-            METHOD_DEFLATE -> InflaterInputStream(plain, Inflater(true), 64 * 1024)
+            METHOD_DEFLATE -> inflating(plain)
             else -> throw NotAnArchive("compression method ${record.method} is not read yet")
         }
     }
@@ -99,9 +98,8 @@ class AlzArchive private constructor(
         internal val NAMES: Charset = Charset.forName("x-windows-949")
 
         /** True when [file] starts with the ALZ signature. */
-        fun looksLikeAlz(file: File): Boolean = runCatching {
-            RandomAccessFile(file, "r").use { it.readLittleInt() == SIG_FILE_HEADER }
-        }.getOrDefault(false)
+        fun looksLikeAlz(file: File): Boolean =
+            firstBytes(file, 4).let { it.size == 4 && it.intAt(0) == SIG_FILE_HEADER }
 
         /**
          * Opens [file], taking in its `.a00`, `.a01` … if it has them.
@@ -220,11 +218,4 @@ class AlzArchive private constructor(
             }.getOrNull()
         }
     }
-}
-
-private fun RandomAccessFile.readLittleInt(): Int {
-    val b = ByteArray(4)
-    readFully(b)
-    return (b[0].toInt() and 0xFF) or ((b[1].toInt() and 0xFF) shl 8) or
-        ((b[2].toInt() and 0xFF) shl 16) or ((b[3].toInt() and 0xFF) shl 24)
 }

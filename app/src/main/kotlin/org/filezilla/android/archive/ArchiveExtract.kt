@@ -113,27 +113,13 @@ object ArchiveExtract {
             target.parentFile?.mkdirs()
 
             var stoppedHere = false
-            val startedAt = doneBytes
             val outcome = runCatching {
                 archive.open(entry, password).use { source ->
                     target.outputStream().use { sink ->
-                        val buffer = ByteArray(64 * 1024)
-                        // Report at most every megabyte, not every buffer: a
-                        // four-gigabyte file is sixty thousand buffers, and
-                        // pushing state that often would drop frames doing it.
-                        var sinceReport = 0L
-                        while (true) {
-                            if (cancelled()) { stoppedHere = true; break }
-                            val n = source.read(buffer)
-                            if (n < 0) break
-                            sink.write(buffer, 0, n)
-                            doneBytes += n
-                            sinceReport += n
-                            if (sinceReport >= 1_000_000L) {
-                                onProgress.at(doneBytes, totalBytes, entry.path)
-                                sinceReport = 0L
-                            }
+                        val end = copyCounting(source, sink, doneBytes, cancelled) {
+                            onProgress.at(it, totalBytes, entry.path)
                         }
+                        if (end < 0) stoppedHere = true else doneBytes = end
                     }
                 }
             }
@@ -150,7 +136,6 @@ object ArchiveExtract {
                 // A file half written is worse than no file: it opens, and
                 // it is wrong.
                 runCatching { target.delete() }
-                doneBytes = startedAt
                 skipped += ExtractResult.Skipped(
                     entry.path,
                     if (failure is WrongPassword) ExtractResult.Reason.PASSWORD

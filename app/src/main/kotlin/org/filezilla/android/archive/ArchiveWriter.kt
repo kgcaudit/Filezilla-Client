@@ -78,20 +78,10 @@ object ArchiveWriter {
                     } else {
                         zip.putNextEntry(ZipEntry(name).also { it.time = file.lastModified() })
                         file.inputStream().use { source ->
-                            val buffer = ByteArray(64 * 1024)
-                            var sinceReport = 0L
-                            while (true) {
-                                if (cancelled()) { stoppedHere = true; break }
-                                val n = source.read(buffer)
-                                if (n < 0) break
-                                zip.write(buffer, 0, n)
-                                doneBytes += n
-                                sinceReport += n
-                                if (sinceReport >= 1_000_000L) {
-                                    onProgress.at(doneBytes, totalBytes, name)
-                                    sinceReport = 0L
-                                }
+                            val end = copyCounting(source, zip, doneBytes, cancelled) {
+                                onProgress.at(it, totalBytes, name)
                             }
+                            if (end < 0) stoppedHere = true else doneBytes = end
                         }
                         zip.closeEntry()
                     }

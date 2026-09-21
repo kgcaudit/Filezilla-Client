@@ -5,7 +5,6 @@ import java.io.InputStream
 import java.io.RandomAccessFile
 import java.nio.charset.Charset
 import java.util.zip.Inflater
-import java.util.zip.InflaterInputStream
 
 /**
  * Zip, read from the central directory rather than through [java.util.zip.ZipFile].
@@ -65,7 +64,7 @@ class ZipArchive private constructor(
         val raw = Joined(listOf(file), dataAt, record.compressedSize)
         return when (record.method) {
             METHOD_STORE -> raw
-            METHOD_DEFLATE -> InflaterInputStream(raw, Inflater(true), 64 * 1024)
+            METHOD_DEFLATE -> inflating(raw)
             else -> throw NotAnArchive("compression method ${record.method} is not read")
         }
     }
@@ -114,13 +113,8 @@ class ZipArchive private constructor(
             byteArrayOf(0x50, 0x4B, 0x07, 0x08),
         )
 
-        fun looksLikeZip(file: File): Boolean = runCatching {
-            file.inputStream().use { source ->
-                val head = ByteArray(4)
-                if (source.read(head) != 4) return false
-                SIGNATURES.any { it.contentEquals(head) }
-            }
-        }.getOrDefault(false)
+        fun looksLikeZip(file: File): Boolean =
+            firstBytes(file, 4).let { head -> SIGNATURES.any { it.contentEquals(head) } }
 
         /**
          * Opens [file], reading unflagged names as [names].
@@ -264,24 +258,5 @@ class ZipArchive private constructor(
             return emptyList()
         }
 
-        private fun ByteArray.intAt(at: Int): Int =
-            (this[at].toInt() and 0xFF) or ((this[at + 1].toInt() and 0xFF) shl 8) or
-                ((this[at + 2].toInt() and 0xFF) shl 16) or ((this[at + 3].toInt() and 0xFF) shl 24)
-
-        private fun ByteArray.shortAt(at: Int): Int =
-            (this[at].toInt() and 0xFF) or ((this[at + 1].toInt() and 0xFF) shl 8)
-
-        private fun ByteArray.longAt(at: Int): Long {
-            var value = 0L
-            for (i in 7 downTo 0) value = (value shl 8) or (this[at + i].toLong() and 0xFF)
-            return value
-        }
     }
 }
-
-private fun ByteArray.intAt(at: Int): Int =
-    (this[at].toInt() and 0xFF) or ((this[at + 1].toInt() and 0xFF) shl 8) or
-        ((this[at + 2].toInt() and 0xFF) shl 16) or ((this[at + 3].toInt() and 0xFF) shl 24)
-
-private fun ByteArray.shortAt(at: Int): Int =
-    (this[at].toInt() and 0xFF) or ((this[at + 1].toInt() and 0xFF) shl 8)

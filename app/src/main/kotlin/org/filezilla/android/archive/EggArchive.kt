@@ -6,8 +6,6 @@ import java.io.RandomAccessFile
 import java.io.SequenceInputStream
 import java.nio.charset.Charset
 import java.util.Collections
-import java.util.zip.Inflater
-import java.util.zip.InflaterInputStream
 
 /**
  * EGG, ESTsoft's newer format, read from the published specification.
@@ -115,7 +113,7 @@ class EggArchive private constructor(
                 val plain = crypto?.decrypting(raw) ?: raw
                 when (block.method) {
                     METHOD_STORE -> plain
-                    METHOD_DEFLATE -> InflaterInputStream(plain, Inflater(true), 64 * 1024)
+                    METHOD_DEFLATE -> inflating(plain)
                     else -> throw NotAnArchive("compression method ${block.method} is not read yet")
                 }
             }
@@ -200,13 +198,8 @@ class EggArchive private constructor(
         private const val CRYPTO_HEADER_LENGTH = 12
 
         /** True when [file] starts with the EGG signature. */
-        fun looksLikeEgg(file: File): Boolean = runCatching {
-            RandomAccessFile(file, "r").use { raw ->
-                val head = ByteArray(4)
-                raw.readFully(head)
-                head.intAt(0) == SIG_EGG
-            }
-        }.getOrDefault(false)
+        fun looksLikeEgg(file: File): Boolean =
+            firstBytes(file, 4).let { it.size == 4 && it.intAt(0) == SIG_EGG }
 
         fun open(file: File): EggArchive {
             if (!file.isFile) throw NotAnArchive("${file.name} is not there")
@@ -485,16 +478,3 @@ class EggArchive private constructor(
         }
     }
 }
-
-private fun ByteArray.longAt(at: Int): Long {
-    var value = 0L
-    for (i in 7 downTo 0) value = (value shl 8) or (this[at + i].toLong() and 0xFF)
-    return value
-}
-
-private fun ByteArray.intAt(at: Int): Int =
-    (this[at].toInt() and 0xFF) or ((this[at + 1].toInt() and 0xFF) shl 8) or
-        ((this[at + 2].toInt() and 0xFF) shl 16) or ((this[at + 3].toInt() and 0xFF) shl 24)
-
-private fun ByteArray.shortAt(at: Int): Int =
-    (this[at].toInt() and 0xFF) or ((this[at + 1].toInt() and 0xFF) shl 8)
