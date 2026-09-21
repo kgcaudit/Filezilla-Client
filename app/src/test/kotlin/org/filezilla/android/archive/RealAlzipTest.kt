@@ -144,4 +144,65 @@ class RealAlzipTest {
         }
     }
 
+    @Test
+    fun `a folder is a path in the name, not a record of its own`() {
+        // The question this file answers. Everything written from the spec
+        // put a directory entry in, with the directory attribute set,
+        // because the format has one. ALZip does not use it: a folder
+        // exists only as a prefix on the names of the things inside it.
+        //
+        // So extracting has to make the folders the paths imply, and a
+        // tree on screen has to be derived from the paths. A reader that
+        // waited for a directory record would make no folders at all.
+        AlzArchive.open(fixture("alzip_folder.alz")).use { alz ->
+            assertEquals(
+                listOf("말똥가리/알집.txt", "말똥가리.alz"),
+                alz.entries.map { it.path },
+            )
+            assertTrue(
+                "alzip wrote no directory record, so nothing should claim one",
+                alz.entries.none { it.isDirectory },
+            )
+        }
+    }
+
+    @Test
+    fun `the folder an entry sits in comes from its path`() {
+        AlzArchive.open(fixture("alzip_folder.alz")).use { alz ->
+            val inside = alz.entries.first { it.path == "말똥가리/알집.txt" }
+            assertEquals("말똥가리", inside.parent)
+            assertEquals("알집.txt", inside.name)
+
+            // And the one beside it is at the top, despite the same prefix
+            // in its name -- "말똥가리.alz" is a file called that, not
+            // something inside a folder called 말똥가리.
+            val beside = alz.entries.first { it.path == "말똥가리.alz" }
+            assertEquals("", beside.parent)
+            assertEquals("말똥가리.alz", beside.name)
+        }
+    }
+
+    @Test
+    fun `an archive inside an archive opens too`() {
+        // 말똥가리.alz is itself an ALZ. Nothing about that needs special
+        // handling, which is the point of checking it: what comes out of
+        // an entry is bytes, and bytes are what the reader takes in.
+        val nested = File.createTempFile("nested", ".alz")
+        try {
+            AlzArchive.open(fixture("alzip_folder.alz")).use { outer ->
+                val entry = outer.entries.first { it.path == "말똥가리.alz" }
+                assertEquals(63, entry.size)
+                nested.writeBytes(outer.open(entry).use { it.readBytes() })
+            }
+
+            assertTrue(AlzArchive.looksLikeAlz(nested))
+            AlzArchive.open(nested).use { inner ->
+                assertEquals("알집.txt", inner.entries.single().path)
+                assertEquals("알집", String(inner.open(inner.entries.single()).use { it.readBytes() }))
+            }
+        } finally {
+            nested.delete()
+        }
+    }
+
 }
