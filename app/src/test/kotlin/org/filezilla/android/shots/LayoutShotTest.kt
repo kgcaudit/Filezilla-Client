@@ -50,6 +50,7 @@ import org.filezilla.android.ui.PaneSource
 import org.filezilla.android.files.OpenFile
 import org.filezilla.android.ui.FileAssociationsDialog
 import org.filezilla.android.ui.OpenWithSheet
+import org.filezilla.android.ui.RememberedApp
 import org.filezilla.android.ui.PasteBar
 import org.filezilla.android.ui.PasteKind
 import org.filezilla.android.ui.SearchDeeperRow
@@ -424,7 +425,10 @@ class LayoutShotTest {
     fun `the default apps list`() {
         shootDialog("dialog-associations", height = 900) {
             FileAssociationsDialog(
-                associations = listOf("mkv" to "MX Player", "srt" to "Subtitle Editor"),
+                associations = listOf(
+                    RememberedApp("mkv", "MX Player", "com.example.player"),
+                    RememberedApp("srt", "Subtitle Editor", "com.example.editor"),
+                ),
                 onForget = {},
                 onDismiss = {},
             )

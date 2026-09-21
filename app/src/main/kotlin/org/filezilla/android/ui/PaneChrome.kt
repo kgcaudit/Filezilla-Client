@@ -186,7 +186,11 @@ fun PaneHeader(
         var shown by remember { mutableStateOf(associations.all()) }
         FileAssociationsDialog(
             associations = shown.map { (extension, component) ->
-                extension to labelFor(context, component)
+                RememberedApp(
+                    extension = extension,
+                    label = labelFor(context, component),
+                    packageName = component.packageName,
+                )
             },
             onForget = { extension ->
                 associations.forget(extension)

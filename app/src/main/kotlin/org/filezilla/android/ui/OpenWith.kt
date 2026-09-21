@@ -1,6 +1,9 @@
 package org.filezilla.android.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -10,7 +13,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Android
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Icon
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -21,12 +27,54 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.filezilla.android.R
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.filezilla.android.files.AppIcons
 import org.filezilla.android.files.OpenFile
+
+/**
+ * An app's own icon, at the size these lists draw it.
+ *
+ * Loaded off the main thread: reading the package manager and rasterising
+ * an adaptive icon is not work to do while a dialog is being laid out. It
+ * arrives a frame or two later, and until then the row keeps its space
+ * rather than shuffling the names sideways when the pictures land.
+ */
+@Composable
+private fun AppIcon(packageName: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val icon by produceState<ImageBitmap?>(initialValue = null, packageName) {
+        value = withContext(Dispatchers.IO) { AppIcons.of(context, packageName) }
+    }
+    Box(modifier = modifier.size(32.dp), contentAlignment = Alignment.Center) {
+        if (icon != null) {
+            Image(
+                bitmap = icon!!,
+                contentDescription = null,
+                modifier = Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)),
+            )
+        } else {
+            // An app with no icon this app can draw -- uninstalled, most
+            // often, which is exactly the row worth marking rather than
+            // leaving as a gap the eye reads as a missing row.
+            Icon(
+                Icons.Filled.Android,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.outlineVariant,
+                modifier = Modifier.size(24.dp),
+            )
+        }
+    }
+}
 
 /**
  * Which app to hand a file to, asked once per kind of file.
@@ -102,19 +150,24 @@ fun OpenWithSheet(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { onPick(candidate, always && extension != null) }
-                                .padding(vertical = 12.dp),
+                                .padding(vertical = 10.dp),
                         ) {
+                            AppIcon(candidate.component.packageName)
                             Text(
                                 candidate.label,
                                 style = MaterialTheme.typography.bodyLarge,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1f).padding(start = 12.dp),
                             )
                         }
                         HorizontalDivider()
                     }
                     }
+                    // Outside the scroll, so it marks where the list ends.
+                    // Without it the row half-scrolled off the bottom ran
+                    // straight into the checkbox and read as part of it.
+                    HorizontalDivider()
 
                     // Only where there is an extension to remember it
                     // against. A file called README has no kind to speak of,
@@ -158,9 +211,16 @@ fun OpenWithSheet(
  * is a trap: pick the wrong app once for a kind of file you open daily, and
  * the app is wrong for ever with nothing on screen admitting it happened.
  */
+/** One remembered choice, as the management list shows it. */
+data class RememberedApp(
+    val extension: String,
+    val label: String,
+    val packageName: String,
+)
+
 @Composable
 fun FileAssociationsDialog(
-    associations: List<Pair<String, String>>,
+    associations: List<RememberedApp>,
     onForget: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -177,19 +237,20 @@ fun FileAssociationsDialog(
                 return@OloInfoDialog
             }
             Column {
-                for ((extension, label) in associations) {
+                for (remembered in associations) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
+                        AppIcon(remembered.packageName)
+                        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
                             Text(
-                                ".$extension",
+                                ".${remembered.extension}",
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Medium,
                             )
                             Text(
-                                label,
+                                remembered.label,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
@@ -201,7 +262,7 @@ fun FileAssociationsDialog(
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.error,
                             modifier = Modifier
-                                .clickable { onForget(extension) }
+                                .clickable { onForget(remembered.extension) }
                                 .padding(horizontal = 8.dp, vertical = 8.dp),
                         )
                     }
