@@ -103,6 +103,36 @@ class EggArchiveTest {
     }
 
     @Test
+    fun `a real ALZip egg locks with the cipher this app has`() {
+        // ALZip on a phone locks with the format's oldest cipher -- the
+        // one the specification calls "key base XOR" and the alz reader
+        // already has -- rather than with the AES or LEA it also allows.
+        // Checked on three archives it made: this one, a 5 MB stored mp3
+        // and a 22 MB deflated mp4. So a locked egg is listed as openable
+        // rather than marked out of reach, which is the whole difference
+        // between asking for a password and refusing the file.
+        EggArchive.open(fixture("alzip_secret.egg")).use { egg ->
+            val entry = egg.entries.single()
+            assertEquals("꾀꼬리.egg", entry.path)
+            assertEquals(117L, entry.size)
+            assertTrue(entry.encrypted)
+            assertNull(entry.unreadable)
+        }
+    }
+
+    @Test
+    fun `a real ALZip egg refuses a password that is not its own`() {
+        // The check the format provides, on a file somebody really made:
+        // a key that does not open it stops here rather than handing back
+        // 117 bytes of noise for the screen to save as a file.
+        EggArchive.open(fixture("alzip_secret.egg")).use { egg ->
+            val entry = egg.entries.single()
+            assertThrows(WrongPassword::class.java) { egg.open(entry, "nonsense".toCharArray()) }
+            assertThrows(WrongPassword::class.java) { egg.open(entry) }
+        }
+    }
+
+    @Test
     fun `a name with no code page is read as UTF-8`() {
         EggArchive.open(fixture("korean.egg")).use { egg ->
             assertEquals(listOf("한글이름.txt"), egg.entries.map { it.path })
