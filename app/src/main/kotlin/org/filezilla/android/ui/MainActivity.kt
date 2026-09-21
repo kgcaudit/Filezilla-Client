@@ -49,6 +49,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import org.filezilla.android.R
 import org.filezilla.android.files.FileAssociations
+import org.filezilla.android.files.InstallApk
 import org.filezilla.android.files.OpenFile
 import org.filezilla.android.files.ShareFiles
 import org.filezilla.android.service.TransferService
@@ -119,6 +120,7 @@ private fun AppScreen(
     // choice made once, so it has to ignore it.
     var openingFile by remember { mutableStateOf<java.io.File?>(null) }
     var askWhichApp by remember { mutableStateOf(false) }
+    var installBlockedFor by remember { mutableStateOf<java.io.File?>(null) }
     val associations = remember(context) { FileAssociations(context) }
     var editingSite by remember { mutableStateOf<SiteDraft?>(null) }
     var creatingDirectory by remember { mutableStateOf(false) }
@@ -462,12 +464,22 @@ private fun AppScreen(
                 onDownload = ::startDownload,
                 onRequestNotifications = ::requestNotifications,
                 onOpenLocalFile = { path ->
-                    askWhichApp = false
-                    openingFile = java.io.File(path)
+                    val file = java.io.File(path)
+                    if (InstallApk.isPackage(file.name) && !InstallApk.allowed(context)) {
+                        installBlockedFor = file
+                    } else {
+                        askWhichApp = false
+                        openingFile = file
+                    }
                 },
                 onOpenLocalFileWith = { path ->
-                    askWhichApp = true
-                    openingFile = java.io.File(path)
+                    val file = java.io.File(path)
+                    if (InstallApk.isPackage(file.name) && !InstallApk.allowed(context)) {
+                        installBlockedFor = file
+                    } else {
+                        askWhichApp = true
+                        openingFile = file
+                    }
                 },
                 onShareLocal = { paths ->
                     val intent = ShareFiles.intentFor(context, paths.map { java.io.File(it) })
@@ -536,6 +548,27 @@ private fun AppScreen(
         )
     }
 
+
+    // An apk this app is not yet allowed to hand over. Asked before the
+    // installer is launched, because an installer that turns the app away
+    // does it silently: no error, no dialog, nothing to read and nothing to
+    // fix. See InstallApk.
+    installBlockedFor?.let { file ->
+        OloDialog(
+            title = stringResource(R.string.install_blocked_title),
+            detail = stringResource(R.string.install_blocked_detail, file.name),
+            onDismiss = { installBlockedFor = null },
+            action = {
+                ConfirmButton(
+                    text = stringResource(R.string.install_blocked_settings),
+                    onClick = {
+                        runCatching { context.startActivity(InstallApk.settingsIntent(context)) }
+                        installBlockedFor = null
+                    },
+                )
+            },
+        )
+    }
 
     openingFile?.let { file ->
         // The remembered choice first, and straight there: somebody who has

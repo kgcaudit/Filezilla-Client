@@ -31,6 +31,20 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!--
+        Handing an .apk to the system installer.
+
+        Since Android 8 the app that starts an install has to say so here,
+        and the user has to have allowed this app to be a source. Without
+        the declaration the installer is simply not reached: on Samsung's
+        Android nothing happens at all, no error and no dialog, which is
+        what a downloaded .apk did here.
+
+        It does not install anything itself. It asks the platform's own
+        installer to, which then shows its own confirmation.
+    -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!--
         What this app is allowed to see of the other apps on the phone.
 
         Since Android 11 an app cannot list who can open a file without
