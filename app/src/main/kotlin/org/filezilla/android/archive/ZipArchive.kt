@@ -65,7 +65,7 @@ class ZipArchive private constructor(
         val raw = Joined(listOf(file), dataAt, record.compressedSize)
         return when (record.method) {
             METHOD_STORE -> raw
-            METHOD_DEFLATE -> InflaterInputStream(raw, Inflater(true))
+            METHOD_DEFLATE -> InflaterInputStream(raw, Inflater(true), 64 * 1024)
             else -> throw NotAnArchive("compression method ${record.method} is not read")
         }
     }

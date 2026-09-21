@@ -115,7 +115,7 @@ class EggArchive private constructor(
                 val plain = crypto?.decrypting(raw) ?: raw
                 when (block.method) {
                     METHOD_STORE -> plain
-                    METHOD_DEFLATE -> InflaterInputStream(plain, Inflater(true))
+                    METHOD_DEFLATE -> InflaterInputStream(plain, Inflater(true), 64 * 1024)
                     else -> throw NotAnArchive("compression method ${block.method} is not read yet")
                 }
             }
