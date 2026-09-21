@@ -133,8 +133,25 @@ fun ConfirmButton(
     text: String,
     onClick: () -> Unit,
     enabled: Boolean = true,
+    /**
+     * For the rare confirm that is not the safe answer.
+     *
+     * The confirming button is normally the one to reach for, and looks it.
+     * Where it is the one to think twice about -- accepting a certificate
+     * that has changed underneath a server that was already trusted -- it
+     * should not be wearing the colour that means "this is fine".
+     */
+    destructive: Boolean = false,
 ) {
-    TextButton(onClick = onClick, enabled = enabled) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        colors = if (destructive) {
+            ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+        } else {
+            ButtonDefaults.textButtonColors()
+        },
+    ) {
         Text(text, fontWeight = FontWeight.SemiBold)
     }
 }

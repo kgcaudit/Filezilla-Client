@@ -26,7 +26,17 @@ data class SiteEntity(
     @ColumnInfo(name = "password_cipher") val passwordCipher: String,
     val security: String,
     val transferMode: String,
-    val trustAllCertificates: Boolean,
+    /**
+     * The certificate fingerprint this server has been recognised on.
+     *
+     * Replaces a switch that turned certificate checking off for the server
+     * entirely. That switch was not really optional -- a home server's
+     * certificate is signed by nobody, so it was the price of connecting at
+     * all -- and once paid, the connection stayed encrypted but stopped
+     * being addressed to anyone in particular. This holds one certificate
+     * instead of accepting all of them.
+     */
+    @ColumnInfo(name = "pinned_certificate") val pinnedCertificate: String? = null,
     val initialPath: String?,
     /** Null negotiates UTF-8; a name pins it. See [FtpSettings.encoding]. */
     val encoding: String? = null,
@@ -53,7 +63,7 @@ data class SiteEntity(
         user = user,
         password = passwords.decrypt(passwordCipher).orEmpty(),
         security = enumValueOf<FtpSecurity>(security),
-        trustAllCertificates = trustAllCertificates,
+        pinnedCertificate = pinnedCertificate,
         transferMode = enumValueOf<TransferMode>(transferMode),
         encoding = encoding,
     )

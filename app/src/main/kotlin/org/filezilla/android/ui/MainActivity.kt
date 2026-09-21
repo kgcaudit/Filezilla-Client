@@ -694,6 +694,17 @@ private fun AppScreen(
         )
     }
 
+    // Above everything else it could collide with, because until this is
+    // answered nothing can reach that server at all -- and because the
+    // question is not about the operation that happened to trip over it.
+    model.certificateQuestion?.let { question ->
+        CertificateDialog(
+            question = question,
+            onTrust = model::trustCertificate,
+            onDismiss = model::dismissCertificateQuestion,
+        )
+    }
+
     // A paste inside the phone asks the same question, for the same reason.
     // It did not: the file operations refuse to write over anything, so a
     // paste onto a name already there failed outright and the pane came back

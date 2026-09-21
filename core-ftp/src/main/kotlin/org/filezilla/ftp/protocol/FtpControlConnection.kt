@@ -1,5 +1,6 @@
 package org.filezilla.ftp.protocol
 
+import org.filezilla.ftp.net.CertificateNotTrusted
 import org.filezilla.ftp.net.TlsFactory
 import java.io.BufferedReader
 import java.io.Closeable
@@ -37,7 +38,7 @@ class FtpControlConnection(
     private var writer: Writer? = null
 
     /** Held for the whole connection so the data channel can resume its session. */
-    val tlsFactory = TlsFactory(trustAllCertificates = settings.trustAllCertificates)
+    val tlsFactory = TlsFactory(pinnedCertificate = settings.pinnedCertificate)
 
     var isSecure: Boolean = false
         private set
@@ -96,7 +97,7 @@ class FtpControlConnection(
         }
 
         if (settings.security == FtpSecurity.IMPLICIT_TLS) {
-            val tls = tlsFactory.upgradeControl(plain, settings.host, settings.port)
+            val tls = handshake(plain)
             adopt(tls)
             isSecure = true
             logger.log(LogLevel.STATUS, "TLS established (implicit), waiting for welcome message...")
@@ -121,13 +122,38 @@ class FtpControlConnection(
         capabilities.set(settings.serverKey, CapabilityName.AUTH_TLS_COMMAND, Capability.YES)
 
         logger.log(LogLevel.STATUS, "Initializing TLS...")
-        val tls = tlsFactory.upgradeControl(plainSocket!!, settings.host, settings.port)
+        val tls = handshake(plainSocket!!)
         adopt(tls)
         isSecure = true
         logger.log(
             LogLevel.STATUS,
             "TLS established: ${tls.session.protocol} / ${tls.session.cipherSuite}",
         )
+    }
+
+    /**
+     * The TLS handshake, with the reason a refused certificate was refused.
+     *
+     * A trust manager that throws does so from inside the socket's
+     * handshake, and what comes back out is a bare
+     * [javax.net.ssl.SSLHandshakeException] whose cause chain the JDK does
+     * not promise to keep. Nothing in that is enough to put a certificate
+     * in front of somebody, so what the trust manager recorded is what gets
+     * rethrown.
+     */
+    private fun handshake(plain: Socket): javax.net.ssl.SSLSocket = try {
+        tlsFactory.upgradeControl(plain, settings.host, settings.port)
+    } catch (failed: IOException) {
+        val refused = tlsFactory.trust.refusal ?: throw failed
+        logger.log(
+            LogLevel.ERROR,
+            if (refused.changed) {
+                "The server's certificate has changed since it was accepted"
+            } else {
+                "The server's certificate is not signed by anyone this phone trusts"
+            },
+        )
+        throw CertificateNotTrusted(refused.certificate, refused.previouslyTrusted, failed)
     }
 
     fun login() {

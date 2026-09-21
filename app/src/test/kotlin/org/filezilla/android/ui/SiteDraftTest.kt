@@ -2,6 +2,7 @@ package org.filezilla.android.ui
 
 import org.filezilla.android.data.FakePasswordCipher
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
@@ -56,4 +57,27 @@ class SiteDraftTest {
         val entity = SiteDraft.blank().copy(host = "ftp.example.org").toEntity(passwords)
         assertEquals("ftp.example.org", entity.name)
     }
+    @Test
+    fun `editing a site keeps the certificate that was accepted for it`() {
+        // Nothing in the editor sets this, so it is exactly the field a
+        // round trip through a form drops without anyone noticing -- and
+        // dropping it means the server starts asking to be recognised
+        // again every time its port or its name is corrected.
+        val pin = "AA:BB:CC:DD"
+        val saved = SiteDraft.blank()
+            .copy(host = "nas.home", pinnedCertificate = pin)
+            .toEntity(FakePasswordCipher())
+
+        val edited = SiteDraft.of(saved, FakePasswordCipher())
+            .copy(name = "renamed")
+            .toEntity(FakePasswordCipher())
+
+        assertEquals(pin, edited.pinnedCertificate)
+    }
+
+    @Test
+    fun `a new site starts with nothing accepted`() {
+        assertNull(SiteDraft.blank().pinnedCertificate)
+    }
+
 }

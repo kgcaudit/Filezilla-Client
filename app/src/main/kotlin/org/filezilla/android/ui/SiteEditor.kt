@@ -73,7 +73,7 @@ fun SiteEditor(
     var security by remember { mutableStateOf(initial.security) }
     var mode by remember { mutableStateOf(initial.transferMode) }
     var encoding by remember { mutableStateOf(initial.encoding) }
-    var trustAll by remember { mutableStateOf(initial.trustAllCertificates) }
+    var pinned by remember { mutableStateOf(initial.pinnedCertificate) }
     var initialPath by remember { mutableStateOf(initial.initialPath.orEmpty()) }
 
     OloDialog(
@@ -190,23 +190,12 @@ fun SiteEditor(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Switch(checked = trustAll, onCheckedChange = { trustAll = it })
-                    Column(modifier = Modifier.padding(start = 10.dp)) {
-                        Text(
-                            stringResource(R.string.trust_all_title),
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                        Text(
-                            stringResource(R.string.trust_all_detail),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+                // Not a setting. There is nothing here to choose -- a
+                // certificate is accepted by recognising one when the server
+                // presents it, which happens on connecting, not in a form.
+                // What this offers is the other direction: seeing what was
+                // accepted, and taking it back.
+                CertificateStatus(pinned = pinned, onForget = { pinned = null })
             }
         },
         action = {
@@ -224,7 +213,7 @@ fun SiteEditor(
                             security = security,
                             transferMode = mode,
                             encoding = encoding,
-                            trustAllCertificates = trustAll,
+                            pinnedCertificate = pinned,
                             initialPath = initialPath,
                         ),
                     )

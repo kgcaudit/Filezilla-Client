@@ -26,7 +26,7 @@ class PaneTest {
         passwordCipher = "x",
         security = "PLAIN",
         transferMode = "DEFAULT",
-        trustAllCertificates = false,
+        pinnedCertificate = null,
         initialPath = null,
     )
 

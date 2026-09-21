@@ -26,7 +26,7 @@ abstract class AppDatabase : RoomDatabase() {
          * test went stale the moment a column was added -- so every existing
          * database looked unmigratable from a test that was only out of date.
          */
-        const val VERSION = 5
+        const val VERSION = 6
 
         /**
          * Every migration, in one list.
@@ -36,7 +36,13 @@ abstract class AppDatabase : RoomDatabase() {
          * open an old database.
          */
         fun migrations(passwords: PasswordCipher): Array<Migration> =
-            arrayOf(encryptPasswords(passwords), ADD_ENCODING, ADD_POSITION, ADD_REMOVE_SOURCE)
+            arrayOf(
+                encryptPasswords(passwords),
+                ADD_ENCODING,
+                ADD_POSITION,
+                ADD_REMOVE_SOURCE,
+                PIN_CERTIFICATES,
+            )
 
         fun open(context: Context, passwords: PasswordCipher): AppDatabase =
             Room.databaseBuilder(
@@ -50,6 +56,55 @@ abstract class AppDatabase : RoomDatabase() {
                 // would turn a schema change into silently re-downloading
                 // everything in the queue -- and now the saved passwords too.
                 .build()
+
+        /**
+         * Version 6 trades "accept any certificate" for accepting one.
+         *
+         * Every site that had the switch on comes out with nothing pinned,
+         * which means the next connection to it stops and asks. That is the
+         * point rather than a cost of doing it: those sites were accepting
+         * whatever was presented, so there is no certificate among them that
+         * anybody ever actually looked at, and carrying the switch forward
+         * under a new name would carry the hole with it.
+         *
+         * Sites that had it off are unaffected -- they were already being
+         * checked properly and still are.
+         *
+         * The table is rebuilt rather than altered because the old column
+         * has to go: SQLite before 3.35 cannot drop one, and Room will
+         * refuse to open a database whose columns it did not expect.
+         */
+        internal val PIN_CERTIFICATES = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE `sites_new` (" +
+                        "`id` TEXT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`host` TEXT NOT NULL, " +
+                        "`port` INTEGER NOT NULL, " +
+                        "`user` TEXT NOT NULL, " +
+                        "`password_cipher` TEXT NOT NULL, " +
+                        "`security` TEXT NOT NULL, " +
+                        "`transferMode` TEXT NOT NULL, " +
+                        "`pinned_certificate` TEXT, " +
+                        "`initialPath` TEXT, " +
+                        "`encoding` TEXT, " +
+                        "`position` INTEGER NOT NULL DEFAULT 0, " +
+                        "PRIMARY KEY(`id`))",
+                )
+                db.execSQL(
+                    "INSERT INTO `sites_new` (" +
+                        "`id`, `name`, `host`, `port`, `user`, `password_cipher`, " +
+                        "`security`, `transferMode`, `pinned_certificate`, " +
+                        "`initialPath`, `encoding`, `position`) " +
+                        "SELECT `id`, `name`, `host`, `port`, `user`, `password_cipher`, " +
+                        "`security`, `transferMode`, NULL, " +
+                        "`initialPath`, `encoding`, `position` FROM `sites`",
+                )
+                db.execSQL("DROP TABLE `sites`")
+                db.execSQL("ALTER TABLE `sites_new` RENAME TO `sites`")
+            }
+        }
 
         /**
          * Version 5 lets a queued transfer know it is half of a move.

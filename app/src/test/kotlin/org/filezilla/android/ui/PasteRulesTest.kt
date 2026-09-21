@@ -21,7 +21,7 @@ class PasteRulesTest {
     private val site = SiteEntity(
         id = "s1", name = "NAS", host = "h", port = 21, user = "u",
         passwordCipher = "x", security = "PLAIN", transferMode = "DEFAULT",
-        trustAllCertificates = false, initialPath = null,
+        pinnedCertificate = null, initialPath = null,
     )
 
     private fun held(
@@ -222,7 +222,7 @@ class ServerPasteRulesTest {
     private val nas = SiteEntity(
         id = "s1", name = "NAS", host = "h", port = 21, user = "u",
         passwordCipher = "x", security = "PLAIN", transferMode = "DEFAULT",
-        trustAllCertificates = false, initialPath = null,
+        pinnedCertificate = null, initialPath = null,
     )
     private val other = nas.copy(id = "s2", name = "Backup", host = "b")
 

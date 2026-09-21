@@ -52,7 +52,7 @@ class JournalledTransferTest {
         user = server.user,
         password = server.password,
         security = FtpSecurity.EXPLICIT_TLS,
-        trustAllCertificates = true,
+        pinnedCertificate = FtpsTestServer.fingerprint,
         readTimeoutMillis = 3_000,
     )
 

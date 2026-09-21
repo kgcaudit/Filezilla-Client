@@ -22,7 +22,13 @@ data class SiteDraft(
     val password: String,
     val security: FtpSecurity,
     val transferMode: TransferMode,
-    val trustAllCertificates: Boolean,
+    /**
+     * The certificate accepted for this server, carried through the editor
+     * untouched. It is not something to type -- it is set by recognising a
+     * certificate when one is presented, and cleared by the editor's own
+     * button -- but editing and saving a site must not silently drop it.
+     */
+    val pinnedCertificate: String?,
     val initialPath: String?,
     /** Null means "negotiate", which is what most servers want. */
     val encoding: String? = null,
@@ -48,7 +54,7 @@ data class SiteDraft(
         ),
         security = security.name,
         transferMode = transferMode.name,
-        trustAllCertificates = trustAllCertificates,
+        pinnedCertificate = pinnedCertificate,
         initialPath = initialPath?.ifBlank { null },
         encoding = encoding?.ifBlank { null },
     )
@@ -70,7 +76,7 @@ data class SiteDraft(
             password = "",
             security = FtpSecurity.PLAIN,
             transferMode = TransferMode.DEFAULT,
-            trustAllCertificates = false,
+            pinnedCertificate = null,
             initialPath = null,
             encoding = null,
         )
@@ -86,7 +92,7 @@ data class SiteDraft(
                 password = plaintext.orEmpty(),
                 security = site.securityEnum,
                 transferMode = enumValueOf(site.transferMode),
-                trustAllCertificates = site.trustAllCertificates,
+                pinnedCertificate = site.pinnedCertificate,
                 initialPath = site.initialPath,
                 encoding = site.encoding,
                 passwordUnreadable = plaintext == null,

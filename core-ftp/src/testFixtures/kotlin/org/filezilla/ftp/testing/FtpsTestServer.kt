@@ -1,5 +1,6 @@
 package org.filezilla.ftp.testing
 
+import org.filezilla.ftp.net.ServerCertificate
 import java.io.File
 import java.net.ServerSocket
 import java.nio.file.Files
@@ -194,6 +195,23 @@ class FtpsTestServer(
             python.canExecute() &&
                 File(serverDir, "cert.pem").isFile &&
                 File(serverDir, "key.pem").isFile
+        }
+
+        /**
+         * The SHA-256 fingerprint of the certificate this server presents.
+         *
+         * Every test that connects here pins this, which is the same path a
+         * real user takes after recognising their server -- and a far
+         * better test than the switch it replaced, because "accept
+         * anything" would have gone on passing no matter what the pinning
+         * did. A fingerprint that does not match is a handshake that fails.
+         */
+        val fingerprint: String by lazy {
+            val pem = File(serverDir, "cert.pem").readText()
+            val body = pem.substringAfter("-----BEGIN CERTIFICATE-----")
+                .substringBefore("-----END CERTIFICATE-----")
+                .filterNot { it.isWhitespace() }
+            ServerCertificate.fingerprintOf(java.util.Base64.getDecoder().decode(body))
         }
 
         /**

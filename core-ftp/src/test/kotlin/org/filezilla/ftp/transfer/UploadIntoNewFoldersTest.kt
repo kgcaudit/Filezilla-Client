@@ -54,7 +54,7 @@ class UploadIntoNewFoldersTest {
             user = server.user,
             password = server.password,
             security = FtpSecurity.EXPLICIT_TLS,
-            trustAllCertificates = true,
+            pinnedCertificate = FtpsTestServer.fingerprint,
         )
         val capabilities = ServerCapabilities()
         return FtpControlConnection(settings, capabilities).use { control ->

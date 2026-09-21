@@ -16,7 +16,7 @@ class DownloadTargetTest {
     private val site = SiteEntity(
         id = "s1", name = "NAS", host = "h", port = 21, user = "u",
         passwordCipher = "x", security = "PLAIN", transferMode = "DEFAULT",
-        trustAllCertificates = false, initialPath = null,
+        pinnedCertificate = null, initialPath = null,
     )
 
     @Test

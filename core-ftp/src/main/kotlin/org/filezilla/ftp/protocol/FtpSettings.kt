@@ -31,8 +31,16 @@ data class FtpSettings(
     val password: String = "anonymous@",
     val security: FtpSecurity = FtpSecurity.EXPLICIT_TLS,
 
-    /** Accept any server certificate. The app layer asks the user first. */
-    val trustAllCertificates: Boolean = false,
+    /**
+     * The certificate fingerprint this server has already been accepted on.
+     *
+     * Null means it has not been, so the certificate has to be valid on its
+     * own -- and when it is not, the connection raises
+     * [org.filezilla.ftp.net.CertificateNotTrusted] carrying what the server
+     * presented, for the app to put in front of the person. Once they
+     * recognise it, its fingerprint comes back here and only it is accepted.
+     */
+    val pinnedCertificate: String? = null,
 
     val transferMode: TransferMode = TransferMode.DEFAULT,
     val pasvFallbackMode: PasvFallbackMode = PasvFallbackMode.USE_SERVER_ADDRESS,

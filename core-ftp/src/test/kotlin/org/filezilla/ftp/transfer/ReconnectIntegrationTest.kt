@@ -60,7 +60,7 @@ class ReconnectIntegrationTest {
                 user = s.user,
                 password = s.password,
                 security = FtpSecurity.EXPLICIT_TLS,
-                trustAllCertificates = true,
+                pinnedCertificate = FtpsTestServer.fingerprint,
                 // A cut transfer is detected by the control connection going
                 // silent, so each drop costs one timeout. Shortened here to
                 // keep the suite quick; the product default is 20 seconds.

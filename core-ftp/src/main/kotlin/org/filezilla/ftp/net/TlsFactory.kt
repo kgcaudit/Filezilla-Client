@@ -3,12 +3,10 @@ package org.filezilla.ftp.net
 import java.net.InetAddress
 import java.net.Socket
 import java.security.SecureRandom
-import java.security.cert.X509Certificate
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
 
 /**
  * Creates the TLS sockets for one server connection.
@@ -19,17 +17,22 @@ import javax.net.ssl.X509TrustManager
  */
 class TlsFactory(
     /**
-     * When set, certificates are not verified. Only for connecting to a server
-     * whose self-signed certificate the user has explicitly accepted; the app
-     * layer is responsible for asking.
+     * The certificate fingerprint already accepted for this server, if any.
+     *
+     * Null means nothing has been accepted, so the certificate has to be
+     * valid on its own terms. See [PinningTrustManager] for both rules.
      */
-    private val trustAllCertificates: Boolean = false,
+    private val pinnedCertificate: String? = null,
     private val minimumProtocol: String = "TLSv1.2",
 ) {
+    /**
+     * Kept so the connection can say what certificate it was that could not
+     * be trusted, once the handshake has failed.
+     */
+    val trust = PinningTrustManager(pinnedCertificate)
+
     private val context: SSLContext = SSLContext.getInstance("TLS").also { ctx ->
-        val trustManagers: Array<TrustManager>? =
-            if (trustAllCertificates) arrayOf(TrustEverything) else null
-        ctx.init(null, trustManagers, SecureRandom())
+        ctx.init(null, arrayOf<TrustManager>(trust), SecureRandom())
     }
 
     private val factory: SSLSocketFactory get() = context.socketFactory
@@ -39,6 +42,7 @@ class TlsFactory(
         val socket = factory.createSocket(plain, host, port, true) as SSLSocket
         socket.useClientMode = true
         applyProtocols(socket)
+        applyHostnameCheck(socket)
         socket.startHandshake()
         return socket
     }
@@ -73,7 +77,30 @@ class TlsFactory(
         val socket = factory.createSocket(toWrap, host, port, true) as SSLSocket
         socket.useClientMode = true
         applyProtocols(socket)
+        applyHostnameCheck(socket)
         return socket
+    }
+
+    /**
+     * Turns on the check that the certificate is for the host being talked
+     * to, which a bare [SSLSocket] does not do.
+     *
+     * Without it a certificate signed by a real authority for some entirely
+     * different domain passes: the chain is valid, and nothing was looking
+     * at the name. That is a hole the pinning below does not cover, because
+     * it only applies to servers that have no pin.
+     *
+     * Deliberately off for a pinned server. A home server's certificate
+     * names whatever it was generated with, rarely the address it is
+     * reached at, and it has already been identified by something stricter
+     * than its name: the person recognised that exact certificate. Failing
+     * it on the name after that would rule out the servers this is for.
+     */
+    internal fun applyHostnameCheck(socket: SSLSocket) {
+        if (pinnedCertificate != null) return
+        socket.sslParameters = socket.sslParameters.apply {
+            endpointIdentificationAlgorithm = "HTTPS"
+        }
     }
 
     private fun applyProtocols(socket: SSLSocket) {
@@ -82,11 +109,5 @@ class TlsFactory(
         val wanted = order.drop(minIndex).toSet()
         val enabled = socket.supportedProtocols.filter { it in wanted }
         if (enabled.isNotEmpty()) socket.enabledProtocols = enabled.toTypedArray()
-    }
-
-    private object TrustEverything : X509TrustManager {
-        override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
-        override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
-        override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
     }
 }

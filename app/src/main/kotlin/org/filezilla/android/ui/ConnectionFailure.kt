@@ -2,6 +2,7 @@ package org.filezilla.android.ui
 
 import androidx.annotation.StringRes
 import org.filezilla.android.R
+import org.filezilla.ftp.net.CertificateNotTrusted
 import org.filezilla.ftp.protocol.FtpCommandException
 import java.io.IOException
 import java.net.ConnectException
@@ -44,6 +45,23 @@ data class ConnectionFailure(
 fun describeFailure(error: Throwable, online: Boolean): ConnectionFailure {
     val host = (error as? UnknownHostException)?.message.orEmpty()
     val message = error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName
+
+    // Ahead of the offline check as well, and for a stronger reason: the
+    // phone reached the server perfectly well. Saying the connection is
+    // down would send somebody to look at their signal over a question
+    // about who they are talking to -- which is the one failure here that
+    // might not be a mistake.
+    val refused = generateSequence(error) { it.cause }
+        .filterIsInstance<CertificateNotTrusted>()
+        .firstOrNull()
+    if (refused != null) {
+        return ConnectionFailure(
+            if (refused.changed) R.string.cert_changed_short else R.string.fail_certificate,
+            R.string.fail_certificate_advice,
+            R.string.detail_plain,
+            refused.certificate.fingerprint,
+        )
+    }
 
     // Ahead of the offline check, because this one is not a network failure
     // at all -- nothing was sent and nothing was removed -- and the offline

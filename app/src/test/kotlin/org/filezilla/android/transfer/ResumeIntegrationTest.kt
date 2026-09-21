@@ -124,7 +124,7 @@ class ResumeIntegrationTest {
         passwordCipher = FakePasswordCipher().encrypt(server.password),
         security = FtpSecurity.EXPLICIT_TLS.name,
         transferMode = TransferMode.DEFAULT.name,
-        trustAllCertificates = true,
+        pinnedCertificate = FtpsTestServer.fingerprint,
         initialPath = null,
     )
 

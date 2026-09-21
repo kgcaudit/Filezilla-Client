@@ -51,8 +51,6 @@
     <string name="password_hint">Leave blank for anonymous</string>
     <string name="field_initial_path">Starting folder (optional)</string>
     <string name="password_unreadable">The saved password could not be read back and needs entering again.</string>
-    <string name="trust_all_title">Accept any certificate</string>
-    <string name="trust_all_detail">Turns off certificate checking for this server. Only for a server whose certificate you already know.</string>
     <string name="security_plain">Plain FTP</string>
     <string name="security_explicit">FTPS explicit (AUTH TLS)</string>
     <string name="security_implicit">FTPS implicit</string>
@@ -176,7 +174,7 @@
     <string name="fail_timeout">Server did not respond</string>
     <string name="fail_timeout_advice">The address is reachable but nothing replied in time. Check the port, and whether a firewall is in the way.</string>
     <string name="fail_tls">Encryption failed</string>
-    <string name="fail_tls_advice">The TLS handshake did not complete. Try a different Encryption setting, or turn on "Accept any certificate" if this is a server whose certificate you know.</string>
+    <string name="fail_tls_advice">The TLS handshake did not complete. Try a different Encryption setting: a server expecting plain FTP or implicit TLS cannot answer an explicit one.</string>
     <string name="fail_login">Login rejected</string>
     <string name="fail_login_advice">The server refused these credentials. Check the user name and password.</string>
     <string name="fail_denied">Not available</string>
@@ -335,4 +333,25 @@
     <string name="install_blocked_detail">To install %1$s, this app has to be allowed as a source of apps. Android asks for that on a settings screen of its own; without it the installer turns the app away without saying so.</string>
     <string name="install_blocked_settings">Open settings</string>
     <string name="app_build">Build %1$s</string>
+    <string name="cert_none_title">Certificate not yet accepted</string>
+    <string name="cert_none_detail">You will be shown this server\'s certificate the first time you connect, and asked whether it is the right one.</string>
+    <string name="cert_pinned_title">This server\'s certificate is accepted</string>
+    <string name="cert_forget">Forget</string>
+    <string name="cert_fingerprint">Fingerprint (SHA-256)</string>
+    <string name="cert_subject">Issued for</string>
+    <string name="cert_issuer">Signed by</string>
+    <string name="cert_issuer_self">Itself (self-signed)</string>
+    <string name="cert_valid">Valid</string>
+    <string name="cert_valid_range">%1$s to %2$s</string>
+    <string name="cert_valid_expired">%1$s to %2$s — outside this period today</string>
+    <string name="cert_ask_title">Is this %1$s?</string>
+    <string name="cert_ask_detail">No authority vouches for this certificate, which is normal for a server you run yourself. Compare the fingerprint with the one your server shows. Accept it only if they match: anything else on the network could be answering instead.</string>
+    <string name="cert_accept">This is my server</string>
+    <string name="cert_changed_title">%1$s is presenting a different certificate</string>
+    <string name="cert_changed_detail">The certificate accepted before has been replaced. A renewed certificate looks exactly like somebody intercepting the connection, and only you can tell which this is. Do not accept it unless you know the server changed.</string>
+    <string name="cert_changed_was">Accepted before: %1$s</string>
+    <string name="cert_accept_changed">Accept the new certificate</string>
+    <string name="fail_certificate">The server\'s certificate could not be verified.</string>
+    <string name="cert_changed_short">The server\'s certificate has changed</string>
+    <string name="fail_certificate_advice">Tap the server again to see the certificate and decide whether it is the right one.</string>
 </resources>

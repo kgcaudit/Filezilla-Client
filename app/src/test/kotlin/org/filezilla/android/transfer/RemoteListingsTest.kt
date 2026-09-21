@@ -34,7 +34,7 @@ class RemoteListingsTest {
         passwordCipher = "",
         security = "EXPLICIT_TLS",
         transferMode = "DEFAULT",
-        trustAllCertificates = true,
+        pinnedCertificate = null,
         initialPath = null,
         encoding = encoding,
     )

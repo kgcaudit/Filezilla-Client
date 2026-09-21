@@ -68,7 +68,7 @@ class LargeFileResumeTest {
             user = s.user,
             password = s.password,
             security = FtpSecurity.EXPLICIT_TLS,
-            trustAllCertificates = true,
+            pinnedCertificate = FtpsTestServer.fingerprint,
         )
         return FtpControlConnection(settings, capabilities).use { control ->
             control.connect()

@@ -37,7 +37,7 @@ class BrowseConnectionsTest {
         passwordCipher = "x",
         security = FtpSecurity.EXPLICIT_TLS.name,
         transferMode = TransferMode.DEFAULT.name,
-        trustAllCertificates = false,
+        pinnedCertificate = null,
         initialPath = null,
     )
 

@@ -139,7 +139,7 @@ class BrowseConnections<S : java.io.Closeable>(
         site.security,
         site.transferMode,
         site.encoding.orEmpty(),
-        site.trustAllCertificates.toString(),
+        site.pinnedCertificate.orEmpty(),
     ).joinToString("\u0000")
 
     companion object {

@@ -54,7 +54,7 @@ class ConnectionReuseIntegrationTest {
         user = server.user,
         password = server.password,
         security = FtpSecurity.EXPLICIT_TLS,
-        trustAllCertificates = true,
+        pinnedCertificate = FtpsTestServer.fingerprint,
         maxRetries = 1,
     )
 

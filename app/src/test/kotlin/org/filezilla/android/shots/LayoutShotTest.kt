@@ -541,7 +541,7 @@ class LayoutShotTest {
                     password = "",
                     security = FtpSecurity.EXPLICIT_TLS,
                     transferMode = TransferMode.DEFAULT,
-                    trustAllCertificates = false,
+                    pinnedCertificate = null,
                     initialPath = null,
                 ),
                 onDismiss = {},
@@ -672,7 +672,7 @@ class LayoutShotTest {
         passwordCipher = "",
         security = security.name,
         transferMode = TransferMode.DEFAULT.name,
-        trustAllCertificates = false,
+        pinnedCertificate = null,
         initialPath = null,
         position = id,
     )

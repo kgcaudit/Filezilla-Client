@@ -20,6 +20,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.filezilla.android.AppGraph
 import org.filezilla.android.data.SiteEntity
+import org.filezilla.ftp.net.CertificateNotTrusted
 import org.filezilla.android.files.AccessRoute
 import org.filezilla.android.files.FilePath
 import org.filezilla.android.files.LocalOperations
@@ -678,7 +679,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 .onFailure { error ->
                     update(activePane) {
-                        it.copy(error = describeFailure(error, graph.networkGate.currentlyOnline()))
+                        it.copy(error = failureOn(pane(activePane).site, error))
                     }
                     onQueued(0)
                 }
@@ -906,7 +907,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (held.mode == ClipboardMode.MOVE) clipboard = null
                 onQueued(count)
             }.onFailure { error ->
-                update(activePane) { it.copy(error = describeFailure(error, graph.networkGate.currentlyOnline())) }
+                update(activePane) { it.copy(error = failureOn(pane(activePane).site, error)) }
                 onQueued(0)
             }
         }
@@ -982,7 +983,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }.onFailure { error ->
                 update(id) {
-                    it.copy(loading = false, error = describeFailure(error, graph.networkGate.currentlyOnline()))
+                    it.copy(loading = false, error = failureOn(pane(id).site, error))
                 }
             }
         }
@@ -1061,7 +1062,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             open(id)
             failure?.let { error ->
                 update(id) {
-                    it.copy(error = describeFailure(error, graph.networkGate.currentlyOnline()))
+                    it.copy(error = failureOn(pane(id).site, error))
                 }
             }
         }
@@ -1442,6 +1443,81 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * held. Navigation leaves it off -- walking back up a tree is where
      * every cache hit comes from -- and refresh turns it on.
      */
+    // ------------------------------------------------- the server's certificate
+
+    /**
+     * The certificate somebody is being asked to recognise, if any.
+     *
+     * One at a time and app-wide rather than per pane: the question is
+     * about a server, both panes can be pointed at the same one, and being
+     * asked the same question twice is how people learn to dismiss it
+     * without reading.
+     */
+    var certificateQuestion by mutableStateOf<CertificateQuestion?>(null)
+        private set
+
+    /**
+     * Turns a failure into something to show, and raises the certificate
+     * question when that is what the failure was.
+     *
+     * Every connection failure in this class goes through here, so a
+     * refused certificate cannot reach the user as a bare "could not
+     * connect" from whichever operation happened to be first.
+     *
+     * A refusal during a queued transfer is not routed here and does not
+     * need to be: it fails the transfer, which is the safe outcome, and the
+     * next time the user browses that server they get asked properly.
+     */
+    private fun failureOn(site: SiteEntity?, error: Throwable): ConnectionFailure {
+        val refused = generateSequence(error) { it.cause }
+            .filterIsInstance<CertificateNotTrusted>()
+            .firstOrNull()
+        if (refused != null && site != null && certificateQuestion == null) {
+            certificateQuestion = CertificateQuestion(
+                site = site,
+                certificate = refused.certificate,
+                replacing = refused.previouslyTrusted,
+            )
+        }
+        return describeFailure(error, graph.networkGate.currentlyOnline())
+    }
+
+    fun dismissCertificateQuestion() {
+        certificateQuestion = null
+    }
+
+    /**
+     * Records that this certificate is the server, and goes back in.
+     *
+     * The fingerprint is saved against the site before anything reconnects,
+     * and the pooled connection for that site is dropped -- its key
+     * includes the pin, but a connection opened under the old settings
+     * would otherwise be handed to the retry.
+     */
+    fun trustCertificate() {
+        val question = certificateQuestion ?: return
+        certificateQuestion = null
+        viewModelScope.launch {
+            val pinned = question.site.copy(
+                pinnedCertificate = question.certificate.fingerprint,
+            )
+            graph.database.sites().upsert(pinned)
+            graph.transfers.forget(question.site)
+
+            // Both panes, because both may be sitting on the failure. The
+            // site object each pane holds is the one from before the pin,
+            // so it is replaced rather than reused -- a stale copy would
+            // reconnect with no pin and be refused again.
+            for (id in PaneId.entries) {
+                val source = pane(id).source
+                if (source is PaneSource.Remote && source.site.id == pinned.id) {
+                    update(id) { it.copy(source = PaneSource.Remote(pinned), error = null) }
+                    loadRemote(id, pinned, pane(id).path.takeIf { it.isNotEmpty() }, fresh = true)
+                }
+            }
+        }
+    }
+
     private fun loadRemote(id: PaneId, site: SiteEntity, path: String?, fresh: Boolean = false) {
         val asked = askForListing(id)
         if (!fresh && path != null) {
@@ -1508,7 +1584,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 update(id) {
                     it.copy(
                         loading = false,
-                        error = describeFailure(error, graph.networkGate.currentlyOnline()),
+                        error = failureOn(pane(id).site, error),
                     )
                 }
             }
@@ -1833,7 +1909,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }.onFailure { error ->
                 browse = browse.copy(
                     loading = false,
-                    error = describeFailure(error, graph.networkGate.currentlyOnline()),
+                    error = failureOn(site, error),
                 )
             }
         }
@@ -2031,7 +2107,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 update(id) {
                     it.copy(
                         loading = false,
-                        error = describeFailure(error, graph.networkGate.currentlyOnline()),
+                        error = failureOn(pane(id).site, error),
                     )
                 }
             }

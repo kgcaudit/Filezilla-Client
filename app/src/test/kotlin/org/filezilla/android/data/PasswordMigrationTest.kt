@@ -61,7 +61,12 @@ class PasswordMigrationTest {
         assertEquals("Work", site.name)
         assertEquals(21, site.port)
         assertEquals("EXPLICIT_TLS", site.security)
-        assertEquals(true, site.trustAllCertificates)
+        // Except the one thing that must not come across. This site had
+        // "accept any certificate" switched on, and version 6 does not have
+        // a way to say that any more -- so it arrives with nothing pinned
+        // and the next connection asks. Carrying it forward under a new
+        // name would have carried the hole with it.
+        assertEquals(null, site.pinnedCertificate)
         assertEquals("/pub", site.initialPath)
         // The column version 3 added defaults to null, which is the same
         // "negotiate UTF-8" behaviour the site had before it existed.

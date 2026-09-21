@@ -190,7 +190,7 @@ class ServerCompatibilityTest {
             user = user,
             password = password,
             security = FtpSecurity.EXPLICIT_TLS,
-            trustAllCertificates = true,
+            pinnedCertificate = FtpsTestServer.fingerprint,
         )
         val key = settings.serverKey
 
