@@ -190,6 +190,13 @@ fun FilePanes(
                     // downloading it first.
                     onShare = if (state.isLocal) ({ onShareLocal(sharable) }) else null,
                     canShare = sharable.isNotEmpty(),
+                    // Folders are kept here, unlike sharing: a zip of a
+                    // folder is the commonest thing anybody wants a zip of.
+                    onCompress = if (state.isLocal) {
+                        { model.compress(active, state.selection.toList()) }
+                    } else {
+                        null
+                    },
                     onCut = { model.cutSelection(active) },
                     onCopy = { model.copySelection(active) },
                     onDelete = { confirmingDelete = true },

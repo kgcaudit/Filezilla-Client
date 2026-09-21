@@ -47,6 +47,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.filezilla.android.archive.Archives
 import kotlinx.coroutines.launch
 import org.filezilla.android.R
 import org.filezilla.android.files.FileAssociations
@@ -753,12 +756,58 @@ private fun AppScreen(
     LaunchedEffect(ready, model.warnReadOnly) {
         if (ready != null && !model.warnReadOnly) {
             model.openedReady()
-            if (InstallApk.isPackage(ready.name) && !InstallApk.allowed(context)) {
+            // An archive is opened here rather than handed to another app.
+            // Nothing else on a phone reads alz or egg, and for a zip the
+            // chooser offers whatever will take it -- which is how tapping
+            // an archive used to end in a photo viewer.
+            val kind = withContext(Dispatchers.IO) { Archives.kindOf(ready) }
+            if (kind != null) {
+                model.openArchive(ready, model.unpackInto(ready))
+            } else if (InstallApk.isPackage(ready.name) && !InstallApk.allowed(context)) {
                 installBlockedFor = ready
             } else {
                 askWhichApp = false
                 openingFile = ready
             }
+        }
+    }
+
+    model.archive?.let { view ->
+        ArchiveScreen(
+            view = view,
+            busy = model.archiveBusy,
+            actions = ArchiveActions(
+                onEnter = model::archiveEnter,
+                onUp = model::archiveUp,
+                onToggle = model::archiveToggle,
+                onPickAll = model::archivePickAll,
+                onPickNone = model::archivePickNone,
+                onExtract = model::archiveExtract,
+                onClose = model::closeArchive,
+            ),
+        )
+    }
+
+    if (model.archivePasswordAsked) {
+        ArchivePasswordDialog(
+            wrong = model.archivePasswordWrong,
+            onSubmit = model::archiveExtractWith,
+            onDismiss = model::dismissArchivePassword,
+        )
+    }
+
+    // A compress started from the pane has no archive screen behind it, so
+    // it needs somewhere of its own to show what it is doing.
+    if (model.archive == null) {
+        model.archiveBusy?.let { busy -> ArchiveWorkDialog(busy) }
+    }
+
+    model.archiveOutcome?.let { outcome ->
+        LaunchedEffect(outcome) {
+            model.archiveOutcomeShown()
+            snackbars.showSnackbar(
+                context.getString(outcome.message, *outcome.args.toTypedArray()),
+            )
         }
     }
 

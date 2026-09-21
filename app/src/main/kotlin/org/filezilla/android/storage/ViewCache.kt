@@ -132,6 +132,17 @@ class ViewCache(
      * fetch in flight is on its way to being one or on its way to being
      * deleted, and either way it is not what "kept for opening" means.
      */
+    /**
+     * Whether [file] is one of the copies kept here.
+     *
+     * Asked because a file in this folder has no "beside it": unpacking an
+     * archive next to it would put the result in a cache Android empties
+     * when it wants the room.
+     */
+    fun holds(file: File): Boolean = runCatching {
+        file.canonicalPath.startsWith(root.canonicalPath + File.separator)
+    }.getOrDefault(false)
+
     fun totalBytes(): Long = root.listFiles()
         ?.filter { it.isFile && !it.name.contains(PARTIAL_SUFFIX) }
         ?.sumOf { it.length() }

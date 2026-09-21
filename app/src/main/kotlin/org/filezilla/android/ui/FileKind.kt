@@ -39,7 +39,10 @@ fun kindOf(name: String, isDirectory: Boolean): FileKind {
 }
 
 private val BY_EXTENSION: Map<String, FileKind> = buildMap {
-    for (e in "zip rar 7z tar gz bz2 xz tgz iso".split(" ")) put(e, FileKind.ARCHIVE)
+    // alz and egg are ESTsoft's, they are everywhere in Korea, and this
+    // app opens both -- so a row that is one should look like an archive
+    // rather than like a file nothing knows about.
+    for (e in "zip rar 7z tar gz bz2 xz tgz iso alz egg a00 a01".split(" ")) put(e, FileKind.ARCHIVE)
     for (e in "jpg jpeg png gif webp bmp heic heif tiff tif svg".split(" ")) put(e, FileKind.IMAGE)
     for (e in "mkv mp4 avi mov wmv flv webm m4v mpg mpeg ts m2ts".split(" ")) put(e, FileKind.VIDEO)
     for (e in "mp3 flac wav aac ogg m4a wma opus".split(" ")) put(e, FileKind.AUDIO)

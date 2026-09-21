@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.automirrored.filled.NoteAdd
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -157,6 +158,15 @@ fun SelectionBar(
     onShare: (() -> Unit)? = null,
     /** Folders cannot be handed over, so a selection of only folders cannot. */
     canShare: Boolean = false,
+    /**
+     * On a phone pane, packing the picked rows into a zip beside them.
+     *
+     * Null on a server pane. Compressing there would mean fetching every
+     * picked file, zipping it here and sending it back -- which is a
+     * transfer, several of them, and not what a button on a selection
+     * bar should quietly start.
+     */
+    onCompress: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -192,6 +202,14 @@ fun SelectionBar(
                     Icon(
                         Icons.Filled.Share,
                         contentDescription = stringResource(R.string.action_share_selected),
+                    )
+                }
+            }
+            onCompress?.let { compress ->
+                IconButton(onClick = compress) {
+                    Icon(
+                        Icons.Filled.FolderZip,
+                        contentDescription = stringResource(R.string.archive_compress),
                     )
                 }
             }

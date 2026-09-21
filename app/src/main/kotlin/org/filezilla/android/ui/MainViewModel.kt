@@ -19,6 +19,13 @@ import org.filezilla.android.storage.numberedName
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.filezilla.android.AppGraph
+import org.filezilla.android.R
+import org.filezilla.android.archive.ArchiveBrowsing
+import org.filezilla.android.archive.ArchiveEntry
+import org.filezilla.android.archive.ArchiveExtract
+import org.filezilla.android.archive.ArchiveWriter
+import org.filezilla.android.archive.Archives
+import org.filezilla.android.archive.ExtractResult
 import org.filezilla.android.data.SiteEntity
 import org.filezilla.android.files.FileMode
 import org.filezilla.ftp.transfer.TransferAbort
@@ -1684,6 +1691,295 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun offerToOpen(file: java.io.File) {
         if (!graph.preferences.warnedThatViewingIsReadOnly) warnReadOnly = true
         readyToOpen = file
+    }
+
+    // ---------------------------------------------------------------- archives
+
+    /**
+     * What an unpack or a compress had to say for itself.
+     *
+     * Separate from [WorkOutcome], which carries two counts: these
+     * sentences carry a folder name and a file name, and squeezing a name
+     * into an int was not going to work.
+     */
+    data class ArchiveOutcome(
+        @androidx.annotation.StringRes val message: Int,
+        val args: List<Any> = emptyList(),
+    )
+
+    /** The archive being looked inside, or null. */
+    var archive by mutableStateOf<ArchiveView?>(null)
+        private set
+
+    /** Where that archive's bytes are: on the phone, or fetched to look at. */
+    private var archiveFile: java.io.File? = null
+
+    /** Where an unpack from it would go; see [unpackInto]. */
+    private var archiveInto: java.io.File? = null
+
+    var archiveBusy by mutableStateOf<ArchiveBusy?>(null)
+        private set
+
+    var archiveOutcome by mutableStateOf<ArchiveOutcome?>(null)
+        private set
+
+    /**
+     * Set when something locked has to be opened before it can be unpacked.
+     *
+     * Asked once, at the front, rather than at the seventh file of thirty:
+     * a dialog that appears part way through a progress bar is a dialog
+     * nobody is looking at.
+     */
+    var archivePasswordAsked by mutableStateOf(false)
+        private set
+
+    var archivePasswordWrong by mutableStateOf(false)
+        private set
+
+    private var archiveExtractAll = false
+
+    fun archiveOutcomeShown() {
+        archiveOutcome = null
+    }
+
+    /** Lists the phone's panes again, because something wrote to it. */
+    private fun relistLocalPanes() {
+        for (id in PaneId.entries) if (pane(id).isLocal) openLocal(id, pane(id).path)
+    }
+
+    /**
+     * Opens [file] as an archive and shows what is in it.
+     *
+     * [into] is where an unpack lands. For a file on the phone that is a
+     * new folder beside it, which is what every file manager does. A file
+     * fetched from a server has no "beside it" -- it is in the cache of
+     * copies kept for opening -- so the caller passes the folder a
+     * download from that pane would have used, which is the rule the rest
+     * of this app already follows.
+     */
+    fun openArchive(file: java.io.File, into: java.io.File) {
+        viewModelScope.launch {
+            val opened = withContext(Dispatchers.IO) {
+                runCatching { Archives.open(file).use { it.entries } }
+            }
+            opened.onSuccess { entries ->
+                archiveFile = file
+                archiveInto = into
+                archive = ArchiveView(name = file.name, entries = entries)
+            }.onFailure {
+                archiveOutcome = ArchiveOutcome(R.string.archive_not_readable)
+            }
+        }
+    }
+
+    /**
+     * Where unpacking [file] would put things.
+     *
+     * Beside it, in a new folder, when the archive is on the phone: that
+     * is what every file manager does and it needs no explaining. A file
+     * fetched from a server is in the cache of copies kept for opening,
+     * and that folder is emptied whenever Android wants the room -- so
+     * there is no "beside it" and the answer is the phone's pane, which
+     * is where a download from this app goes.
+     */
+    fun unpackInto(file: java.io.File): java.io.File {
+        val beside = file.parentFile
+        if (beside != null && !graph.viewCache.holds(file)) return beside
+        val shown = PaneId.entries
+            .firstOrNull { pane(it).isLocal && pane(it).path.isNotEmpty() }
+            ?.let { java.io.File(pane(it).path) }
+        return shown ?: beside ?: file
+    }
+
+    fun closeArchive() {
+        archiveBusy?.onStop?.invoke()
+        archive = null
+        archiveFile = null
+        archiveInto = null
+        archivePasswordAsked = false
+        archivePasswordWrong = false
+    }
+
+    fun archiveEnter(at: String) {
+        archive = archive?.copy(at = at)
+    }
+
+    fun archiveUp() {
+        val at = archive?.at ?: return
+        archive = archive?.copy(at = ArchiveBrowsing.upFrom(at) ?: "")
+    }
+
+    fun archiveToggle(path: String) {
+        val view = archive ?: return
+        archive = view.copy(
+            picks = if (path in view.picks) view.picks - path else view.picks + path,
+        )
+    }
+
+    /** Chooses what is on screen, not the whole archive: see [ArchiveBrowsing.pathsIn]. */
+    fun archivePickAll() {
+        val view = archive ?: return
+        archive = view.copy(picks = view.picks + ArchiveBrowsing.pathsIn(view.entries, view.at))
+    }
+
+    fun archivePickNone() {
+        archive = archive?.copy(picks = emptySet())
+    }
+
+    fun dismissArchivePassword() {
+        archivePasswordAsked = false
+        archivePasswordWrong = false
+    }
+
+    /**
+     * Starts an unpack, asking for a password first when one is needed.
+     *
+     * [all] is the button that was pressed rather than a state: with
+     * nothing chosen the button says "unpack all" and means it.
+     */
+    fun archiveExtract(all: Boolean) {
+        val view = archive ?: return
+        val file = archiveFile ?: return
+        archiveExtractAll = all
+        val picks = if (all) emptySet() else ArchiveBrowsing.expand(view.entries, view.picks)
+        val locked = view.entries.any {
+            !it.isDirectory && it.encrypted &&
+                it.unreadable != ArchiveEntry.Unreadable.ENCRYPTED_METHOD &&
+                (picks.isEmpty() || it.path in picks)
+        }
+        if (locked) {
+            archivePasswordAsked = true
+            return
+        }
+        runExtract(file, picks, null)
+    }
+
+    fun archiveExtractWith(password: CharArray) {
+        val view = archive ?: return
+        val file = archiveFile ?: return
+        archivePasswordAsked = false
+        archivePasswordWrong = false
+        val picks = if (archiveExtractAll) emptySet()
+        else ArchiveBrowsing.expand(view.entries, view.picks)
+        runExtract(file, picks, password)
+    }
+
+    private fun runExtract(file: java.io.File, picks: Set<String>, password: CharArray?) {
+        val root = archiveInto ?: return
+        val stop = java.util.concurrent.atomic.AtomicBoolean(false)
+        val extracting = getApplication<android.app.Application>()
+            .getString(R.string.archive_extracting)
+        archiveBusy = ArchiveBusy(extracting, "", 0, 0) { stop.set(true) }
+
+        viewModelScope.launch {
+            val outcome = withContext(Dispatchers.IO) {
+                runCatching {
+                    val into = java.io.File(root, freeNameIn(root.path, Archives.folderNameFor(file.name)))
+                    into.mkdirs()
+                    Archives.open(file).use { opened ->
+                        ArchiveExtract.run(
+                            archive = opened,
+                            into = into,
+                            picks = picks,
+                            password = password,
+                            cancelled = { stop.get() },
+                        ) { done, total, path ->
+                            archiveBusy = archiveBusy?.copy(done = done, total = total, path = path)
+                        }
+                    } to into
+                }
+            }
+            archiveBusy = null
+
+            outcome.onSuccess { (result, into) ->
+                // A password that opened nothing is the one failure worth
+                // asking about again rather than reporting: it is almost
+                // always a typo, and the archive is still open in front of
+                // the user.
+                val allLocked = result.written.isEmpty() &&
+                    result.skipped.isNotEmpty() &&
+                    result.skipped.all { it.reason == ExtractResult.Reason.PASSWORD }
+                if (allLocked) {
+                    runCatching { into.delete() }
+                    archivePasswordAsked = true
+                    archivePasswordWrong = true
+                    return@onSuccess
+                }
+                archiveOutcome = when {
+                    result.cancelled -> ArchiveOutcome(
+                        R.string.archive_extract_stopped,
+                        listOf(result.written.size),
+                    )
+                    result.written.isEmpty() -> ArchiveOutcome(R.string.archive_extract_none)
+                    result.skipped.isEmpty() -> ArchiveOutcome(
+                        R.string.archive_extracted,
+                        listOf(result.written.size, into.name),
+                    )
+                    else -> ArchiveOutcome(
+                        R.string.archive_extracted_some,
+                        listOf(result.written.size, result.skipped.size),
+                    )
+                }
+                if (result.written.isNotEmpty()) relistLocalPanes()
+                closeArchive()
+            }.onFailure {
+                archiveOutcome = ArchiveOutcome(R.string.archive_not_readable)
+            }
+        }
+    }
+
+    /**
+     * Makes a zip of [picks] in [folder], and puts it there.
+     *
+     * Always a zip; see [ArchiveWriter] for why there is no choice to
+     * make. The name is the folder's own when one folder was chosen and
+     * the containing folder's otherwise, which is what a person would
+     * have typed.
+     */
+    fun compress(id: PaneId, picks: List<String>) {
+        if (picks.isEmpty()) return
+        val folder = pane(id).path.takeIf { it.isNotEmpty() && pane(id).isLocal } ?: return
+        val sources = picks.map { java.io.File(folder, it) }
+        val stem = if (sources.size == 1) Archives.folderNameFor(sources.first().name)
+        else java.io.File(folder).name.ifEmpty { "archive" }
+        val target = java.io.File(folder, freeNameIn(folder, "$stem.zip"))
+
+        val stop = java.util.concurrent.atomic.AtomicBoolean(false)
+        val compressing = getApplication<android.app.Application>()
+            .getString(R.string.archive_compressing)
+        archiveBusy = ArchiveBusy(compressing, "", 0, 0) { stop.set(true) }
+
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    ArchiveWriter.zip(sources, target, cancelled = { stop.get() }) { done, total, name ->
+                        archiveBusy = archiveBusy?.copy(done = done, total = total, path = name)
+                    }
+                }
+            }
+            archiveBusy = null
+            result.onSuccess { written ->
+                if (written.cancelled) {
+                    // Half a zip is a file that opens and is wrong, so it
+                    // goes rather than being left to be found later.
+                    runCatching { target.delete() }
+                    archiveOutcome = ArchiveOutcome(
+                        R.string.archive_compress_stopped,
+                        listOf(target.name),
+                    )
+                } else {
+                    archiveOutcome = ArchiveOutcome(
+                        R.string.archive_compressed,
+                        listOf(target.name, written.entries),
+                    )
+                }
+                clearSelectionIn(id)
+                relistLocalPanes()
+            }.onFailure {
+                runCatching { target.delete() }
+                archiveOutcome = ArchiveOutcome(R.string.archive_compress_stopped, listOf(target.name))
+            }
+        }
     }
 
     // ------------------------------------------------- the server's certificate

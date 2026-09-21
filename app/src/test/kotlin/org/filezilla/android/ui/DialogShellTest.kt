@@ -54,7 +54,7 @@ class DialogShellTest {
             .toList()
 
         assertEquals(
-            listOf("BrowseMenus.kt", "BrowseScreen.kt", "CertificateUi.kt",
+            listOf("ArchiveScreen.kt", "BrowseMenus.kt", "BrowseScreen.kt", "CertificateUi.kt",
                    "ConflictDialog.kt", "FilePanes.kt", "MainActivity.kt",
                    "OpenWith.kt", "PermissionsDialog.kt", "ServerWork.kt",
                    "SiteEditor.kt", "ViewingDialogs.kt"),
@@ -140,7 +140,7 @@ class TextFieldShellTest {
             .sorted()
             .toList()
 
-        assertEquals(listOf("BrowseScreen.kt", "Dialogs.kt", "SiteEditor.kt"), users)
+        assertEquals(listOf("ArchiveScreen.kt", "BrowseScreen.kt", "Dialogs.kt", "SiteEditor.kt"), users)
     }
 }
 
