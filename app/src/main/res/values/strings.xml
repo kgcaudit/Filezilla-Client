@@ -334,4 +334,5 @@
     <string name="install_blocked_title">Allow installing apps</string>
     <string name="install_blocked_detail">To install %1$s, this app has to be allowed as a source of apps. Android asks for that on a settings screen of its own; without it the installer turns the app away without saying so.</string>
     <string name="install_blocked_settings">Open settings</string>
+    <string name="app_build">Build %1$s</string>
 </resources>

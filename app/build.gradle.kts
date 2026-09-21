@@ -7,6 +7,33 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+/**
+ * How many commits are behind this build, and which one it is.
+ *
+ * Every build carried versionCode 1 and versionName "0.1" for eighty-nine
+ * commits, so the phone could not tell two of them apart and neither could
+ * anybody holding one: "is this the build with the fix in it" had no answer
+ * short of finding the bug again. Derived from git rather than typed,
+ * because a number somebody has to remember to raise is a number that
+ * stops being raised.
+ *
+ * Falls back when git is not there -- a source archive, a clean CI
+ * checkout without history -- rather than failing the build, since a build
+ * that cannot say which commit it is is still a build.
+ */
+fun git(vararg args: String): String? = runCatching {
+    val process = ProcessBuilder("git", *args)
+        .directory(rootDir)
+        .redirectErrorStream(true)
+        .start()
+    val text = process.inputStream.bufferedReader().readText().trim()
+    if (process.waitFor() == 0 && text.isNotEmpty()) text else null
+}.getOrNull()
+
+val commitCount = git("rev-list", "--count", "HEAD")?.toIntOrNull() ?: 0
+val commitHash = git("rev-parse", "--short", "HEAD") ?: "unknown"
+val workingTreeDirty = git("status", "--porcelain")?.isNotEmpty() == true
+
 android {
     namespace = "org.filezilla.android"
     compileSdk = 35
@@ -15,8 +42,16 @@ android {
         applicationId = "org.filezilla.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1"
+        // The commit count: it only ever goes up, and it goes up by itself.
+        // Android refuses to install a lower one over a higher one, which
+        // is the behaviour wanted -- an older build should not quietly
+        // replace a newer one.
+        versionCode = commitCount
+        // What a person needs to answer "which build is this": the commit
+        // it was made from. Marked when the tree had uncommitted changes,
+        // because such a build exists nowhere but on the machine that made
+        // it and saying so saves an afternoon.
+        versionName = "0.1.$commitCount ($commitHash${if (workingTreeDirty) "+" else ""})"
     }
 
     buildTypes {
@@ -36,6 +71,8 @@ android {
 
     buildFeatures {
         compose = true
+        // So the app can say which build it is on its own settings sheet.
+        buildConfig = true
     }
 
     sourceSets {

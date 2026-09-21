@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import org.filezilla.android.BuildConfig
 import org.filezilla.android.R
 import org.filezilla.android.ui.theme.tiles
 
@@ -94,5 +95,17 @@ fun QueueSettings(wifiOnly: Boolean, onWifiOnly: (Boolean) -> Unit) {
             }
             Switch(checked = wifiOnly, onCheckedChange = onWifiOnly)
         }
+
+        // Which build this is, where somebody holding the phone can read
+        // it. Every build said "0.1" for eighty-nine commits, so "is this
+        // the one with the fix in it" had no answer short of finding the
+        // bug again. The last settings surface in the app is the place a
+        // person looks for it.
+        Text(
+            stringResource(R.string.app_build, BuildConfig.VERSION_NAME),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 20.dp, top = 18.dp, end = 20.dp, bottom = 8.dp),
+        )
     }
 }
