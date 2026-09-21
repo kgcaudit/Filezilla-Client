@@ -55,6 +55,8 @@ fun FilePanes(
     onTransfersQueued: (Int) -> Unit,
     onDownloadSelected: () -> Unit,
     onOpenLocalFile: (String) -> Unit,
+    /** The same, but always asking which app rather than using the remembered one. */
+    onOpenLocalFileWith: (String) -> Unit,
     /** Hands the given full paths, all on this phone, to another app. */
     onShareLocal: (List<String>) -> Unit,
     onNewDirectory: () -> Unit,
@@ -142,6 +144,7 @@ fun FilePanes(
                                 onPickSite = onPickSite,
                                 onDownload = onDownload,
                                 onOpenLocalFile = onOpenLocalFile,
+                                onOpenLocalFileWith = onOpenLocalFileWith,
                                 onNewDirectory = onNewDirectory,
                                 onUpload = onUpload,
                                 onOpenScreen = onOpenScreen,
@@ -160,6 +163,7 @@ fun FilePanes(
                         onPickSite = onPickSite,
                         onDownload = onDownload,
                         onOpenLocalFile = onOpenLocalFile,
+                        onOpenLocalFileWith = onOpenLocalFileWith,
                         onNewDirectory = onNewDirectory,
                         onUpload = onUpload,
                         onOpenScreen = onOpenScreen,
@@ -402,6 +406,7 @@ private fun PaneBody(
     onPickSite: () -> Unit,
     onDownload: (org.filezilla.ftp.listing.DirectoryEntry) -> Unit,
     onOpenLocalFile: (String) -> Unit,
+    onOpenLocalFileWith: (String) -> Unit,
     onNewDirectory: () -> Unit,
     onUpload: () -> Unit,
     onOpenScreen: (Screen) -> Unit,
@@ -484,6 +489,9 @@ private fun PaneBody(
                     onRename = model::rename,
                     onProperties = { model.showProperties(it) },
                     onToggleSelected = { model.toggleSelected(it.name) },
+                    onOpenWith = { entry ->
+                        onOpenLocalFileWith(FilePath.child(model.pane(id).path, entry.name))
+                    },
                 ),
             )
         }

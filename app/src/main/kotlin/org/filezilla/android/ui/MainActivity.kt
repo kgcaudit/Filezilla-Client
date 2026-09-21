@@ -113,8 +113,11 @@ private fun AppScreen(
         }
     }
     var queueMenuOpen by remember { mutableStateOf(false) }
-    // The file waiting on a decision about which app opens it.
+    // The file waiting on a decision about which app opens it, and whether
+    // the remembered choice counts. "Open with" is the way back from a
+    // choice made once, so it has to ignore it.
     var openingFile by remember { mutableStateOf<java.io.File?>(null) }
+    var askWhichApp by remember { mutableStateOf(false) }
     val associations = remember(context) { FileAssociations(context) }
     var editingSite by remember { mutableStateOf<SiteDraft?>(null) }
     var creatingDirectory by remember { mutableStateOf(false) }
@@ -454,7 +457,14 @@ private fun AppScreen(
                 onPickSite = { screen = Screen.SITES },
                 onDownload = ::startDownload,
                 onRequestNotifications = ::requestNotifications,
-                onOpenLocalFile = { path -> openingFile = java.io.File(path) },
+                onOpenLocalFile = { path ->
+                    askWhichApp = false
+                    openingFile = java.io.File(path)
+                },
+                onOpenLocalFileWith = { path ->
+                    askWhichApp = true
+                    openingFile = java.io.File(path)
+                },
                 onShareLocal = { paths ->
                     val intent = ShareFiles.intentFor(context, paths.map { java.io.File(it) })
                     val chooser = intent?.let {
@@ -526,7 +536,7 @@ private fun AppScreen(
     openingFile?.let { file ->
         // The remembered choice first, and straight there: somebody who has
         // said "always open .srt this way" has asked not to be asked.
-        val remembered = associations.appForFile(file.name)
+        val remembered = if (askWhichApp) null else associations.appForFile(file.name)
         val wentStraight = remembered != null && runCatching {
             context.startActivity(OpenFile.intentFor(context, file, app = remembered))
         }.isSuccess

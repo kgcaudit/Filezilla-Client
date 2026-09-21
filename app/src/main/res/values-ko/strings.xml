@@ -260,7 +260,6 @@
     <string name="storage_servers_section">서버</string>
     <string name="storage_not_granted">아직 저장소를 읽을 수 없습니다</string>
     <string name="storage_grant_action">눌러서 권한을 허용하세요</string>
-    <string name="browse_open">%1$s 열기</string>
     <string name="storage_free_of">%2$s 중 %1$s 사용 가능</string>
     <string name="storage_clear_pane">이 창 비우기</string>
     <string name="storage_manage_servers">서버 추가·편집</string>
@@ -315,4 +314,5 @@
 
     <string name="action_create">만들기</string>
     <string name="action_change">변경</string>
+    <string name="browse_open_with">다른 앱으로 열기…</string>
 </resources>

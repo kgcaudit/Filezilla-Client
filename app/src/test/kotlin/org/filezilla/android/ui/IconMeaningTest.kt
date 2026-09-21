@@ -116,7 +116,7 @@ class IconMeaningTest {
         // Which app opens which kind of file.
         "AppShortcut" to setOf("menu_associations"),
         "Share" to setOf("action_share_selected"),
-        "Download" to setOf("action_download_selected"),
+        "Download" to setOf("action_download_selected", "browse_download"),
         "Search" to setOf("menu_filter"),
         "Add" to setOf("sites_add"),
         "ArrowBack" to setOf("action_back"),

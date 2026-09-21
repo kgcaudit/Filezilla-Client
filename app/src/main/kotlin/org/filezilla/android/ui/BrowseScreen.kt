@@ -19,7 +19,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
@@ -67,6 +66,16 @@ class EntryActions(
     val onRename: (DirectoryEntry, String) -> Unit,
     val onProperties: (DirectoryEntry) -> Unit,
     val onToggleSelected: (DirectoryEntry) -> Unit,
+    /**
+     * Opens a file on the phone with an app chosen now.
+     *
+     * Not the same act as tapping it: a tap honours whatever "always open
+     * .srt this way" was ticked, and this deliberately ignores it. Without
+     * it, a choice made once could only be undone by finding the default
+     * apps list, clearing the entry, and coming back -- which is a long way
+     * round for "not that one, the other one".
+     */
+    val onOpenWith: (DirectoryEntry) -> Unit = {},
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -298,6 +307,25 @@ private fun FilterBar(filter: String, onChange: (String) -> Unit, onClose: () ->
     )
 }
 
+/**
+ * Whether a row carries a button of its own beside the menu.
+ *
+ * It carried one on both sides, and on both sides it called exactly what
+ * tapping the row calls -- a second control for the same act, inside the
+ * control that already did it. The user asked what it was for and whether
+ * it marked the files that had an app to open them; it never meant that,
+ * and on the phone it meant nothing at all.
+ *
+ * It stays on a server, where it is the one thing that says a file row can
+ * be fetched: "tap a file to download it" is not something a listing
+ * teaches by itself, and a file's own menu offers no download either. On
+ * the phone, tapping a file to open it is what tapping a file means
+ * everywhere, so the button bought nothing and spent about fifty points of
+ * the width the file names were being truncated for.
+ */
+fun showsFetchButton(isLocal: Boolean, isDirectory: Boolean): Boolean =
+    !isLocal && !isDirectory
+
 @Composable
 private fun EntryRow(
     entry: DirectoryEntry,
@@ -405,18 +433,11 @@ private fun EntryRow(
             }
         }
         if (!selecting) {
-            if (!entry.isDirectory) {
-                // The same action, and two different things: on a server it
-                // fetches the file, on the phone it opens it. A download
-                // arrow beside a file that is already on the phone says the
-                // button does something it does not.
+            if (showsFetchButton(isLocal = isLocal, isDirectory = entry.isDirectory)) {
                 IconButton(onClick = { actions.onDownload(entry) }) {
                     Icon(
-                        if (isLocal) Icons.AutoMirrored.Filled.OpenInNew else Icons.Filled.Download,
-                        contentDescription = stringResource(
-                            if (isLocal) R.string.browse_open else R.string.browse_download,
-                            entry.name,
-                        ),
+                        Icons.Filled.Download,
+                        contentDescription = stringResource(R.string.browse_download, entry.name),
                         tint = MaterialTheme.colorScheme.primary,
                     )
                 }
@@ -434,8 +455,19 @@ private fun EntryRow(
                     )
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    // A file has the download button beside it; a folder has
-                    // nowhere else to be asked for on its own.
+                    // Only on the phone, and only for a file: a row on a
+                    // server is not a file this device can hand to anything.
+                    if (isLocal && !entry.isDirectory) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.browse_open_with)) },
+                            onClick = {
+                                menuOpen = false
+                                actions.onOpenWith(entry)
+                            },
+                        )
+                    }
+                    // A file on a server has the download button beside it;
+                    // a folder has nowhere else to be asked for on its own.
                     if (entry.isDirectory && !isLocal) {
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.browse_download_folder)) },
