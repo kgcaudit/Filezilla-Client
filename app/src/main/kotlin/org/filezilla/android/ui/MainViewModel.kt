@@ -307,6 +307,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 source.site,
                 pane(id).path.ifEmpty { rememberedRemote(id, source.site).orEmpty() }
                     .takeIf { it.isNotEmpty() },
+                // This is the refresh gesture as well as the first load, and
+                // refresh means ask the server. A pane that answered a pull
+                // from memory would be a pane that cannot be made to tell
+                // the truth, which is worse than a slow one.
+                fresh = true,
             )
 
             PaneSource.Empty -> Unit
@@ -1430,8 +1435,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refresh() = open(activePane)
 
-    private fun loadRemote(id: PaneId, site: SiteEntity, path: String?) {
+    /**
+     * Lists [path] on [site] into pane [id].
+     *
+     * [fresh] asks the server even when the last answer is still being
+     * held. Navigation leaves it off -- walking back up a tree is where
+     * every cache hit comes from -- and refresh turns it on.
+     */
+    private fun loadRemote(id: PaneId, site: SiteEntity, path: String?, fresh: Boolean = false) {
         val asked = askForListing(id)
+        if (!fresh && path != null) {
+            // Straight onto the screen, in this frame, with no coroutine and
+            // no loading state: a spinner for a listing that is already in
+            // hand would put a flicker where the win was supposed to be.
+            val known = graph.transfers.listings.recall(site, path)
+            if (known != null) {
+                graph.preferences.setPanePath(id.name, siteSourceKey(site), known.path)
+                update(id) {
+                    it.copy(
+                        source = PaneSource.Remote(site),
+                        path = known.path,
+                        entries = known.entries,
+                        selection = if (known.path == it.path) {
+                            it.prunedSelection(known.entries)
+                        } else {
+                            emptySet()
+                        },
+                        loading = false,
+                        error = null,
+                    )
+                }
+                return
+            }
+        }
         update(id) { it.copy(source = PaneSource.Remote(site), loading = true, error = null) }
         viewModelScope.launch {
             runCatching {
@@ -1451,6 +1487,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }.onSuccess { (here, entries) ->
                 if (!stillWanted(id, asked)) return@launch
+                // Kept under the path that was asked for, not under the one
+                // the server resolved it to: the next visit will ask by the
+                // same name this one did.
+                if (path != null) graph.transfers.listings.remember(site, path, here, entries)
                 graph.preferences.setPanePath(id.name, siteSourceKey(site), here)
                 update(id) {
                     it.copy(

@@ -42,13 +42,43 @@ class FtpSession(
 
     fun list(): List<DirectoryEntry> = engine.list()
 
-    fun createDirectory(name: String) = operations.createDirectory(name)
+    fun createDirectory(name: String) = writing { operations.createDirectory(name) }
 
-    fun removeDirectory(name: String) = operations.removeDirectory(name)
+    fun removeDirectory(name: String) = writing { operations.removeDirectory(name) }
 
-    fun deleteFile(name: String) = operations.deleteFile(name)
+    fun deleteFile(name: String) = writing { operations.deleteFile(name) }
 
-    fun rename(from: String, to: String) = operations.rename(from, to)
+    fun rename(from: String, to: String) = writing { operations.rename(from, to) }
+
+    /**
+     * How many times this session has been asked to change the server.
+     *
+     * [RemoteListings] holds what the server last said about a folder, and
+     * anything written through here makes those listings a guess.
+     * Recording that on the session rather than at each call site is the
+     * point: a browse borrows a session and hands it back, and
+     * [TransferManager.browse] can see the count moved without knowing
+     * which operation moved it -- so a write added to this class later
+     * cannot quietly skip telling the cache.
+     *
+     * It only ever goes up. The session is pooled and outlives any one
+     * borrow, so a flag would need clearing by whoever cleared it last,
+     * and a count needs nothing.
+     */
+    var writes: Int = 0
+        private set
+
+    /**
+     * Counts first, then writes.
+     *
+     * Deliberately this way round: an operation that fails part way through
+     * has still changed the server, and a listing thrown away for nothing
+     * costs one re-read.
+     */
+    private fun <T> writing(block: () -> T): T {
+        writes++
+        return block()
+    }
 
     /**
      * What the server says about [remotePath] right now, for

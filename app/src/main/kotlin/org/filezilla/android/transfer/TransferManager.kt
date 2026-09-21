@@ -678,6 +678,12 @@ class TransferManager(
         )
         journal.put(running)
 
+        // A file has appeared on the server, so whatever this app was
+        // holding about the folder it landed in no longer describes it. The
+        // queue has its own connections and never borrows a browse session,
+        // so the write counter above cannot see this one.
+        listings.forgetServer(record.host, record.port, record.user)
+
         // After the record says COMPLETED and not before. If the process
         // dies between the two, the file is still on the phone and the
         // record still says it arrived, which is the harmless way round.
@@ -1015,6 +1021,13 @@ class TransferManager(
     private val browseConnections = BrowseConnections.forServers(capabilities, passwords, log)
 
     /**
+     * What each server last said about a folder, so walking back up a tree
+     * costs nothing. Shared: written by whoever listed, emptied here by
+     * whoever wrote.
+     */
+    val listings = RemoteListings()
+
+    /**
      * A blocking browse, run so that coroutine cancellation interrupts the
      * socket rather than leaving it parked on a read.
      */
@@ -1024,12 +1037,27 @@ class TransferManager(
         // safe; the short version is that it is held one caller at a time
         // and retried once when the server has silently hung up.
         browseConnections.withSession(site) { session ->
-            runInterruptible { block(session) }
+            // Every remote change this app makes outside the transfer queue
+            // goes through a session borrowed here, so this is the one place
+            // that has to notice one. The count is read either side rather
+            // than the operations being listed, so a write added to
+            // FtpSession later is covered without anything being remembered
+            // here -- and in a finally, because a delete that threw half way
+            // through has still deleted something.
+            val before = session.writes
+            try {
+                runInterruptible { block(session) }
+            } finally {
+                if (session.writes != before) listings.forget(site)
+            }
         }
     }
 
     /** Lets go of a server's kept connection, for one edited or deleted. */
-    suspend fun forget(site: SiteEntity) = browseConnections.close(site)
+    suspend fun forget(site: SiteEntity) {
+        browseConnections.close(site)
+        listings.forget(site)
+    }
 }
 
 /**
