@@ -1,6 +1,7 @@
 package org.filezilla.android.ui
 
 import android.graphics.Bitmap
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
@@ -64,9 +66,14 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
             }
 
             // A thin bar over the picture: the way back, the name, the place
-            // in the set. Dark so it reads on any image under it.
+            // in the set. Below the status bar so it never lands on the clock,
+            // and white on a dark scrim so it reads on any image under it.
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .background(Color.Black.copy(alpha = 0.32f))
+                    .statusBarsPadding()
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = model::closeImageViewer) {
@@ -93,6 +100,7 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun ZoomableImage(ref: MainViewModel.ImageRef, model: MainViewModel) {
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -141,7 +149,10 @@ private fun ZoomableImage(ref: MainViewModel.ImageRef, model: MainViewModel) {
                         translationX = offsetX,
                         translationY = offsetY,
                     )
-                    .transformable(transform)
+                    // Only claim a one-finger drag once zoomed in, to pan the
+                    // enlarged picture; at rest the drag belongs to the pager,
+                    // so a swipe turns the page. Pinch to zoom works either way.
+                    .transformable(state = transform, canPan = { scale > 1f })
                     .pointerInput(ref) {
                         detectTapGestures(onDoubleTap = {
                             // Double-tap toggles between fit and a close look.
