@@ -212,6 +212,21 @@ fun FileHeading(name: String, isDirectory: Boolean, modifier: Modifier = Modifie
  * thing that mattered: this one takes the label of the box it is drawing,
  * where the other hard-coded it.
  */
+/**
+ * What of a name to select when its box opens.
+ *
+ * The whole thing, unless it is a file with an extension: then the part
+ * before the last dot, so a rename keeps the ".zip" and lands the cursor
+ * right before it rather than off the end of a long name. A leading dot is
+ * not an extension -- a dotfile is all name -- so it is only a real dot past
+ * the first character that counts.
+ */
+private fun nameSelection(name: String, hasExtension: Boolean): TextRange {
+    if (!hasExtension) return TextRange(0, name.length)
+    val dot = name.lastIndexOf('.')
+    return TextRange(0, if (dot > 0) dot else name.length)
+}
+
 @Composable
 fun OloPromptDialog(
     @StringRes title: Int,
@@ -223,15 +238,24 @@ fun OloPromptDialog(
     titleArg: String? = null,
     @StringRes detail: Int? = null,
     @StringRes confirmLabel: Int = R.string.action_ok,
+    /**
+     * Whether the name carries an extension worth keeping out of the
+     * selection -- true for renaming a file, so the part before the last dot
+     * is highlighted and `.zip` is left alone.
+     */
+    hasExtension: Boolean = false,
 ) {
     // Keyed on what it started from. Unkeyed, a dialog reopened on a
     // different entry keeps the first one's name in the box, because the
     // same composable is reused and remember has nothing to tell it that
-    // the question changed. Opened with the whole name selected, so a long
-    // one can be replaced in a keystroke rather than fought with a cursor
-    // that lands at the end and a field that scrolls the rest out of reach.
+    // the question changed. Opened with the name selected so a long one can
+    // be replaced in a keystroke rather than fought with a cursor that lands
+    // at the end and a field that scrolls the rest out of reach -- but a
+    // file's extension is left out of the selection and the cursor sits just
+    // before it, both so the common rename keeps the ".zip" and so the box
+    // opens scrolled to the middle of the name rather than off its end.
     var value by remember(initial) {
-        mutableStateOf(TextFieldValue(initial, selection = TextRange(0, initial.length)))
+        mutableStateOf(TextFieldValue(initial, selection = nameSelection(initial, hasExtension)))
     }
     val focusRequester = remember { FocusRequester() }
     // The selection only shows once the box has focus, and the prompt is here

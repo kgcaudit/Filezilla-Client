@@ -299,6 +299,7 @@ fun BrowseScreen(
             detail = R.string.rename_detail,
             label = R.string.prompt_new_name,
             initial = entry.name,
+            hasExtension = !entry.isDirectory,
             onDismiss = { renaming = null },
             onConfirm = { newName ->
                 actions.onRename(entry, newName)
