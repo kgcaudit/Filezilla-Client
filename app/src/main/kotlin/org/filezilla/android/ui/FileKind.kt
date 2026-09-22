@@ -14,6 +14,7 @@ import org.filezilla.android.R
 enum class FileKind(@DrawableRes val glyph: Int) {
     FOLDER(R.drawable.ic_tile_folder),
     ARCHIVE(R.drawable.ic_tile_archive),
+    COMIC(R.drawable.ic_tile_comic),
     IMAGE(R.drawable.ic_tile_image),
     VIDEO(R.drawable.ic_tile_video),
     AUDIO(R.drawable.ic_tile_audio),
@@ -43,6 +44,10 @@ private val BY_EXTENSION: Map<String, FileKind> = buildMap {
     // app opens both -- so a row that is one should look like an archive
     // rather than like a file nothing knows about.
     for (e in "zip rar 7z tar gz bz2 xz tgz iso alz egg a00 a01".split(" ")) put(e, FileKind.ARCHIVE)
+    // Comic archives -- a zip, rar, 7z or tar renamed to open in a reader.
+    // They are archives, but common enough on a phone full of manga to earn
+    // their own open-book tile so a shelf of them is told from a shelf of zips.
+    for (e in "cbz cbr cb7 cbt".split(" ")) put(e, FileKind.COMIC)
     for (e in "jpg jpeg png gif webp bmp heic heif tiff tif svg".split(" ")) put(e, FileKind.IMAGE)
     for (e in "mkv mp4 avi mov wmv flv webm m4v mpg mpeg ts m2ts".split(" ")) put(e, FileKind.VIDEO)
     for (e in "mp3 flac wav aac ogg m4a wma opus".split(" ")) put(e, FileKind.AUDIO)

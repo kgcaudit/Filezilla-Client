@@ -15,11 +15,17 @@ import java.io.File
 object Archives {
 
     enum class Kind(val extensions: List<String>) {
-        ZIP(listOf("zip")),
+        // The cb* extensions are comic archives: a zip, rar, 7z or tar under
+        // a name that opens them in a comic reader. They are the same bytes,
+        // so they open through the same readers -- the extension only decides
+        // whether a tap is worth looking inside, and their real kind is read
+        // from the bytes like everything else.
+        ZIP(listOf("zip", "cbz")),
         ALZ(listOf("alz")),
         EGG(listOf("egg")),
-        RAR(listOf("rar")),
-        SEVENZ(listOf("7z")),
+        RAR(listOf("rar", "cbr")),
+        SEVENZ(listOf("7z", "cb7")),
+        TAR(listOf("tar", "cbt")),
     }
 
     /**
@@ -31,6 +37,7 @@ object Archives {
         EggArchive.looksLikeEgg(file) -> Kind.EGG
         RarArchive.looksLikeRar(file) && RarNative.available -> Kind.RAR
         SevenZArchive.looksLikeSevenZ(file) && SevenZipNative.available -> Kind.SEVENZ
+        TarArchive.looksLikeTar(file) -> Kind.TAR
         else -> null
     }
 
@@ -52,6 +59,7 @@ object Archives {
         Kind.EGG -> EggArchive.open(file)
         Kind.RAR -> RarArchive.open(file)
         Kind.SEVENZ -> SevenZArchive.open(file)
+        Kind.TAR -> TarArchive.open(file)
         null -> throw NotAnArchive("${file.name} is not an archive this app reads")
     }
 

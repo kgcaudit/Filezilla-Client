@@ -30,6 +30,17 @@ class FileKindTest {
         assertEquals(FileKind.DOCUMENT, kindOf("report.pdf", false))
     }
 
+    /** Comic archives get the open-book tile, not the plain archive box. */
+    @Test
+    fun `a comic archive reads as a comic`() {
+        assertEquals(FileKind.COMIC, kindOf("Spy x Family v01.cbz", false))
+        assertEquals(FileKind.COMIC, kindOf("chapter.CBR", false))
+        assertEquals(FileKind.COMIC, kindOf("volume.cb7", false))
+        assertEquals(FileKind.COMIC, kindOf("scan.cbt", false))
+        // A plain archive is still an archive.
+        assertEquals(FileKind.ARCHIVE, kindOf("backup.zip", false))
+    }
+
     /**
      * A subtitle beside the film it belongs to must not look like the film.
      * Telling them apart at a glance is most of what this list is scanned for.

@@ -136,6 +136,10 @@ fun colourFor(kind: FileKind): Color = with(androidx.compose.material3.MaterialT
     when (kind) {
         FileKind.FOLDER -> folder
         FileKind.ARCHIVE -> archive
+        // A comic is an archive underneath, so it keeps the archive tile and
+        // is told apart by its open-book mark rather than by a tenth hue --
+        // nine are already as many as a list can be scanned by.
+        FileKind.COMIC -> archive
         FileKind.IMAGE -> image
         FileKind.VIDEO -> video
         FileKind.AUDIO -> audio
