@@ -2177,127 +2177,82 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun runRarExtract(
-        id: PaneId,
-        session: ArchiveSession,
-        picks: Set<String>,
-        into: java.io.File,
-        overwrite: Boolean,
-        password: CharArray?,
-        onDone: () -> Unit,
-    ) {
-        val stop = java.util.concurrent.atomic.AtomicBoolean(false)
-        val extracting = getApplication<android.app.Application>().getString(R.string.archive_extracting)
-        archiveBusy = ArchiveBusy(extracting, "", 0L, 0L, { stop.set(true) }, bytes = true)
+    /** How a native reader's extraction ended, the same for rar and 7z. */
+    private enum class NativeOutcome { OK, CANCELLED, WRONG_PASSWORD, FAILED }
 
-        val covered = if (picks.isEmpty()) null else picks
-        val total = session.entries
-            .filter { !it.isDirectory && (covered == null || it.path in ArchiveBrowsing.expand(session.entries, picks)) }
-            .sumOf { it.size.coerceAtLeast(0) }
-
-        viewModelScope.launch {
-            val outcome = withContext(Dispatchers.IO) {
-                runCatching {
-                    into.mkdirs()
-                    val result = RarNative.extract(
-                        session.file, into,
-                        covered?.let { ArchiveBrowsing.expand(session.entries, it) },
-                        password, total, skipExisting = !overwrite,
-                        object : RarNative.Sink {
-                            override fun entry(name: String, size: Long, isDirectory: Boolean, modifiedMillis: Long, encrypted: Boolean) = Unit
-                            override fun progress(doneBytes: Long, totalBytes: Long, name: String) {
-                                archiveBusy = archiveBusy?.copy(done = doneBytes, total = totalBytes, path = name)
-                            }
-                            override fun cancelled() = stop.get()
-                        },
-                    )
-                    result to into
-                }
-            }
-            archiveBusy = null
-
-            outcome.onSuccess { (result, into) ->
-                when (result) {
-                    RarNative.Result.WRONG_PASSWORD -> {
-                        runCatching { into.deleteRecursively() }
-                        pendingPassword = PendingPassword.Extract(id, session, picks, into, overwrite)
-                        archivePasswordAsked = true
-                        archivePasswordWrong = true
-                        return@onSuccess
-                    }
-                    RarNative.Result.CANCELLED -> {
-                        archivePasswordWrong = false
-                        val written = into.walkTopDown().count { it.isFile }
-                        archiveOutcome = ArchiveOutcome(R.string.archive_extract_stopped, listOf(written))
-                    }
-                    else -> {
-                        archivePasswordWrong = false
-                        val written = into.walkTopDown().count { it.isFile }
-                        archiveOutcome = when {
-                            written == 0 -> ArchiveOutcome(R.string.archive_extract_none)
-                            result == RarNative.Result.FAILED ->
-                                ArchiveOutcome(R.string.archive_extracted_some, listOf(written, 0))
-                            else -> ArchiveOutcome(R.string.archive_extracted, listOf(written, into.name))
-                        }
-                    }
-                }
-                relistLocalPanes()
-                onDone()
-            }.onFailure {
-                archiveOutcome = ArchiveOutcome(R.string.archive_not_readable)
-            }
-        }
+    private fun RarNative.Result.toOutcome() = when (this) {
+        RarNative.Result.OK -> NativeOutcome.OK
+        RarNative.Result.CANCELLED -> NativeOutcome.CANCELLED
+        RarNative.Result.WRONG_PASSWORD -> NativeOutcome.WRONG_PASSWORD
+        RarNative.Result.FAILED -> NativeOutcome.FAILED
     }
 
-    private fun runSevenZExtract(
+    private fun SevenZipNative.Result.toOutcome() = when (this) {
+        SevenZipNative.Result.OK -> NativeOutcome.OK
+        SevenZipNative.Result.CANCELLED -> NativeOutcome.CANCELLED
+        SevenZipNative.Result.WRONG_PASSWORD -> NativeOutcome.WRONG_PASSWORD
+        SevenZipNative.Result.FAILED -> NativeOutcome.FAILED
+    }
+
+    /**
+     * The shared body of the native extractors (rar, 7z).
+     *
+     * Both unpack in one call rather than entry by entry -- a solid archive
+     * would otherwise decode everything before a file once per file -- and
+     * both report progress, stop and re-ask for a password the same way. Only
+     * the call into the reader differs, which [extract] supplies: it is given
+     * where to write, the expanded picks (null for everything), the byte
+     * total, whether to keep existing files, a progress report and a stop
+     * check, and returns how it ended.
+     */
+    private fun runNativeExtract(
         id: PaneId,
         session: ArchiveSession,
         picks: Set<String>,
         into: java.io.File,
         overwrite: Boolean,
-        password: CharArray?,
         onDone: () -> Unit,
+        extract: (
+            into: java.io.File,
+            picks: Set<String>?,
+            total: Long,
+            skipExisting: Boolean,
+            onProgress: (Long, Long, String) -> Unit,
+            stopRequested: () -> Boolean,
+        ) -> NativeOutcome,
     ) {
         val stop = java.util.concurrent.atomic.AtomicBoolean(false)
         val extracting = getApplication<android.app.Application>().getString(R.string.archive_extracting)
         archiveBusy = ArchiveBusy(extracting, "", 0L, 0L, { stop.set(true) }, bytes = true)
 
-        val covered = if (picks.isEmpty()) null else picks
+        val covered = if (picks.isEmpty()) null else ArchiveBrowsing.expand(session.entries, picks)
         val total = session.entries
-            .filter { !it.isDirectory && (covered == null || it.path in ArchiveBrowsing.expand(session.entries, picks)) }
+            .filter { !it.isDirectory && (covered == null || it.path in covered) }
             .sumOf { it.size.coerceAtLeast(0) }
 
         viewModelScope.launch {
             val outcome = withContext(Dispatchers.IO) {
                 runCatching {
                     into.mkdirs()
-                    val result = SevenZipNative.extract(
-                        session.file, into,
-                        covered?.let { ArchiveBrowsing.expand(session.entries, it) },
-                        password, total, skipExisting = !overwrite,
-                        object : SevenZipNative.Sink {
-                            override fun entry(name: String, size: Long, isDirectory: Boolean, modifiedMillis: Long, encrypted: Boolean, unsupported: Boolean) = Unit
-                            override fun progress(doneBytes: Long, totalBytes: Long, name: String) {
-                                archiveBusy = archiveBusy?.copy(done = doneBytes, total = totalBytes, path = name)
-                            }
-                            override fun cancelled() = stop.get()
-                        },
-                    )
-                    result to into
+                    extract(
+                        into, covered, total, !overwrite,
+                        { done, totalBytes, name -> archiveBusy = archiveBusy?.copy(done = done, total = totalBytes, path = name) },
+                        { stop.get() },
+                    ) to into
                 }
             }
             archiveBusy = null
 
             outcome.onSuccess { (result, into) ->
                 when (result) {
-                    SevenZipNative.Result.WRONG_PASSWORD -> {
+                    NativeOutcome.WRONG_PASSWORD -> {
                         runCatching { into.deleteRecursively() }
                         pendingPassword = PendingPassword.Extract(id, session, picks, into, overwrite)
                         archivePasswordAsked = true
                         archivePasswordWrong = true
                         return@onSuccess
                     }
-                    SevenZipNative.Result.CANCELLED -> {
+                    NativeOutcome.CANCELLED -> {
                         archivePasswordWrong = false
                         val written = into.walkTopDown().count { it.isFile }
                         archiveOutcome = ArchiveOutcome(R.string.archive_extract_stopped, listOf(written))
@@ -2307,7 +2262,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         val written = into.walkTopDown().count { it.isFile }
                         archiveOutcome = when {
                             written == 0 -> ArchiveOutcome(R.string.archive_extract_none)
-                            result == SevenZipNative.Result.FAILED ->
+                            result == NativeOutcome.FAILED ->
                                 ArchiveOutcome(R.string.archive_extracted_some, listOf(written, 0))
                             else -> ArchiveOutcome(R.string.archive_extracted, listOf(written, into.name))
                         }
@@ -2330,21 +2285,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         password: CharArray?,
         onDone: () -> Unit = {},
     ) {
-        // RAR is unpacked by the native reader in one call rather than
-        // entry by entry: a solid archive would otherwise decompress
-        // everything before it once per file. It reports and stops the
-        // same way, so the bar and the stop button are unchanged.
-        if (Archives.kindOf(session.file) == Archives.Kind.RAR) {
-            runRarExtract(id, session, picks, into, overwrite, password, onDone)
-            return
-        }
-        // 7z is solid too, and unpacked by the native reader in one call for
-        // the same reason. It has no password path here -- the reference
-        // decoder has no AES -- so an encrypted 7z's entries were already
-        // marked unreadable when it was listed.
-        if (Archives.kindOf(session.file) == Archives.Kind.SEVENZ) {
-            runSevenZExtract(id, session, picks, into, overwrite, password, onDone)
-            return
+        // RAR and 7z are unpacked by their native readers in one call rather
+        // than entry by entry: a solid archive would otherwise decode
+        // everything before a file once per file. The shared body handles the
+        // bar, the stop button and the password re-ask; only the reader call
+        // differs. A no-op entry() -- the listing is not wanted here.
+        when (Archives.kindOf(session.file)) {
+            Archives.Kind.RAR -> {
+                runNativeExtract(id, session, picks, into, overwrite, onDone) { dest, expanded, total, skip, onProgress, stopRequested ->
+                    RarNative.extract(session.file, dest, expanded, password, total, skip,
+                        object : RarNative.Sink {
+                            override fun entry(name: String, size: Long, isDirectory: Boolean, modifiedMillis: Long, encrypted: Boolean) = Unit
+                            override fun progress(doneBytes: Long, totalBytes: Long, name: String) = onProgress(doneBytes, totalBytes, name)
+                            override fun cancelled() = stopRequested()
+                        }).toOutcome()
+                }
+                return
+            }
+            Archives.Kind.SEVENZ -> {
+                runNativeExtract(id, session, picks, into, overwrite, onDone) { dest, expanded, total, skip, onProgress, stopRequested ->
+                    SevenZipNative.extract(session.file, dest, expanded, password, total, skip,
+                        object : SevenZipNative.Sink {
+                            override fun entry(name: String, size: Long, isDirectory: Boolean, modifiedMillis: Long, encrypted: Boolean, unsupported: Boolean) = Unit
+                            override fun progress(doneBytes: Long, totalBytes: Long, name: String) = onProgress(doneBytes, totalBytes, name)
+                            override fun cancelled() = stopRequested()
+                        }).toOutcome()
+                }
+                return
+            }
+            else -> Unit
         }
         val stop = java.util.concurrent.atomic.AtomicBoolean(false)
         val extracting = getApplication<android.app.Application>().getString(R.string.archive_extracting)
