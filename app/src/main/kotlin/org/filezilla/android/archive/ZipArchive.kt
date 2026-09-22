@@ -31,7 +31,7 @@ import java.util.zip.Inflater
  * it and every Korean one is.)
  */
 class ZipArchive private constructor(
-    private val file: RandomAccessFile,
+    private val volumes: Volumes,
     override val entries: List<ArchiveEntry>,
     private val records: Map<String, Record>,
 ) : Archive {
@@ -55,13 +55,12 @@ class ZipArchive private constructor(
         // differently from the central one's, so where the data starts is
         // read from the local header and never assumed.
         val header = ByteArray(LOCAL_HEADER_LENGTH)
-        file.seek(record.localHeaderOffset)
-        file.readFully(header)
+        volumes.readFully(record.localHeaderOffset, header)
         if (header.intAt(0) != LOCAL_FILE_HEADER) throw NotAnArchive("entry ${entry.path} is not where it said")
         val dataAt = record.localHeaderOffset + LOCAL_HEADER_LENGTH +
             header.shortAt(26) + header.shortAt(28)
 
-        val raw = Joined(listOf(file), dataAt, record.compressedSize)
+        val raw = Joined(volumes.parts, dataAt, record.compressedSize)
         return when (record.method) {
             METHOD_STORE -> raw
             METHOD_DEFLATE -> inflating(raw)
@@ -69,7 +68,7 @@ class ZipArchive private constructor(
         }
     }
 
-    override fun close() = file.close()
+    override fun close() = volumes.close()
 
     companion object {
         private const val LOCAL_FILE_HEADER = 0x04034B50
@@ -117,6 +116,51 @@ class ZipArchive private constructor(
             firstBytes(file, 4).let { head -> SIGNATURES.any { it.contentEquals(head) } }
 
         /**
+         * The parts of a split zip, first to last, or the file itself.
+         *
+         * Two shapes are read. A raw byte split -- `name.zip.001`, `.002`,
+         * ... -- is opened from the first part, and is just the whole zip cut
+         * into pieces. A standard split -- `name.z01`, `.z02`, ... and
+         * `name.zip` last -- puts the central directory in the final `.zip`
+         * and addresses the rest by disk number; it opens from any of its
+         * parts. A lone `.zip` is its own one-part set.
+         */
+        fun volumesOf(file: File): List<File> {
+            val parent = file.parentFile ?: return listOf(file)
+            val name = file.name
+            Regex("""(?i)^(.+\.zip)\.(\d{3,})$""").matchEntire(name)?.let { m ->
+                if (m.groupValues[2].toInt() != 1) return listOf(file)
+                val parts = gather(parent, m.groupValues[1], ".", m.groupValues[2].length, start = 1)
+                return parts.ifEmpty { listOf(file) }
+            }
+            val base = when {
+                name.lowercase().endsWith(".zip") && File(parent, name.dropLast(4) + ".z01").isFile ->
+                    name.dropLast(4)
+                Regex("""(?i)^(.+)\.z\d{2,}$""").matches(name) -> name.substringBeforeLast('.')
+                else -> return listOf(file)
+            }
+            val parts = gather(parent, base, ".z", 2, start = 1)
+            val last = File(parent, "$base.zip")
+            return if (parts.isNotEmpty() && last.isFile) parts + last else listOf(file)
+        }
+
+        /** Consecutive parts `$stem$sep<n padded to width>` that exist, from [start]. */
+        private fun gather(parent: File, stem: String, sep: String, width: Int, start: Int): List<File> {
+            val parts = mutableListOf<File>()
+            var n = start
+            while (true) {
+                val part = File(parent, stem + sep + n.toString().padStart(width, '0'))
+                if (!part.isFile) break
+                parts += part
+                n++
+            }
+            return parts
+        }
+
+        /** Whether [file] is (part of) a split zip spread over several files. */
+        fun isSplitZip(file: File): Boolean = volumesOf(file).size > 1
+
+        /**
          * Opens [file], reading unflagged names as [names].
          *
          * [names] is offered rather than fixed because an archive can be
@@ -124,19 +168,18 @@ class ZipArchive private constructor(
          * setting the flag exists, and the only cure is to be told.
          */
         fun open(file: File, names: Charset = FALLBACK): ZipArchive {
-            val raw = RandomAccessFile(file, "r")
-            return runCatching { read(raw, names) }.getOrElse { failure ->
-                runCatching { raw.close() }
+            val volumes = Volumes(volumesOf(file).map { RandomAccessFile(it, "r") })
+            return runCatching { read(volumes, names) }.getOrElse { failure ->
+                runCatching { volumes.close() }
                 throw if (failure is NotAnArchive) failure else NotAnArchive("${file.name} is not a zip: ${failure.message}")
             }
         }
 
-        private fun read(raw: RandomAccessFile, names: Charset): ZipArchive {
-            val length = raw.length()
+        private fun read(volumes: Volumes, names: Charset): ZipArchive {
+            val length = volumes.length
             val window = minOf(length, END_RECORD_SEARCH.toLong()).toInt()
             val tail = ByteArray(window)
-            raw.seek(length - window)
-            raw.readFully(tail)
+            volumes.readFully(length - window, tail)
 
             // Backwards, because the end record is last and a comment is
             // free to contain something that looks like one.
@@ -150,7 +193,11 @@ class ZipArchive private constructor(
             if (end < 0) throw NotAnArchive("no end-of-central-directory record")
 
             var count = tail.shortAt(end + 10)
-            var start = tail.intAt(end + 16).toLong() and 0xFFFFFFFFL
+            // The directory's place is a disk number and an offset within it.
+            // For a single zip both resolve to the plain offset; for a split
+            // one the disk picks the part and the offset the place inside it.
+            var cdDisk = tail.shortAt(end + 6)
+            var cdOffset = tail.intAt(end + 16).toLong() and 0xFFFFFFFFL
 
             // A zip over four gigabytes -- or one a tool chose to write in
             // the newer form -- puts 0xFFFF and 0xFFFFFFFF here and the
@@ -158,30 +205,33 @@ class ZipArchive private constructor(
             // before this record and points at it. Without this the
             // placeholder reads as an offset past the end of the file, and
             // a big comic zip opens onto nothing.
-            if (count == 0xFFFF || start == NEEDS_ZIP64) {
+            if (count == 0xFFFF || cdOffset == NEEDS_ZIP64 || cdDisk == 0xFFFF) {
                 val locator = end - ZIP64_LOCATOR_LENGTH
                 if (locator >= 0 && tail.intAt(locator) == ZIP64_LOCATOR) {
-                    val z64 = tail.longAt(locator + 8)
+                    val z64Abs = volumes.absolute(tail.intAt(locator + 4), tail.longAt(locator + 8))
                     val header = ByteArray(ZIP64_END_LENGTH)
-                    if (z64 >= 0 && z64 + ZIP64_END_LENGTH <= length) {
-                        raw.seek(z64)
-                        raw.readFully(header)
+                    if (z64Abs >= 0 && z64Abs + ZIP64_END_LENGTH <= length) {
+                        volumes.readFully(z64Abs, header)
                         if (header.intAt(0) == ZIP64_END_RECORD) {
                             count = header.longAt(32).toInt()
-                            start = header.longAt(48)
+                            cdDisk = header.intAt(20)
+                            cdOffset = header.longAt(48)
                         }
                     }
                 }
             }
+            val start = volumes.absolute(cdDisk, cdOffset)
             if (start >= length) throw NotAnArchive("the central directory is outside the file")
 
             val entries = mutableListOf<ArchiveEntry>()
             val records = LinkedHashMap<String, Record>(count)
-            raw.seek(start)
+            var pos = start
 
             repeat(count) {
+                if (pos + CENTRAL_HEADER_LENGTH > length) return@repeat
                 val header = ByteArray(CENTRAL_HEADER_LENGTH)
-                if (raw.read(header) != CENTRAL_HEADER_LENGTH) return@repeat
+                volumes.readFully(pos, header)
+                pos += CENTRAL_HEADER_LENGTH
                 if (header.intAt(0) != CENTRAL_FILE_HEADER) return@repeat
 
                 val flag = header.shortAt(8)
@@ -190,19 +240,23 @@ class ZipArchive private constructor(
                 val nameLength = header.shortAt(28)
                 val extraLength = header.shortAt(30)
                 val commentLength = header.shortAt(32)
+                val diskStart = header.shortAt(34)
                 val external = header.intAt(38)
 
                 var compressed = header.intAt(20).toLong() and 0xFFFFFFFFL
                 var uncompressed = header.intAt(24).toLong() and 0xFFFFFFFFL
                 var offset = header.intAt(42).toLong() and 0xFFFFFFFFL
 
+                if (pos + nameLength + extraLength > length) return@repeat
                 val nameBytes = ByteArray(nameLength)
-                if (raw.read(nameBytes) != nameLength) return@repeat
+                volumes.readFully(pos, nameBytes)
+                pos += nameLength
                 // The flag decides; the fallback applies only without it.
                 val name = String(nameBytes, if (flag and FLAG_UTF8_NAME != 0) Charsets.UTF_8 else names)
 
                 val extra = ByteArray(extraLength)
-                if (extraLength > 0 && raw.read(extra) != extraLength) return@repeat
+                if (extraLength > 0) volumes.readFully(pos, extra)
+                pos += extraLength
                 // Over four gigabytes the real figures live in an extra
                 // field, and the ones above are all ones. Reading those as
                 // sizes would claim a four-gigabyte archive and truncate.
@@ -213,7 +267,7 @@ class ZipArchive private constructor(
                     if (compressed == NEEDS_ZIP64) compressed = zip64.getOrElse(at++) { compressed }
                     if (offset == NEEDS_ZIP64) offset = zip64.getOrElse(at) { offset }
                 }
-                raw.seek(raw.filePointer + commentLength)
+                pos += commentLength
 
                 val encrypted = flag and FLAG_ENCRYPTED != 0
                 val isDirectory = name.endsWith("/") || (external and 0x10) != 0
@@ -231,11 +285,13 @@ class ZipArchive private constructor(
                         else -> ArchiveEntry.Unreadable.COMPRESSION_METHOD
                     },
                 )
-                records[name] = Record(method, compressed, uncompressed, offset)
+                // The local header's place is a disk and an offset within it,
+                // turned into one absolute position over the joined parts.
+                records[name] = Record(method, compressed, uncompressed, volumes.absolute(diskStart, offset))
             }
 
             if (entries.isEmpty() && count > 0) throw NotAnArchive("the central directory could not be read")
-            return ZipArchive(raw, entries, records)
+            return ZipArchive(volumes, entries, records)
         }
 
         /** The eight-byte values in a Zip64 extra field, in the order stored. */

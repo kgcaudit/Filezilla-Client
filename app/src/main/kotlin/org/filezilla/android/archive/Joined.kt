@@ -92,6 +92,45 @@ internal class Joined(
 }
 
 /**
+ * Random access across a set of volumes, as though they were one file.
+ *
+ * A split zip is `name.z01`, `name.z02`, ... `name.zip`, or `name.zip.001`,
+ * `.002`, ...; its central directory addresses bytes by a disk number and an
+ * offset within that disk. This turns that pair into one absolute position
+ * over the concatenation and reads there, so the reader above works in a
+ * single run of bytes and never has to know how many parts there are.
+ */
+internal class Volumes(val parts: List<RandomAccessFile>) {
+
+    // The absolute position each part begins at: prefix[i] is the sum of the
+    // lengths before part i, so a disk number indexes straight into it.
+    private val prefix: LongArray = LongArray(parts.size + 1).also {
+        for (i in parts.indices) it[i + 1] = it[i] + parts[i].length()
+    }
+
+    val length: Long get() = prefix.last()
+
+    /** The absolute position of [offset] within disk [disk]. */
+    fun absolute(disk: Int, offset: Long): Long =
+        (if (disk in parts.indices) prefix[disk] else 0L) + offset
+
+    /** Fills [into] from [offset], across a part edge if need be. */
+    fun readFully(offset: Long, into: ByteArray) {
+        var filled = 0
+        while (filled < into.size) {
+            val got = readAt(parts, offset + filled, into, filled, into.size - filled)
+            if (got <= 0) throw NotAnArchive("the archive ends in the middle of a record")
+            filled += got
+        }
+    }
+
+    /** One read from [offset]; may be short at a part's edge, or -1 at the end. */
+    fun read(offset: Long, into: ByteArray): Int = readAt(parts, offset, into, 0, into.size)
+
+    fun close() = parts.forEach { runCatching { it.close() } }
+}
+
+/**
  * Reads at an absolute offset across the parts, as though joined.
  *
  * Returns what one read gave, which may be short at a part's edge; the

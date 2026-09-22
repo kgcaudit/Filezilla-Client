@@ -32,7 +32,10 @@ object Archives {
      * What this file is, read from its first bytes, or null if none of them.
      */
     fun kindOf(file: File): Kind? = when {
-        ZipArchive.looksLikeZip(file) -> Kind.ZIP
+        // A split zip is recognised by its parts, since a middle part carries
+        // no zip signature of its own and a standard split's last .zip holds
+        // the directory rather than a header at its start.
+        ZipArchive.looksLikeZip(file) || ZipArchive.isSplitZip(file) -> Kind.ZIP
         AlzArchive.looksLikeAlz(file) -> Kind.ALZ
         EggArchive.looksLikeEgg(file) -> Kind.EGG
         RarArchive.looksLikeRar(file) && RarNative.available -> Kind.RAR
@@ -48,10 +51,14 @@ object Archives {
      * is [kindOf], which has the file in front of it.
      */
     fun looksLikeArchive(name: String): Boolean {
-        // A split 7z's first volume is name.7z.001; its extension is the
-        // number, so it is recognised by the whole tail. Only the first part
-        // opens the set -- the others carry no 7z header of their own.
-        if (name.lowercase().endsWith(".7z.001")) return true
+        // Split-archive parts whose extension is a number or z-number rather
+        // than a format: a 7z first volume (name.7z.001), and a zip split in
+        // either shape (name.zip.001, or name.z01 ... name.zNN). The bytes
+        // settle what they really are; this only decides they are worth a look.
+        val lower = name.lowercase()
+        if (lower.endsWith(".7z.001")) return true
+        if (Regex(""".+\.zip\.\d{3,}""").matches(lower)) return true
+        if (Regex(""".+\.z\d{2,}""").matches(lower)) return true
         val extension = name.substringAfterLast('.', "").lowercase()
         return extension.isNotEmpty() && Kind.entries.any { extension in it.extensions }
     }
