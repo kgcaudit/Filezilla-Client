@@ -1785,16 +1785,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Decodes an image off the IO thread, unpacking it from its archive first if need be. */
+    /**
+     * Decodes an image off the IO thread.
+     *
+     * A page still inside its archive is read straight into memory and
+     * decoded there, rather than unpacked to a cache file and read back --
+     * one pass over the bytes instead of a write and two reads, which is what
+     * a page turn was waiting on.
+     */
     suspend fun loadImage(ref: ImageRef, reqWidth: Int, reqHeight: Int): android.graphics.Bitmap? =
         withContext(Dispatchers.IO) {
-            val file = when (ref) {
-                is ImageRef.OnDisk -> ref.file
-                is ImageRef.InArchive ->
-                    runCatching { cachedArchiveEntry(ref.session, ref.entry, password = null) }.getOrNull()
-                        ?: return@withContext null
+            when (ref) {
+                is ImageRef.OnDisk -> ImageFiles.decode(ref.file, reqWidth, reqHeight)
+                is ImageRef.InArchive -> {
+                    val bytes = runCatching {
+                        Archives.open(ref.session.file).use { archive ->
+                            archive.open(ref.entry).use { it.readBytes() }
+                        }
+                    }.getOrNull() ?: return@withContext null
+                    ImageFiles.decode(bytes, reqWidth, reqHeight)
+                }
             }
-            ImageFiles.decode(file, reqWidth, reqHeight)
         }
 
     fun acknowledgeReadOnly() {

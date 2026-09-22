@@ -131,6 +131,10 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
             HorizontalPager(
                 state = pager,
                 reverseLayout = rtl,
+                // The next page (and the one before) are composed off-screen so
+                // they decode ahead of time; a turn then lands on a page that
+                // is already drawn instead of on a spinner.
+                beyondViewportPageCount = 1,
                 modifier = Modifier.fillMaxSize().padding(top = reservedTopDp),
             ) { page ->
                 ReaderPage(

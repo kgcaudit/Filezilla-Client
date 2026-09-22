@@ -46,6 +46,25 @@ object ImageFiles {
     }
 
     /**
+     * The same, straight from bytes already in hand.
+     *
+     * A comic's page comes out of its archive as bytes; decoding them here
+     * rather than writing them to a file and reading them back saves a page a
+     * round trip to disk each time it is turned to. Both passes read the one
+     * in-memory array, so the header sniff costs nothing extra.
+     */
+    fun decode(bytes: ByteArray, reqWidth: Int, reqHeight: Int): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+
+        val options = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, reqWidth, reqHeight)
+        }
+        return runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) }.getOrNull()
+    }
+
+    /**
      * The largest power of two by which [width]x[height] can be halved and
      * still cover [reqWidth]x[reqHeight].
      *
