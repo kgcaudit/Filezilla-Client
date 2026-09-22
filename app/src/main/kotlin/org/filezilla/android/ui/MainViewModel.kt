@@ -1032,6 +1032,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val taken = rows.map { it.name }.toMutableSet()
                     for (name in held.names) {
                         var asName = name
+                        // The item being replaced can contain the one
+                        // replacing it -- a folder moved up onto a same-named
+                        // parent. Removing the destination would then take the
+                        // source down with it, so it is moved aside under a
+                        // free name first and only then is the destination
+                        // cleared and the set-aside item renamed into place.
+                        val fromWithin = name in taken && choice == ConflictChoice.OVERWRITE &&
+                            FilePath.isWithin(FilePath.child(held.directory, name), FilePath.child(target, name))
+                        if (fromWithin) {
+                            var n = 1
+                            while (numberedName(name, n) in taken) n++
+                            val aside = numberedName(name, n)
+                            session.rename(
+                                FilePath.child(held.directory, name),
+                                FilePath.child(target, aside),
+                            )
+                            deleteRemoteTree(session, target, rows.first { it.name == name })
+                            session.rename(
+                                FilePath.child(target, aside),
+                                FilePath.child(target, name),
+                            )
+                            taken += name
+                            continue
+                        }
                         if (name in taken) {
                             when (choice) {
                                 ConflictChoice.SKIP -> continue
@@ -1039,25 +1063,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                 // an existing name is refused by some servers
                                 // and silently overwrites on others, and
                                 // neither is a thing to leave to chance.
-                                ConflictChoice.OVERWRITE -> {
-                                    val row = rows.first { it.name == name }
-                                    val plan = RemoteDelete.plan(
-                                        lister = { path ->
-                                            session.changeDirectory(path)
-                                            session.list()
-                                        },
-                                        directory = target,
-                                        picks = listOf(row),
-                                    )
-                                    if (plan.truncated) throw TooMuchToDeleteException()
-                                    for (step in plan.steps) {
-                                        if (step.isDirectory) {
-                                            session.removeDirectory(step.path)
-                                        } else {
-                                            session.deleteFile(step.path)
-                                        }
-                                    }
-                                }
+                                ConflictChoice.OVERWRITE ->
+                                    deleteRemoteTree(session, target, rows.first { it.name == name })
 
                                 ConflictChoice.KEEP_BOTH -> {
                                     var n = 1
@@ -1096,6 +1103,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * Removes [row] under [directory] on the server, contents and all.
+     *
+     * RNTO onto an existing name is refused by some servers and silently
+     * overwrites on others, so an overwrite clears the way first. Walked with
+     * [RemoteDelete] rather than a single command because a folder has to be
+     * emptied depth first before it can go.
+     */
+    private fun deleteRemoteTree(
+        session: org.filezilla.android.transfer.FtpSession,
+        directory: String,
+        row: org.filezilla.ftp.listing.DirectoryEntry,
+    ) {
+        val plan = RemoteDelete.plan(
+            lister = { path ->
+                session.changeDirectory(path)
+                session.list()
+            },
+            directory = directory,
+            picks = listOf(row),
+        )
+        if (plan.truncated) throw TooMuchToDeleteException()
+        for (step in plan.steps) {
+            if (step.isDirectory) session.removeDirectory(step.path) else session.deleteFile(step.path)
+        }
+    }
+
+    /**
      * Puts down what is held, asking first about anything already there.
      *
      * It did not ask. The operations refuse to write over something, so a
@@ -1128,28 +1162,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val failure = withContext(Dispatchers.IO) {
                 runCatching {
-                    for (path in held.paths()) {
-                        val name = FilePath.name(path)
-                        val existing = java.io.File(FilePath.child(target, name))
-                        var asName: String? = null
-                        if (existing.exists()) {
-                            when (choice) {
-                                ConflictChoice.SKIP -> continue
-                                // Removed first: the operations refuse to
-                                // write over anything, which is what makes
-                                // them safe, so replacing is a decision taken
-                                // here rather than a rule bent down there.
-                                ConflictChoice.OVERWRITE ->
-                                    LocalOperations.delete(existing.absolutePath)
-
-                                ConflictChoice.KEEP_BOTH -> asName = freeNameIn(target, name)
-                            }
-                        }
-                        when (held.mode) {
-                            ClipboardMode.COPY -> LocalOperations.copy(path, target, asName)
-                            ClipboardMode.MOVE -> LocalOperations.move(path, target, asName)
-                        }
-                    }
+                    pasteLocally(held.mode, held.paths(), target, choice)
                 }.exceptionOrNull()
             }
             // Emptied whichever it was. Keeping a copy on the clipboard so it
