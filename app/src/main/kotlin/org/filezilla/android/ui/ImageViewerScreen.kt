@@ -112,6 +112,7 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
                     ReaderBottomBar(
                         page = pager.currentPage,
                         count = viewer.images.size,
+                        rtl = rtl,
                         onSeek = { scope.launch { pager.scrollToPage(it) } },
                     )
                 }
@@ -162,7 +163,7 @@ private fun ReaderTopBar(
 }
 
 @Composable
-private fun ReaderBottomBar(page: Int, count: Int, onSeek: (Int) -> Unit) {
+private fun ReaderBottomBar(page: Int, count: Int, rtl: Boolean, onSeek: (Int) -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -184,7 +185,13 @@ private fun ReaderBottomBar(page: Int, count: Int, onSeek: (Int) -> Unit) {
             onValueChange = { dragged = it },
             onValueChangeFinished = { onSeek(dragged.toInt().coerceIn(0, count - 1)) },
             valueRange = 0f..(count - 1).toFloat(),
-            modifier = Modifier.fillMaxWidth(),
+            // Turning pages leftward means the book runs the other way, so the
+            // slider is mirrored to match: page one on the right, filling left
+            // as it is read. The flip carries the touch with it, so a drag
+            // still moves the thumb the way the finger goes.
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer(scaleX = if (rtl) -1f else 1f),
         )
     }
 }

@@ -412,5 +412,5 @@
     <string name="viewer_saved">Saved</string>
     <string name="viewer_save_failed">Could not save</string>
     <string name="reader_settings">Reader settings</string>
-    <string name="reader_direction_rtl">Right to left (manga)</string>
+    <string name="reader_direction_rtl">Turn pages leftward (manga)</string>
 </resources>
