@@ -401,4 +401,14 @@
     <string name="archive_open_failed">Could not open %1$s: %2$s</string>
     <string name="archive_folder_exists_title">A folder named "%1$s" already exists</string>
     <string name="archive_folder_exists_detail">Choose what to do with the files it unpacks. The same choice is used for every file.</string>
+    <string name="action_search">Search</string>
+    <string name="viewer_edit">Edit</string>
+    <string name="viewer_done_editing">Done</string>
+    <string name="viewer_save">Save</string>
+    <string name="viewer_prev_match">Previous match</string>
+    <string name="viewer_next_match">Next match</string>
+    <string name="viewer_text_too_big">This file is too large to open here. Use “Open with” to hand it to another app.</string>
+    <string name="viewer_image_failed">This image could not be shown.</string>
+    <string name="viewer_saved">Saved</string>
+    <string name="viewer_save_failed">Could not save</string>
 </resources>

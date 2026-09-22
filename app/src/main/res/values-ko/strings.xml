@@ -393,4 +393,14 @@
     <string name="archive_open_failed">%1$s을(를) 열지 못했습니다: %2$s</string>
     <string name="archive_folder_exists_title">"%1$s" 폴더가 이미 있습니다</string>
     <string name="archive_folder_exists_detail">풀리는 파일을 어떻게 할지 고르세요. 모든 파일에 같은 조건이 적용됩니다.</string>
+    <string name="action_search">검색</string>
+    <string name="viewer_edit">편집</string>
+    <string name="viewer_done_editing">완료</string>
+    <string name="viewer_save">저장</string>
+    <string name="viewer_prev_match">이전 찾기</string>
+    <string name="viewer_next_match">다음 찾기</string>
+    <string name="viewer_text_too_big">이 파일은 여기서 열기에 너무 큽니다. “연결 프로그램”으로 다른 앱에서 여세요.</string>
+    <string name="viewer_image_failed">이미지를 표시할 수 없습니다.</string>
+    <string name="viewer_saved">저장했습니다</string>
+    <string name="viewer_save_failed">저장하지 못했습니다</string>
 </resources>

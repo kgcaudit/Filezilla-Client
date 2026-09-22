@@ -44,6 +44,8 @@ import org.filezilla.android.files.localParent
 import org.filezilla.android.files.StorageRoot
 import org.filezilla.android.transfer.ActiveProgress
 import org.filezilla.android.transfer.LogLine
+import org.filezilla.android.viewer.ImageFiles
+import org.filezilla.android.viewer.TextFiles
 import org.filezilla.ftp.journal.TransferRecord
 import org.filezilla.ftp.journal.TransferState
 import org.filezilla.ftp.listing.DirectoryEntry
@@ -1666,6 +1668,102 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun emptyViewCache() = graph.viewCache.clear()
 
+    // -------------------------------------------------------- in-app viewers
+
+    /** A text file shown in the app's own reader, editable only on the phone. */
+    data class TextViewer(val file: java.io.File, val name: String, val editable: Boolean)
+
+    var textViewer by mutableStateOf<TextViewer?>(null)
+        private set
+
+    /** One image the viewer can show, on the phone or still inside an archive. */
+    sealed interface ImageRef {
+        val name: String
+
+        data class OnDisk(val file: java.io.File) : ImageRef {
+            override val name: String get() = file.name
+        }
+
+        data class InArchive(val session: ArchiveSession, val entry: ArchiveEntry) : ImageRef {
+            override val name: String get() = entry.name
+        }
+    }
+
+    /** The images the viewer can swipe through, and which one is on screen. */
+    data class ImageViewer(val images: List<ImageRef>, val index: Int)
+
+    var imageViewer by mutableStateOf<ImageViewer?>(null)
+        private set
+
+    fun openTextViewer(file: java.io.File, editable: Boolean) {
+        textViewer = TextViewer(file, file.name, editable)
+    }
+
+    fun closeTextViewer() {
+        textViewer = null
+    }
+
+    fun openImageViewer(images: List<ImageRef>, index: Int) {
+        if (images.isEmpty()) return
+        imageViewer = ImageViewer(images, index.coerceIn(0, images.size - 1))
+    }
+
+    /**
+     * Opens [file] in the image viewer with the other pictures in its folder,
+     * so a folder of photos swipes through like the pages of a comic does.
+     */
+    fun openLocalImage(id: PaneId, file: java.io.File) {
+        val folder = pane(id).path
+        val images = pane(id).entries.filter { !it.isDirectory && ImageFiles.looksImage(it.name) }
+        openImageViewer(
+            images.map { ImageRef.OnDisk(java.io.File(folder, it.name)) },
+            images.indexOfFirst { it.name == file.name },
+        )
+    }
+
+    fun closeImageViewer() {
+        imageViewer = null
+    }
+
+    fun setImageIndex(index: Int) {
+        imageViewer = imageViewer?.let { it.copy(index = index.coerceIn(0, it.images.size - 1)) }
+    }
+
+    /** Reads a text file off the IO thread, or null when it is too big or unreadable. */
+    suspend fun loadText(file: java.io.File): TextFiles.Loaded? = withContext(Dispatchers.IO) {
+        if (file.length() > TextFiles.MAX_BYTES) return@withContext null
+        runCatching { TextFiles.decode(file.readBytes()) }.getOrNull()
+    }
+
+    /**
+     * Writes edited text back to [file] in the encoding it came in.
+     *
+     * Only ever a phone file: the viewer offers editing on those alone, so
+     * there is no server round-trip to make here. The panes are re-listed
+     * because the size and time on the row have just changed.
+     */
+    fun saveText(file: java.io.File, loaded: TextFiles.Loaded, text: String, onDone: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching { file.writeBytes(TextFiles.encode(text, loaded)) }.isSuccess
+            }
+            if (ok) relistLocalPanes()
+            onDone(ok)
+        }
+    }
+
+    /** Decodes an image off the IO thread, unpacking it from its archive first if need be. */
+    suspend fun loadImage(ref: ImageRef, reqWidth: Int, reqHeight: Int): android.graphics.Bitmap? =
+        withContext(Dispatchers.IO) {
+            val file = when (ref) {
+                is ImageRef.OnDisk -> ref.file
+                is ImageRef.InArchive ->
+                    runCatching { cachedArchiveEntry(ref.session, ref.entry, password = null) }.getOrNull()
+                        ?: return@withContext null
+            }
+            ImageFiles.decode(file, reqWidth, reqHeight)
+        }
+
     fun acknowledgeReadOnly() {
         graph.preferences.warnedThatViewingIsReadOnly = true
         warnReadOnly = false
@@ -1885,12 +1983,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** A row tapped inside an archive: into a folder, or open a file. */
     fun archiveTap(id: PaneId, name: String) {
         val session = pane(id).archive ?: return
-        val row = ArchiveNav.rows(session).firstOrNull { it.name == name } ?: return
-        if (row.isDirectory) {
-            val next = ArchiveNav.into(session, name)
-            update(id) { it.copy(archive = next, entries = ArchiveNav.rows(next), selection = emptySet(), filter = "") }
-        } else {
-            openArchiveEntry(id, session, name, password = null)
+        val rows = ArchiveNav.rows(session)
+        val row = rows.firstOrNull { it.name == name } ?: return
+        when {
+            row.isDirectory -> {
+                val next = ArchiveNav.into(session, name)
+                update(id) { it.copy(archive = next, entries = ArchiveNav.rows(next), selection = emptySet(), filter = "") }
+            }
+            // A picture opens in the viewer, and the other pictures in the same
+            // archive folder come with it so it can be swiped through -- which
+            // is what reading a cbz is. The images are still inside the archive
+            // and unpacked one at a time as they are reached.
+            ImageFiles.looksImage(name) -> {
+                val images = rows.filter { !it.isDirectory && ImageFiles.looksImage(it.name) }
+                val refs = images.mapNotNull { r ->
+                    ArchiveNav.entryFor(session, r.name)?.let { ImageRef.InArchive(session, it) }
+                }
+                openImageViewer(refs, images.indexOfFirst { it.name == name })
+            }
+            else -> openArchiveEntry(id, session, name, password = null)
         }
     }
 
@@ -1988,14 +2099,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // anywhere else has no shareable URI, and the chooser comes up empty
         // with "no app can open this". It is also capped and evicted, so
         // opening files out of archives cannot quietly fill the phone.
-        val key = ViewCache.Key(
-            serverKey = "archive\u0000" + session.file.path,
-            path = entry.path,
-            name = entry.name,
-            size = entry.size,
-            modifiedMillis = entry.modifiedMillis ?: 0,
-        )
-        graph.viewCache.readyFile(key)?.let { held ->
+        graph.viewCache.readyFile(archiveEntryKey(session, entry))?.let { held ->
             graph.viewCache.touch(held)
             readyToOpen = held
             return
@@ -2006,34 +2110,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
         viewModelScope.launch {
             val opened = withContext(Dispatchers.IO) {
-                runCatching {
-                    val partial = graph.viewCache.partialFor(key)
-                    try {
-                        Archives.open(session.file).use { archive ->
-                            // The native readers unpack straight into the cache
-                            // slot; the rest hand back a stream to copy in. A
-                            // 7z or rar entry is otherwise written to a temp
-                            // file and read all the way back out to write here
-                            // again -- twice the disk for a 100 MB comic.
-                            if (!archive.extractTo(entry, partial, password)) {
-                                archive.open(entry, password).use { source ->
-                                    partial.outputStream().use { sink -> source.copyTo(sink) }
-                                }
-                            }
-                        }
-                    } catch (failure: Throwable) {
-                        partial.delete()
-                        throw failure
-                    }
-                    graph.viewCache.finish(partial, key)
-                        ?: throw java.io.IOException("the copy could not be put in place")
-                }
+                runCatching { cachedArchiveEntry(session, entry, password) }
             }
             archiveBusy = null
-            opened.onSuccess { held ->
-                graph.viewCache.evictDownTo(keep = held)
-                readyToOpen = held
-            }
+            opened.onSuccess { held -> readyToOpen = held }
                 .onFailure { failure ->
                     if (failure is WrongPassword) {
                         pendingPassword = PendingPassword.Open(id, session, name)
@@ -2044,6 +2124,50 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
         }
+    }
+
+    private fun archiveEntryKey(session: ArchiveSession, entry: ArchiveEntry) = ViewCache.Key(
+        serverKey = "archive\u0000" + session.file.path,
+        path = entry.path,
+        name = entry.name,
+        size = entry.size,
+        modifiedMillis = entry.modifiedMillis ?: 0,
+    )
+
+    /**
+     * The cache file holding one archive entry, unpacking it there if it is
+     * not already held. Blocking, for an IO context; throws [WrongPassword] or
+     * an IOException. The copy lives in the viewing cache -- capped, evicted,
+     * and declared to the FileProvider -- so unpacking files out of archives
+     * neither fills the phone nor lands somewhere with no shareable URI.
+     */
+    private fun cachedArchiveEntry(session: ArchiveSession, entry: ArchiveEntry, password: CharArray?): java.io.File {
+        val key = archiveEntryKey(session, entry)
+        graph.viewCache.readyFile(key)?.let { held ->
+            graph.viewCache.touch(held)
+            return held
+        }
+        val partial = graph.viewCache.partialFor(key)
+        try {
+            Archives.open(session.file).use { archive ->
+                // The native readers unpack straight into the cache slot; the
+                // rest hand back a stream to copy in. A 7z or rar entry is
+                // otherwise written to a temp file and read all the way back
+                // out to write here again -- twice the disk for a 100 MB comic.
+                if (!archive.extractTo(entry, partial, password)) {
+                    archive.open(entry, password).use { source ->
+                        partial.outputStream().use { sink -> source.copyTo(sink) }
+                    }
+                }
+            }
+        } catch (failure: Throwable) {
+            partial.delete()
+            throw failure
+        }
+        val held = graph.viewCache.finish(partial, key)
+            ?: throw java.io.IOException("the copy could not be put in place")
+        graph.viewCache.evictDownTo(keep = held)
+        return held
     }
 
     /**

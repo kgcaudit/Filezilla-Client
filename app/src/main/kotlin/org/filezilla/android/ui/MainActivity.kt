@@ -56,6 +56,8 @@ import org.filezilla.android.R
 import org.filezilla.android.files.FileAssociations
 import org.filezilla.android.files.InstallApk
 import org.filezilla.android.files.OpenFile
+import org.filezilla.android.viewer.ImageFiles
+import org.filezilla.android.viewer.TextFiles
 import org.filezilla.android.files.ShareFiles
 import org.filezilla.android.service.TransferService
 import org.filezilla.android.storage.ConflictChoice
@@ -482,6 +484,14 @@ private fun AppScreen(
                             model.openArchive(id, file, file.parent ?: model.pane(id).path)
                         InstallApk.isPackage(file.name) && !InstallApk.allowed(context) ->
                             installBlockedFor = file
+                        // The phone's own text and images open in the app's
+                        // readers -- text editable, images swiped through the
+                        // folder. "Open with" in the overflow still hands the
+                        // file to another app for anyone who wants that.
+                        TextFiles.looksTextual(file.name) && file.length() <= TextFiles.MAX_BYTES ->
+                            model.openTextViewer(file, editable = true)
+                        ImageFiles.looksImage(file.name) ->
+                            model.openLocalImage(id, file)
                         else -> {
                             askWhichApp = false
                             openingFile = file
@@ -778,6 +788,14 @@ private fun AppScreen(
                     model.openArchive(model.activePane, ready, ready.parent ?: "")
                 InstallApk.isPackage(ready.name) && !InstallApk.allowed(context) ->
                     installBlockedFor = ready
+                // A file fetched from a server, or unpacked from an archive, is
+                // a read-only copy: text opens in the viewer but not for
+                // editing, and an image opens on its own (its neighbours are
+                // still on the server, not here to swipe to).
+                TextFiles.looksTextual(ready.name) && ready.length() <= TextFiles.MAX_BYTES ->
+                    model.openTextViewer(ready, editable = false)
+                ImageFiles.looksImage(ready.name) ->
+                    model.openImageViewer(listOf(MainViewModel.ImageRef.OnDisk(ready)), 0)
                 else -> {
                     askWhichApp = false
                     openingFile = ready
@@ -863,6 +881,19 @@ private fun AppScreen(
             },
             onDismiss = model::dismissConflicts,
         )
+    }
+
+    // The in-app readers, drawn over everything when open. Composed last so
+    // they sit on top of the panes, and left as ordinary full-screen surfaces
+    // rather than dialogs so the text editor's keyboard resizes the box the
+    // normal way. Back closes the reader before it touches the panes.
+    model.imageViewer?.let { viewer ->
+        BackHandler { model.closeImageViewer() }
+        ImageViewerScreen(viewer, model)
+    }
+    model.textViewer?.let { viewer ->
+        BackHandler { model.closeTextViewer() }
+        TextViewerScreen(viewer, model)
     }
 }
 
