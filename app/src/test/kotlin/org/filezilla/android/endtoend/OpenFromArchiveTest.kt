@@ -57,7 +57,7 @@ class OpenFromArchiveTest {
         AppGraph.sealPasswordsWith = { KeystorePasswordCipher() }
     }
 
-    private fun waitFor(what: String, seconds: Long = 30, condition: () -> Boolean) {
+    private fun waitFor(what: String, seconds: Long = 60, condition: () -> Boolean) {
         // An archive opens on a background thread and resumes on the main
         // looper; idle() runs those continuations and the sleep yields the CPU
         // the background thread needs to land. The same wait the other

@@ -2255,6 +2255,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         picks: Set<String>,
         into: java.io.File,
         overwrite: Boolean,
+        password: CharArray?,
         onDone: () -> Unit,
     ) {
         val stop = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -2273,7 +2274,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val result = SevenZipNative.extract(
                         session.file, into,
                         covered?.let { ArchiveBrowsing.expand(session.entries, it) },
-                        total, skipExisting = !overwrite,
+                        password, total, skipExisting = !overwrite,
                         object : SevenZipNative.Sink {
                             override fun entry(name: String, size: Long, isDirectory: Boolean, modifiedMillis: Long, encrypted: Boolean, unsupported: Boolean) = Unit
                             override fun progress(doneBytes: Long, totalBytes: Long, name: String) {
@@ -2289,11 +2290,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             outcome.onSuccess { (result, into) ->
                 when (result) {
+                    SevenZipNative.Result.WRONG_PASSWORD -> {
+                        runCatching { into.deleteRecursively() }
+                        pendingPassword = PendingPassword.Extract(id, session, picks, into, overwrite)
+                        archivePasswordAsked = true
+                        archivePasswordWrong = true
+                        return@onSuccess
+                    }
                     SevenZipNative.Result.CANCELLED -> {
+                        archivePasswordWrong = false
                         val written = into.walkTopDown().count { it.isFile }
                         archiveOutcome = ArchiveOutcome(R.string.archive_extract_stopped, listOf(written))
                     }
                     else -> {
+                        archivePasswordWrong = false
                         val written = into.walkTopDown().count { it.isFile }
                         archiveOutcome = when {
                             written == 0 -> ArchiveOutcome(R.string.archive_extract_none)
@@ -2333,7 +2343,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // decoder has no AES -- so an encrypted 7z's entries were already
         // marked unreadable when it was listed.
         if (Archives.kindOf(session.file) == Archives.Kind.SEVENZ) {
-            runSevenZExtract(id, session, picks, into, overwrite, onDone)
+            runSevenZExtract(id, session, picks, into, overwrite, password, onDone)
             return
         }
         val stop = java.util.concurrent.atomic.AtomicBoolean(false)

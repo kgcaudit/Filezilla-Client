@@ -53,6 +53,10 @@ set(SEVENZ_SOURCES
     sevenz/Ppmd7.c sevenz/Ppmd7Dec.c sevenz/7zCrc.c sevenz/7zCrcOpt.c
     sevenz/7zAlloc.c sevenz/7zArcIn.c sevenz/7zBuf.c sevenz/7zBuf2.c
     sevenz/7zDec.c sevenz/7zFile.c sevenz/7zStream.c
+    # AES-256 + SHA-256, for reading password-protected 7z. The *Opt files
+    # carry the CPU-accelerated paths; both compile to the plain C path when
+    # the build has no crypto extensions enabled, which is this one.
+    sevenz/Aes.c sevenz/AesOpt.c sevenz/Sha256.c sevenz/Sha256Opt.c
 )
 
 add_library(olo7z SHARED sevenz_jni.cpp ${SEVENZ_SOURCES})

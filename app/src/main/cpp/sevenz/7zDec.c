@@ -20,6 +20,39 @@
 #include "Ppmd7.h"
 #endif
 
+/* --- 7z AES-256 decryption (added; the reference sample ships no crypto) ---
+   A password-protected 7z encrypts each content folder with AES-256-CBC, the
+   key derived from the password and a per-archive salt by iterated SHA-256.
+   The reference decoder has no AES, so it is added here: an AES folder is
+   decrypted and its inner method decoded from the plaintext. The password,
+   as UTF-16LE (which is what 7z hashes), is set before extraction. This is
+   for content encryption -- an archive whose header is encrypted does not
+   list, and is not handled. */
+#include <stdlib.h>
+#include <stdint.h>
+#include "Aes.h"
+#include "Sha256.h"
+
+#define k_AES 0x06F10701
+/* An AES folder failed to decode: almost always a wrong or missing password. */
+#define SZ_ERROR_7Z_AES 100
+
+static Byte g_sevenZ_password[512];   /* UTF-16LE, up to 256 characters */
+static size_t g_sevenZ_passwordLen = 0;
+
+/* Called from the JNI bridge (C++), so keep C linkage across that boundary. */
+#ifdef __cplusplus
+extern "C"
+#endif
+void SevenZ_SetPassword(const Byte *utf16le, size_t len)
+{
+  if (len > sizeof(g_sevenZ_password))
+    len = sizeof(g_sevenZ_password);
+  if (len != 0)
+    memcpy(g_sevenZ_password, utf16le, len);
+  g_sevenZ_passwordLen = len;
+}
+
 #define k_Copy 0
 #ifndef Z7_NO_METHOD_LZMA2
 #define k_LZMA2 0x21
@@ -330,6 +363,14 @@ static SRes CheckSupportedFolder(const CSzFolder *f)
 {
   if (f->NumCoders < 1 || f->NumCoders > 4)
     return SZ_ERROR_UNSUPPORTED;
+  /* An AES folder is validated and decoded by SzDecodeAesFolder, which the
+     folder decode reaches before walking the coder graph below. */
+  {
+    UInt32 ci;
+    for (ci = 0; ci < f->NumCoders; ci++)
+      if (f->Coders[ci].MethodID == k_AES)
+        return SZ_OK;
+  }
   if (!IS_SUPPORTED_CODER(&f->Coders[0]))
     return SZ_ERROR_UNSUPPORTED;
   if (f->NumCoders == 1)
@@ -408,6 +449,196 @@ static SRes CheckSupportedFolder(const CSzFolder *f)
 
 
 
+/* The AES-256 key and IV from the coder's properties and the set password.
+   The property layout and the SHA-256 key schedule follow 7-Zip's own
+   7zAes.cpp exactly. */
+static void Sz7z_DeriveKey(const Byte *props, unsigned propsSize, Byte key[32], Byte iv[16])
+{
+  unsigned numCyclesPower = 0, saltSize = 0, ivSize = 0, i;
+  const Byte *salt = props + 2;
+  memset(iv, 0, 16);
+  memset(key, 0, 32);
+  if (propsSize == 0)
+    return;
+  {
+    unsigned b0 = props[0];
+    numCyclesPower = b0 & 0x3F;
+    if ((b0 & 0xC0) != 0 && propsSize >= 2)
+    {
+      unsigned b1 = props[1];
+      saltSize = ((b0 >> 7) & 1) + (b1 >> 4);
+      ivSize   = ((b0 >> 6) & 1) + (b1 & 0x0F);
+      for (i = 0; i < ivSize && i < 16; i++)
+        iv[i] = props[2 + saltSize + i];
+    }
+  }
+  if (numCyclesPower == 0x3F)
+  {
+    unsigned pos = 0;
+    for (; pos < saltSize && pos < 32; pos++) key[pos] = salt[pos];
+    for (i = 0; i < g_sevenZ_passwordLen && pos < 32; i++) key[pos++] = g_sevenZ_password[i];
+    return;
+  }
+  {
+    CSha256 sha;
+    size_t bufSize = 8 + saltSize + g_sevenZ_passwordLen;
+    Byte *buf = (Byte *)malloc(bufSize);
+    UInt64 rounds, r;
+    if (!buf)
+      return;
+    if (saltSize != 0)
+      memcpy(buf, salt, saltSize);
+    if (g_sevenZ_passwordLen != 0)
+      memcpy(buf + saltSize, g_sevenZ_password, g_sevenZ_passwordLen);
+    memset(buf + bufSize - 8, 0, 8);
+    Sha256_Init(&sha);
+    rounds = (UInt64)1 << numCyclesPower;
+    for (r = 0; r < rounds; r++)
+    {
+      Byte *ctr = buf + bufSize - 8;
+      unsigned k;
+      Sha256_Update(&sha, buf, bufSize);
+      for (k = 0; k < 8; k++) { if (++ctr[k] != 0) break; }
+    }
+    Sha256_Final(&sha, key);
+    free(buf);
+  }
+}
+
+/* A read stream over a memory buffer, so the plaintext can feed the inner
+   decoder through the same ILookInStream the file ones use. */
+typedef struct { ISeekInStream vt; const Byte *data; size_t size; size_t pos; } CMemInStream;
+
+static SRes MemInStream_Read(ISeekInStreamPtr pp, void *buf, size_t *size)
+{
+  CMemInStream *s = (CMemInStream *)pp;
+  size_t n = *size, avail = s->size - s->pos;
+  if (n > avail) n = avail;
+  if (n != 0) memcpy(buf, s->data + s->pos, n);
+  s->pos += n;
+  *size = n;
+  return SZ_OK;
+}
+
+static SRes MemInStream_Seek(ISeekInStreamPtr pp, Int64 *pos, ESzSeek origin)
+{
+  CMemInStream *s = (CMemInStream *)pp;
+  Int64 p = *pos;
+  if (origin == SZ_SEEK_CUR) p += (Int64)s->pos;
+  else if (origin == SZ_SEEK_END) p += (Int64)s->size;
+  if (p < 0 || (UInt64)p > (UInt64)s->size) return SZ_ERROR_PARAM;
+  s->pos = (size_t)p;
+  *pos = p;
+  return SZ_OK;
+}
+
+/* Decrypts an AES folder's packed stream, then decodes its one inner method
+   from the plaintext. Handles the common shape 7-Zip writes for encryption:
+   AES over a single Copy/LZMA/LZMA2/PPMd coder. Rarer chains (a branch
+   filter under AES) return unsupported. */
+static SRes SzDecodeAesFolder(const CSzFolder *folder, const Byte *propsData,
+    const UInt64 *unpackSizes, const UInt64 *packPositions,
+    ILookInStreamPtr inStream, UInt64 startPos,
+    Byte *outBuffer, SizeT outSize, ISzAllocPtr allocMain)
+{
+  UInt32 ci, aesCi = folder->NumCoders, innerCi = folder->NumCoders;
+  const CSzCoderInfo *aes, *inner;
+  Byte key[32], iv[16];
+  UInt32 aesbuf[AES_NUM_IVMRK_WORDS + 4];
+  UInt32 *p;
+  Byte *enc;
+  UInt64 encSize, decSize;
+  SRes res;
+  CMemInStream mem;
+  CLookToRead2 look;
+
+  if (folder->NumCoders != 2 || folder->NumPackStreams != 1)
+    return SZ_ERROR_UNSUPPORTED;
+  for (ci = 0; ci < folder->NumCoders; ci++)
+  {
+    if (folder->Coders[ci].MethodID == k_AES) aesCi = ci;
+    else innerCi = ci;
+  }
+  if (aesCi == folder->NumCoders || innerCi == folder->NumCoders)
+    return SZ_ERROR_UNSUPPORTED;
+  aes = &folder->Coders[aesCi];
+  inner = &folder->Coders[innerCi];
+
+  encSize = packPositions[1] - packPositions[0];
+  decSize = unpackSizes[aesCi];         /* the plaintext (inner-compressed) size */
+  if ((encSize & 15) != 0 || decSize > encSize)
+    return SZ_ERROR_DATA;
+
+  enc = (Byte *)ISzAlloc_Alloc(allocMain, encSize != 0 ? (size_t)encSize : 1);
+  if (!enc)
+    return SZ_ERROR_MEM;
+
+  res = LookInStream_SeekTo(inStream, startPos + packPositions[0]);
+  if (res == SZ_OK)
+    res = SzDecodeCopy(encSize, inStream, enc);
+  if (res != SZ_OK)
+  {
+    ISzAlloc_Free(allocMain, enc);
+    return res;
+  }
+
+  Sz7z_DeriveKey(propsData + aes->PropsOffset, aes->PropsSize, key, iv);
+  AesGenTables();
+  p = (UInt32 *)(void *)(((uintptr_t)aesbuf + 15) & ~(uintptr_t)15);
+  Aes_SetKey_Dec(p + 4, key, 32);
+  AesCbc_Init(p, iv);
+  if (encSize != 0)
+    g_AesCbc_Decode(p, enc, (size_t)encSize / 16);
+
+  mem.vt.Read = MemInStream_Read;
+  mem.vt.Seek = MemInStream_Seek;
+  mem.data = enc;
+  mem.size = (size_t)decSize;
+  mem.pos = 0;
+  look.buf = (Byte *)ISzAlloc_Alloc(allocMain, 1 << 16);
+  if (!look.buf)
+  {
+    ISzAlloc_Free(allocMain, enc);
+    return SZ_ERROR_MEM;
+  }
+  LookToRead2_CreateVTable(&look, False);
+  look.bufSize = 1 << 16;
+  look.realStream = &mem.vt;
+  LookToRead2_INIT(&look)
+
+  switch ((UInt32)inner->MethodID)
+  {
+    case k_Copy:
+      if (decSize != outSize) res = SZ_ERROR_DATA;
+      else { memcpy(outBuffer, enc, (size_t)outSize); res = SZ_OK; }
+      break;
+    case k_LZMA:
+      res = SzDecodeLzma(propsData + inner->PropsOffset, inner->PropsSize, decSize, &look.vt, outBuffer, outSize, allocMain);
+      break;
+#ifndef Z7_NO_METHOD_LZMA2
+    case k_LZMA2:
+      res = SzDecodeLzma2(propsData + inner->PropsOffset, inner->PropsSize, decSize, &look.vt, outBuffer, outSize, allocMain);
+      break;
+#endif
+#ifdef Z7_PPMD_SUPPORT
+    case k_PPMD:
+      res = SzDecodePpmd(propsData + inner->PropsOffset, inner->PropsSize, decSize, &look.vt, outBuffer, outSize, allocMain);
+      break;
+#endif
+    default:
+      res = SZ_ERROR_UNSUPPORTED;
+  }
+
+  ISzAlloc_Free(allocMain, look.buf);
+  ISzAlloc_Free(allocMain, enc);
+  /* A wrong password decrypts to garbage the inner method rejects as bad
+     data. Report it as the crypto failure it almost always is, so the caller
+     can re-ask -- a truly unsupported inner method stays that. */
+  if (res == SZ_ERROR_DATA)
+    return SZ_ERROR_7Z_AES;
+  return res;
+}
+
 static SRes SzFolder_Decode2(const CSzFolder *folder,
     const Byte *propsData,
     const UInt64 *unpackSizes,
@@ -422,6 +653,13 @@ static SRes SzFolder_Decode2(const CSzFolder *folder,
   Byte *tempBuf3 = 0;
 
   RINOK(CheckSupportedFolder(folder))
+
+  /* An encrypted folder is decrypted and decoded on its own path, above the
+     coder graph the reference sample walks. */
+  for (ci = 0; ci < folder->NumCoders; ci++)
+    if (folder->Coders[ci].MethodID == k_AES)
+      return SzDecodeAesFolder(folder, propsData, unpackSizes, packPositions,
+          inStream, startPos, outBuffer, outSize, allocMain);
 
   for (ci = 0; ci < folder->NumCoders; ci++)
   {

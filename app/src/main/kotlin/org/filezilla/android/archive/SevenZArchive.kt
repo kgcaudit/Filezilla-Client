@@ -26,7 +26,7 @@ class SevenZArchive private constructor(
         temp.delete()
         temp.mkdirs()
         val result = SevenZipNative.extract(
-            file, temp, setOf(entry.path), entry.size.coerceAtLeast(0),
+            file, temp, setOf(entry.path), password, entry.size.coerceAtLeast(0),
             skipExisting = false,
             object : SevenZipNative.Sink {
                 override fun entry(name: String, size: Long, isDirectory: Boolean, modifiedMillis: Long, encrypted: Boolean, unsupported: Boolean) = Unit
@@ -34,6 +34,10 @@ class SevenZArchive private constructor(
                 override fun cancelled() = false
             },
         )
+        if (result == SevenZipNative.Result.WRONG_PASSWORD) {
+            temp.deleteRecursively()
+            throw WrongPassword("the password does not open this entry")
+        }
         val out = File(temp, entry.path)
         if (result != SevenZipNative.Result.OK || !out.isFile) {
             temp.deleteRecursively()

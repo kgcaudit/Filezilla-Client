@@ -12,9 +12,10 @@ import java.io.File
  * lzma-sdk-license.txt`) and driven here. It reads only; nothing in this
  * app writes a 7z.
  *
- * The reference decoder has no AES, so an encrypted 7z lists -- its header
- * is in the clear -- but its entries come back marked unreadable rather
- * than as something a password could open, because no password would help.
+ * AES-256 is built into the native decoder, so a password-protected 7z
+ * whose header is readable -- the common case -- lists, and extracts once
+ * the password is given. An archive whose header itself is encrypted does
+ * not list and is one this reader cannot open.
  *
  * Native, and only for arm64, the same as [RarNative]. On a 32-bit-only
  * device [available] is false and 7z is simply one format it cannot open.
@@ -55,6 +56,7 @@ object SevenZipNative {
         path: String,
         destDir: String,
         picks: Array<String>?,
+        password: String?,
         totalBytes: Long,
         skipExisting: Boolean,
         sink: Sink,
@@ -78,12 +80,11 @@ object SevenZipNative {
                     size = if (isDirectory) -1 else size,
                     isDirectory = isDirectory,
                     modifiedMillis = modifiedMillis.takeIf { it > 0 },
+                    // Encrypted is readable now -- with the password -- so it
+                    // asks for one rather than being marked out of reach; only
+                    // a method the decoder does not do is unreadable.
                     encrypted = encrypted,
-                    unreadable = when {
-                        encrypted -> ArchiveEntry.Unreadable.ENCRYPTED_METHOD
-                        unsupported -> ArchiveEntry.Unreadable.COMPRESSION_METHOD
-                        else -> null
-                    },
+                    unreadable = if (unsupported) ArchiveEntry.Unreadable.COMPRESSION_METHOD else null,
                 )
             }
 
@@ -95,19 +96,22 @@ object SevenZipNative {
     }
 
     /** How an extract ended. */
-    enum class Result { OK, CANCELLED, FAILED }
+    enum class Result { OK, CANCELLED, WRONG_PASSWORD, FAILED }
 
     /**
      * Unpacks [file] into [into]; [picks] null means everything.
      *
-     * The native side reports bytes and asks [sink] whether to stop before
-     * every file, so a large archive is watchable and stoppable between
-     * files -- a single solid folder still decodes as a unit.
+     * [password] is used for the encrypted folders; a wrong or missing one
+     * on an encrypted archive comes back [Result.WRONG_PASSWORD] so the
+     * caller can ask again. The native side reports bytes and asks [sink]
+     * whether to stop before every file, so a large archive is watchable and
+     * stoppable between files -- a single solid folder still decodes as a unit.
      */
     fun extract(
         file: File,
         into: File,
         picks: Set<String>?,
+        password: CharArray?,
         totalBytes: Long,
         skipExisting: Boolean,
         sink: Sink,
@@ -116,6 +120,7 @@ object SevenZipNative {
             file.path,
             into.path,
             picks?.toTypedArray(),
+            password?.let { String(it) },
             totalBytes,
             skipExisting,
             sink,
@@ -123,6 +128,7 @@ object SevenZipNative {
         return when (code) {
             0 -> Result.OK
             1 -> Result.CANCELLED
+            2 -> Result.WRONG_PASSWORD
             else -> Result.FAILED
         }
     }

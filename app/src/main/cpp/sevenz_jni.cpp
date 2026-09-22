@@ -7,9 +7,9 @@
 // port, where a mistake would be silent corruption. This lists and extracts
 // only, and nothing in this app writes a 7z.
 //
-// The reference decoder has no AES, so an encrypted 7z lists (its header is
-// in the clear) but its entries are reported as unreadable rather than
-// prompting for a password no decoder here could use.
+// AES-256 decryption is added in sevenz/7zDec.c, so a password-protected 7z
+// (with a readable header -- the common case) lists and, given the password,
+// extracts. The password is set through SevenZ_SetPassword before extraction.
 #include <jni.h>
 #include <cstdlib>
 #include <cstring>
@@ -22,7 +22,40 @@
 #include "sevenz/7zCrc.h"
 #include "sevenz/7zFile.h"
 
+// The password sink patched into the reference decoder (7zDec.c). UTF-16LE,
+// which is what 7z hashes to the AES key.
+extern "C" void SevenZ_SetPassword(const Byte* utf16le, size_t len);
+
 namespace {
+
+// Custom SRes the AES path returns when a folder will not decrypt -- almost
+// always a wrong or missing password. Matches SZ_ERROR_7Z_AES in 7zDec.c.
+const int kSevenZAesError = 100;
+
+std::vector<Byte> toUtf16le(const std::string& utf8) {
+    std::vector<Byte> out;
+    size_t i = 0;
+    while (i < utf8.size()) {
+        unsigned char c = (unsigned char)utf8[i];
+        unsigned int cp; int n;
+        if (c < 0x80) { cp = c; n = 0; }
+        else if ((c >> 5) == 0x6) { cp = c & 0x1F; n = 1; }
+        else if ((c >> 4) == 0xE) { cp = c & 0x0F; n = 2; }
+        else if ((c >> 3) == 0x1E) { cp = c & 0x07; n = 3; }
+        else { cp = 0xFFFD; n = 0; }
+        i++;
+        for (int k = 0; k < n && i < utf8.size(); ++k, ++i) cp = (cp << 6) | (utf8[i] & 0x3F);
+        if (cp >= 0x10000) {
+            cp -= 0x10000;
+            unsigned int hi = 0xD800 + (cp >> 10), lo = 0xDC00 + (cp & 0x3FF);
+            out.push_back((Byte)(hi & 0xFF)); out.push_back((Byte)(hi >> 8));
+            out.push_back((Byte)(lo & 0xFF)); out.push_back((Byte)(lo >> 8));
+        } else {
+            out.push_back((Byte)(cp & 0xFF)); out.push_back((Byte)(cp >> 8));
+        }
+    }
+    return out;
+}
 
 // The one method the app cannot do: AES-256, the coder 7z uses for
 // encryption. The SDK's reference decoder does not include it.
@@ -323,11 +356,11 @@ Java_org_filezilla_android_archive_SevenZipNative_nativeList(
 
 // Extracts into destDir. picks null/empty = everything, else the named
 // entries and what is under them. Reports and cancels through sink.
-// Returns 0 ok, 1 cancelled, negative an SRes error.
+// Returns 0 ok, 1 cancelled, 2 wrong/missing password, negative an SRes error.
 JNIEXPORT jint JNICALL
 Java_org_filezilla_android_archive_SevenZipNative_nativeExtract(
         JNIEnv* env, jclass, jstring jpath, jstring jdest,
-        jobjectArray jpicks, jlong jtotalBytes, jboolean jskipExisting, jobject sink) {
+        jobjectArray jpicks, jstring jpassword, jlong jtotalBytes, jboolean jskipExisting, jobject sink) {
     std::string path = toUtf8(env, jpath);
     std::string dest = toUtf8(env, jdest);
 
@@ -384,6 +417,12 @@ Java_org_filezilla_android_archive_SevenZipNative_nativeExtract(
 
     mkdir(dest.c_str(), 0755);
 
+    // The password for any encrypted folders, as UTF-16LE. Empty when none
+    // was given; an encrypted folder then fails and the caller re-asks.
+    std::vector<Byte> pw;
+    if (jpassword) pw = toUtf16le(toUtf8(env, jpassword));
+    SevenZ_SetPassword(pw.empty() ? (const Byte*)"" : pw.data(), pw.size());
+
     // The folder cache: a 7z folder holds several files together, so
     // decoding it once and keeping the buffer means the files in it are
     // copied out without decoding it again. Must start as shown.
@@ -418,8 +457,16 @@ Java_org_filezilla_android_archive_SevenZipNative_nativeExtract(
             &outBuffer, &outBufferSize, &offset, &outSizeProcessed, &g_alloc, &g_alloc);
         if (r != SZ_OK) {
             if (cs.cancelled) { outcome = 1; break; }
-            // A folder this decoder cannot do (AES, say): skip the file and
-            // report the reason at the end, the same as a bad rar entry.
+            // An encrypted folder that would not decode is a wrong or missing
+            // password: stop and let the caller re-ask, since one password
+            // covers the whole archive. Other failures are a bad entry --
+            // reported at the end, the rest still extracted.
+            bool enc = false, uns = false;
+            classify(db, i, enc, uns);
+            if (enc && (r == kSevenZAesError || r == SZ_ERROR_CRC || r == SZ_ERROR_DATA)) {
+                outcome = 2;
+                break;
+            }
             outcome = -(jint)r;
             continue;
         }
@@ -432,6 +479,7 @@ Java_org_filezilla_android_archive_SevenZipNative_nativeExtract(
         fclose(fp);
     }
 
+    SevenZ_SetPassword((const Byte*)"", 0);
     ISzAlloc_Free(&g_alloc, outBuffer);
     SzArEx_Free(&db, &g_alloc);
     free(look.buf);
