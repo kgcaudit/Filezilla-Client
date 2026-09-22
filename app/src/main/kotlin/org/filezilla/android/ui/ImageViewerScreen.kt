@@ -1,32 +1,43 @@
 package org.filezilla.android.ui
 
 import android.graphics.Bitmap
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -39,61 +50,69 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import org.filezilla.android.R
 
 /**
- * The app's own image viewer: one picture at a time, pinch to zoom, and a
- * swipe to the next.
+ * A comic reader over a set of images.
  *
- * The swipe is the point of it. A folder of photos, or the pages of a comic
- * still inside its archive, become something to page through rather than a
- * row of taps back and forth to the list. Each page is decoded only as it is
- * reached and shrunk to the screen on the way, so a hundred-page cbz costs no
- * more memory than the few pages on either side of the one being read.
+ * The picture fills the screen with nothing on top of it -- a page of a comic
+ * is the thing being read, and a filename and a page number laid over the art
+ * are in the way. A tap in the middle brings the controls back and hides them
+ * again; a tap on the side turns the page the way the book reads; a swipe does
+ * the same. The place is kept as the pages turn, so a book reopens where it
+ * was left.
  */
 @Composable
 fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
     val pager = rememberPagerState(initialPage = viewer.index, pageCount = { viewer.images.size })
+    val scope = rememberCoroutineScope()
+    val rtl = model.readerRtl
+    var chrome by rememberSaveable(viewer.comicKey) { mutableStateOf(false) }
 
+    // Kept so the book reopens here, and so the bar shows where it is.
     LaunchedEffect(pager) {
         snapshotFlow { pager.currentPage }.collect { model.setImageIndex(it) }
     }
 
+    fun turn(forward: Boolean) {
+        val to = (pager.currentPage + if (forward) 1 else -1).coerceIn(0, viewer.images.size - 1)
+        scope.launch { pager.animateScrollToPage(to) }
+    }
+
     Surface(Modifier.fillMaxSize(), color = Color.Black) {
         // The picture keeps clear of the system status bar rather than running
-        // up under it -- the bar stays the phone's, over the black surface, and
-        // the viewer begins beneath it.
+        // up under it -- the bar stays the phone's, over the black surface.
         Box(Modifier.fillMaxSize().statusBarsPadding()) {
-            HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
-                ZoomableImage(viewer.images[page], model)
+            HorizontalPager(
+                state = pager,
+                reverseLayout = rtl,
+                modifier = Modifier.fillMaxSize(),
+            ) { page ->
+                ReaderPage(
+                    ref = viewer.images[page],
+                    model = model,
+                    rtl = rtl,
+                    onTurn = ::turn,
+                    onToggleChrome = { chrome = !chrome },
+                )
             }
 
-            // A thin bar over the picture: the way back, the name, the place
-            // in the set. White on a faint scrim so it reads on any image.
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.32f))
-                    .padding(horizontal = 4.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = model::closeImageViewer) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_close), tint = Color.White)
-                }
-                Text(
-                    viewer.images.getOrNull(pager.currentPage)?.name.orEmpty(),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+            AnimatedVisibility(visible = chrome, modifier = Modifier.align(Alignment.TopCenter)) {
+                ReaderTopBar(
+                    name = viewer.images.getOrNull(pager.currentPage)?.name.orEmpty(),
+                    rtl = rtl,
+                    onRtl = model::applyReaderRtl,
+                    onClose = model::closeImageViewer,
                 )
-                if (viewer.images.size > 1) {
-                    Text(
-                        "${pager.currentPage + 1} / ${viewer.images.size}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color.White,
-                        modifier = Modifier.padding(end = 8.dp),
+            }
+
+            if (viewer.images.size > 1) {
+                AnimatedVisibility(visible = chrome, modifier = Modifier.align(Alignment.BottomCenter)) {
+                    ReaderBottomBar(
+                        page = pager.currentPage,
+                        count = viewer.images.size,
+                        onSeek = { scope.launch { pager.scrollToPage(it) } },
                     )
                 }
             }
@@ -101,9 +120,84 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
     }
 }
 
+@Composable
+private fun ReaderTopBar(
+    name: String,
+    rtl: Boolean,
+    onRtl: (Boolean) -> Unit,
+    onClose: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(Color.Black.copy(alpha = 0.5f))
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onClose) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_close), tint = Color.White)
+        }
+        Text(
+            name,
+            style = MaterialTheme.typography.titleSmall,
+            color = Color.White,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+        )
+        Box {
+            var open by remember { mutableStateOf(false) }
+            IconButton(onClick = { open = true }) {
+                Icon(Icons.Filled.Settings, stringResource(R.string.reader_settings), tint = Color.White)
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.reader_direction_rtl)) },
+                    trailingIcon = { Switch(checked = rtl, onCheckedChange = { onRtl(it) }) },
+                    onClick = { onRtl(!rtl) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReaderBottomBar(page: Int, count: Int, onSeek: (Int) -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(Color.Black.copy(alpha = 0.5f))
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            "${page + 1} / $count",
+            style = MaterialTheme.typography.labelLarge,
+            color = Color.White,
+        )
+        // Dragged live for the number, and the page turned when let go, so a
+        // long book is not decoded once for every value the finger crosses.
+        var dragged by remember(page) { mutableFloatStateOf(page.toFloat()) }
+        Slider(
+            value = dragged,
+            onValueChange = { dragged = it },
+            onValueChangeFinished = { onSeek(dragged.toInt().coerceIn(0, count - 1)) },
+            valueRange = 0f..(count - 1).toFloat(),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun ZoomableImage(ref: MainViewModel.ImageRef, model: MainViewModel) {
+private fun ReaderPage(
+    ref: MainViewModel.ImageRef,
+    model: MainViewModel,
+    rtl: Boolean,
+    onTurn: (forward: Boolean) -> Unit,
+    onToggleChrome: () -> Unit,
+) {
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         val reqWidth = constraints.maxWidth
         val reqHeight = constraints.maxHeight
@@ -120,8 +214,6 @@ private fun ZoomableImage(ref: MainViewModel.ImageRef, model: MainViewModel) {
         var offsetY by remember(ref) { mutableStateOf(0f) }
         val transform = rememberTransformableState { zoom, pan, _ ->
             scale = (scale * zoom).coerceIn(1f, 6f)
-            // Pan only has somewhere to go once zoomed in; at rest the picture
-            // stays put and the swipe belongs to the pager.
             if (scale > 1f) {
                 offsetX += pan.x
                 offsetY += pan.y
@@ -150,19 +242,29 @@ private fun ZoomableImage(ref: MainViewModel.ImageRef, model: MainViewModel) {
                         translationX = offsetX,
                         translationY = offsetY,
                     )
-                    // Only claim a one-finger drag once zoomed in, to pan the
-                    // enlarged picture; at rest the drag belongs to the pager,
-                    // so a swipe turns the page. Pinch to zoom works either way.
                     .transformable(state = transform, canPan = { scale > 1f })
-                    .pointerInput(ref) {
-                        detectTapGestures(onDoubleTap = {
-                            // Double-tap toggles between fit and a close look.
-                            if (scale > 1f) {
-                                scale = 1f; offsetX = 0f; offsetY = 0f
-                            } else {
-                                scale = 3f
-                            }
-                        })
+                    .pointerInput(ref, rtl) {
+                        detectTapGestures(
+                            onDoubleTap = {
+                                if (scale > 1f) {
+                                    scale = 1f; offsetX = 0f; offsetY = 0f
+                                } else {
+                                    scale = 3f
+                                }
+                            },
+                            onTap = { at ->
+                                // Zoomed in, a tap only brings the controls
+                                // back; at rest, the sides turn the page the
+                                // way the book reads and the middle toggles.
+                                val third = size.width / 3f
+                                when {
+                                    scale > 1f -> onToggleChrome()
+                                    at.x < third -> onTurn(rtl)
+                                    at.x > size.width - third -> onTurn(!rtl)
+                                    else -> onToggleChrome()
+                                }
+                            },
+                        )
                     },
             )
         }

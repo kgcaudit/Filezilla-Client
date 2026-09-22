@@ -214,6 +214,55 @@ class AppPreferences(context: Context) {
             .putStringSet(KEY_MOVE_CLEANUP, value.map { it.encode() }.toSet())
             .apply()
 
+    /**
+     * Which way the comic reader turns its pages: right-to-left for manga,
+     * left-to-right otherwise. One setting for the app, flipped in the reader
+     * and remembered, because a reader who reads manga reads it that way every
+     * time and re-choosing on every book is the friction a setting exists to
+     * remove.
+     */
+    var readerRtl: Boolean
+        get() = prefs.getBoolean(KEY_READER_RTL, false)
+        set(value) = prefs.edit().putBoolean(KEY_READER_RTL, value).apply()
+
+    /** Whether the reader pairs pages into spreads when the screen is wide. */
+    var readerTwoPage: Boolean
+        get() = prefs.getBoolean(KEY_READER_TWO_PAGE, true)
+        set(value) = prefs.edit().putBoolean(KEY_READER_TWO_PAGE, value).apply()
+
+    /**
+     * The page a comic was last left on, so it reopens where it was put down.
+     *
+     * Keyed by the book, capped the same way folder settings are: a reader
+     * opens a great many comics over a phone's life, and one entry per book
+     * kept for ever is a preferences file that only grows. The oldest book's
+     * place is forgotten first.
+     */
+    fun comicPage(key: String): Int? =
+        prefs.getInt(comicPageKey(key), -1).takeIf { it >= 0 }
+
+    fun setComicPage(key: String, page: Int) {
+        val edit = prefs.edit()
+        val keys = (comicKeys() - key).toMutableList()
+        keys += key
+        while (keys.size > MAX_REMEMBERED_COMICS) {
+            edit.remove(comicPageKey(keys.removeAt(0)))
+        }
+        edit.putInt(comicPageKey(key), page)
+        edit.putString(KEY_COMIC_KEYS, keys.joinToString(KEY_SEPARATOR))
+        edit.apply()
+    }
+
+    private fun comicKeys(): List<String> =
+        prefs.getString(KEY_COMIC_KEYS, null)
+            ?.split(KEY_SEPARATOR)
+            ?.filter { it.isNotEmpty() }
+            .orEmpty()
+
+    // Hashed so a long file path does not become an unbounded preferences key,
+    // and so a path with any character in it is still a valid key.
+    private fun comicPageKey(key: String) = "$KEY_COMIC_PAGE${key.hashCode()}"
+
     /** A stored name that no longer exists falls back rather than throwing. */
     private fun panePathKey(pane: String, source: String) = "$KEY_PANE_PATH$pane/$source"
 
@@ -235,6 +284,10 @@ class AppPreferences(context: Context) {
         const val KEY_MOVE_CLEANUP = "move_cleanup"
         const val KEY_FOLDER_OPTIONS = "folder_options_"
         const val KEY_FOLDER_OPTION_KEYS = "folder_options_keys"
+        const val KEY_READER_RTL = "reader_rtl"
+        const val KEY_READER_TWO_PAGE = "reader_two_page"
+        const val KEY_COMIC_PAGE = "comic_page_"
+        const val KEY_COMIC_KEYS = "comic_page_keys"
 
         /** A newline, which no path and no site id contains. */
         const val KEY_SEPARATOR = "\n"
@@ -250,5 +303,8 @@ class AppPreferences(context: Context) {
          * without writing the number down a second time.
          */
         internal const val MAX_REMEMBERED_FOLDERS = 200
+
+        /** How many comics keep their place; the oldest is forgotten first. */
+        internal const val MAX_REMEMBERED_COMICS = 500
     }
 }

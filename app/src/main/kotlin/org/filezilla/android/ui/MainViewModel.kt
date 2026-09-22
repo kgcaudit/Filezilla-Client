@@ -1689,11 +1689,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** The images the viewer can swipe through, and which one is on screen. */
-    data class ImageViewer(val images: List<ImageRef>, val index: Int)
+    /**
+     * The images the viewer can swipe through, which one is on screen, and --
+     * for a comic, whose pages are worth remembering -- the key its place is
+     * saved under. Null [comicKey] is a one-off view that keeps no place.
+     */
+    data class ImageViewer(val images: List<ImageRef>, val index: Int, val comicKey: String?)
 
     var imageViewer by mutableStateOf<ImageViewer?>(null)
         private set
+
+    /** Right-to-left paging for manga, remembered across books. */
+    var readerRtl by mutableStateOf(graph.preferences.readerRtl)
+        private set
+
+    /** Two pages side by side on a wide screen, remembered across books. */
+    var readerTwoPage by mutableStateOf(graph.preferences.readerTwoPage)
+        private set
+
+    fun applyReaderRtl(value: Boolean) {
+        readerRtl = value
+        graph.preferences.readerRtl = value
+    }
+
+    fun applyReaderTwoPage(value: Boolean) {
+        readerTwoPage = value
+        graph.preferences.readerTwoPage = value
+    }
 
     fun openTextViewer(file: java.io.File, editable: Boolean) {
         textViewer = TextViewer(file, file.name, editable)
@@ -1703,9 +1725,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         textViewer = null
     }
 
-    fun openImageViewer(images: List<ImageRef>, index: Int) {
+    /**
+     * Opens the viewer on [images], at [index] unless a place was kept for
+     * [comicKey] -- then it reopens quietly where it was last left.
+     */
+    fun openImageViewer(images: List<ImageRef>, index: Int, comicKey: String?) {
         if (images.isEmpty()) return
-        imageViewer = ImageViewer(images, index.coerceIn(0, images.size - 1))
+        val start = comicKey?.let { graph.preferences.comicPage(it) } ?: index
+        imageViewer = ImageViewer(images, start.coerceIn(0, images.size - 1), comicKey)
     }
 
     /**
@@ -1716,8 +1743,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val folder = pane(id).path
         val images = pane(id).entries.filter { !it.isDirectory && ImageFiles.looksImage(it.name) }
         openImageViewer(
-            images.map { ImageRef.OnDisk(java.io.File(folder, it.name)) },
-            images.indexOfFirst { it.name == file.name },
+            images = images.map { ImageRef.OnDisk(java.io.File(folder, it.name)) },
+            index = images.indexOfFirst { it.name == file.name },
+            comicKey = "dir\u0000$folder",
         )
     }
 
@@ -1726,7 +1754,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setImageIndex(index: Int) {
-        imageViewer = imageViewer?.let { it.copy(index = index.coerceIn(0, it.images.size - 1)) }
+        imageViewer = imageViewer?.let { viewer ->
+            val at = index.coerceIn(0, viewer.images.size - 1)
+            // A comic keeps its place as the pages turn, so it reopens here.
+            viewer.comicKey?.let { graph.preferences.setComicPage(it, at) }
+            viewer.copy(index = at)
+        }
     }
 
     /** Reads a text file off the IO thread, or null when it is too big or unreadable. */
@@ -1999,7 +2032,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val refs = images.mapNotNull { r ->
                     ArchiveNav.entryFor(session, r.name)?.let { ImageRef.InArchive(session, it) }
                 }
-                openImageViewer(refs, images.indexOfFirst { it.name == name })
+                // The book is the archive and the folder within it; its place is
+                // kept under that, so it reopens where it was left.
+                openImageViewer(refs, images.indexOfFirst { it.name == name }, "arc\u0000${session.file.path}\u0000${session.at}")
             }
             else -> openArchiveEntry(id, session, name, password = null)
         }

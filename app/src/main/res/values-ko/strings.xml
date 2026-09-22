@@ -403,4 +403,6 @@
     <string name="viewer_image_failed">이미지를 표시할 수 없습니다.</string>
     <string name="viewer_saved">저장했습니다</string>
     <string name="viewer_save_failed">저장하지 못했습니다</string>
+    <string name="reader_settings">뷰어 설정</string>
+    <string name="reader_direction_rtl">오른쪽부터 넘기기 (만화)</string>
 </resources>

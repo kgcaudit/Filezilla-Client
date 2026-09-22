@@ -411,4 +411,6 @@
     <string name="viewer_image_failed">This image could not be shown.</string>
     <string name="viewer_saved">Saved</string>
     <string name="viewer_save_failed">Could not save</string>
+    <string name="reader_settings">Reader settings</string>
+    <string name="reader_direction_rtl">Right to left (manga)</string>
 </resources>

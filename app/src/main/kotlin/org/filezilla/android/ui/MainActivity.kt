@@ -795,7 +795,7 @@ private fun AppScreen(
                 TextFiles.looksTextual(ready.name) && ready.length() <= TextFiles.MAX_BYTES ->
                     model.openTextViewer(ready, editable = false)
                 ImageFiles.looksImage(ready.name) ->
-                    model.openImageViewer(listOf(MainViewModel.ImageRef.OnDisk(ready)), 0)
+                    model.openImageViewer(listOf(MainViewModel.ImageRef.OnDisk(ready)), 0, comicKey = null)
                 else -> {
                     askWhichApp = false
                     openingFile = ready
