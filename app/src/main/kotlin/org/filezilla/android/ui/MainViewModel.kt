@@ -2141,18 +2141,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         } else {
-            extractNext(id, files, 0, 0, 0)
+            extractNext(id, files, 0)
         }
     }
 
-    /** One archive at a time, so several selected archives each get their own folder. */
-    private fun extractNext(id: PaneId, files: List<java.io.File>, index: Int, done: Int, skipped: Int) {
+    /**
+     * One archive at a time, so several selected archives each get their own
+     * folder and each reports its own result -- then on to the next. A batch
+     * keeps numbering rather than a folder dialog per archive, which would be
+     * a wall of prompts.
+     */
+    private fun extractNext(id: PaneId, files: List<java.io.File>, index: Int) {
         if (index >= files.size) {
-            archiveOutcome = when {
-                done == 0 -> ArchiveOutcome(R.string.archive_extract_none)
-                skipped == 0 -> ArchiveOutcome(R.string.archive_extracted, listOf(done, files.first().parentFile?.name ?: ""))
-                else -> ArchiveOutcome(R.string.archive_extracted_some, listOf(done, skipped))
-            }
             relistLocalPanes()
             return
         }
@@ -2162,17 +2162,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val opened = withContext(Dispatchers.IO) { runCatching { Archives.open(file).use { it.entries } } }
             archiveOpening = null
             val session = opened.getOrNull()?.let { ArchiveSession(file, file.name, file.parent ?: "", it) }
-            // A batch keeps numbering rather than asking per archive: several
-            // files each getting a folder dialog would be a wall of prompts.
             val into = java.io.File(unpackInto(file), freeNameIn(file.parent ?: "", Archives.folderNameFor(file.name)))
-            if (session == null) {
-                extractNext(id, files, index + 1, done, skipped + 1)
-            } else if (session.entries.any { it.encrypted }) {
-                // A locked one in a batch asks on its own, then the batch goes on.
-                pendingPassword = PendingPassword.Extract(id, session, emptySet(), into, overwrite = true)
-                archivePasswordAsked = true
-            } else {
-                runExtract(id, session, emptySet(), into, overwrite = true, null) { relistLocalPanes() }
+            when {
+                session == null -> {
+                    archiveOutcome = ArchiveOutcome(R.string.archive_not_readable)
+                    extractNext(id, files, index + 1)
+                }
+                // A locked one asks for its password; extracting it and going
+                // on is left to the answer, so the prompt is not racing the
+                // next archive's own progress.
+                session.entries.any { it.encrypted } -> {
+                    pendingPassword = PendingPassword.Extract(id, session, emptySet(), into, overwrite = true)
+                    archivePasswordAsked = true
+                }
+                else -> runExtract(id, session, emptySet(), into, overwrite = true, null) {
+                    extractNext(id, files, index + 1)
+                }
             }
         }
     }
