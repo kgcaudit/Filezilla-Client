@@ -1942,6 +1942,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             archivePasswordAsked = true
             return
         }
+        // The copy goes in the viewing cache, not somewhere of its own. That
+        // folder is the one this app declares to the FileProvider, so the URI
+        // handed to "open with" can be built at all -- a copy written
+        // anywhere else has no shareable URI, and the chooser comes up empty
+        // with "no app can open this". It is also capped and evicted, so
+        // opening files out of archives cannot quietly fill the phone.
+        val key = ViewCache.Key(
+            serverKey = "archive\u0000" + session.file.path,
+            path = entry.path,
+            name = entry.name,
+            size = entry.size,
+            modifiedMillis = entry.modifiedMillis ?: 0,
+        )
+        graph.viewCache.readyFile(key)?.let { held ->
+            graph.viewCache.touch(held)
+            readyToOpen = held
+            return
+        }
         archiveBusy = ArchiveBusy(
             getApplication<android.app.Application>().getString(R.string.archive_extracting),
             name, 0L, 0L, {},
@@ -1949,19 +1967,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val opened = withContext(Dispatchers.IO) {
                 runCatching {
-                    val dir = java.io.File(getApplication<android.app.Application>().cacheDir, "opened")
-                    dir.mkdirs()
-                    val out = java.io.File(dir, entry.name)
-                    Archives.open(session.file).use { archive ->
-                        archive.open(entry, password).use { source ->
-                            out.outputStream().use { sink -> source.copyTo(sink) }
+                    val partial = graph.viewCache.partialFor(key)
+                    try {
+                        Archives.open(session.file).use { archive ->
+                            archive.open(entry, password).use { source ->
+                                partial.outputStream().use { sink -> source.copyTo(sink) }
+                            }
                         }
+                    } catch (failure: Throwable) {
+                        partial.delete()
+                        throw failure
                     }
-                    out
+                    graph.viewCache.finish(partial, key)
+                        ?: throw java.io.IOException("the copy could not be put in place")
                 }
             }
             archiveBusy = null
-            opened.onSuccess { readyToOpen = it }
+            opened.onSuccess { held ->
+                graph.viewCache.evictDownTo(keep = held)
+                readyToOpen = held
+            }
                 .onFailure { failure ->
                     if (failure is WrongPassword) {
                         pendingPassword = PendingPassword.Open(id, session, name)
