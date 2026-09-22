@@ -23,6 +23,16 @@ data class ArchiveSession(
     val entries: List<ArchiveEntry>,
     /** The folder inside the archive, without a trailing slash; "" is the root. */
     val at: String = "",
+    /**
+     * The archive this one was opened from inside of, or null at the top.
+     *
+     * An archive can hold another: opening the inner one extracts it to the
+     * viewing cache and browses that. Backing out of it must return to the
+     * outer archive where it was tapped -- not to the cache folder the copy
+     * happens to sit in -- so the outer session is kept here, as it was,
+     * and the chain of them is what the breadcrumb and the back gesture walk.
+     */
+    val parent: ArchiveSession? = null,
 )
 
 /**
@@ -37,6 +47,26 @@ object ArchiveNav {
 
     /** A path that cannot be a real one, marking a breadcrumb that stays in the archive. */
     const val SCHEME = "\u0000archive\u0000"
+
+    /** Separates the nesting depth from the folder in a crumb's fake path. */
+    private const val SEP = "\u0001"
+
+    /**
+     * A breadcrumb's fake path for the folder [at] inside the archive at
+     * [depth] in the nesting chain (0 is the outermost archive).
+     *
+     * The depth is in the path because a nested archive's breadcrumb spans
+     * more than one archive, and a tap has to say which one it means.
+     */
+    fun crumb(depth: Int, at: String): String = "$SCHEME$depth$SEP$at"
+
+    /** Decodes a [crumb] path into depth and folder, or null for a real path. */
+    fun leg(path: String): Pair<Int, String>? {
+        if (!path.startsWith(SCHEME)) return null
+        val rest = path.removePrefix(SCHEME)
+        val depth = rest.substringBefore(SEP).toIntOrNull() ?: return null
+        return depth to rest.substringAfter(SEP)
+    }
 
     /**
      * Whether a tapped file is worth opening in the archive viewer.
@@ -82,6 +112,4 @@ object ArchiveNav {
         ArchiveBrowsing.upFrom(session.at)?.let { session.copy(at = it) }
 
 
-    /** Where a breadcrumb tap lands: the archive folder to show, or null to leave. */
-    fun target(path: String): String? = if (path.startsWith(SCHEME)) path.removePrefix(SCHEME) else null
 }

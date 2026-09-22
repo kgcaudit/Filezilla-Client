@@ -1338,32 +1338,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun breadcrumbsFor(id: PaneId): List<Crumb> {
         val state = pane(id)
         state.archive?.let { session ->
-            val base = folderCrumbs(state)
-            val out = base.toMutableList()
-            out += Crumb(session.name, ArchiveNav.SCHEME)
-            var walked = ""
-            for (segment in session.at.split('/').filter { it.isNotEmpty() }) {
-                walked = if (walked.isEmpty()) segment else "$walked/$segment"
-                out += Crumb(segment, ArchiveNav.SCHEME + walked)
+            // The whole nesting chain, outermost first, so the trail reads
+            // folder / outer.7z / ... / inner.zip / ... rather than exposing
+            // the cache the inner copies sit in.
+            val chain = generateSequence(session) { it.parent }.toList().asReversed()
+            // The base is the real folder the outermost archive sits in.
+            val out = folderCrumbs(state, chain.first().home).toMutableList()
+            chain.forEachIndexed { depth, link ->
+                out += Crumb(link.name, ArchiveNav.crumb(depth, ""))
+                var walked = ""
+                for (segment in link.at.split('/').filter { it.isNotEmpty() }) {
+                    walked = if (walked.isEmpty()) segment else "$walked/$segment"
+                    out += Crumb(segment, ArchiveNav.crumb(depth, walked))
+                }
             }
             return out
         }
         return folderCrumbs(state)
     }
 
-    private fun folderCrumbs(state: BrowseState): List<Crumb> {
+    private fun folderCrumbs(state: BrowseState, path: String = state.path): List<Crumb> {
         if (state.isLocal) {
             val volume = storageRoots()
                 .filter { it.kind != StorageRoot.Kind.SHORTCUT }
-                .firstOrNull { FilePath.isWithin(state.path, it.path) }
+                .firstOrNull { FilePath.isWithin(path, it.path) }
             return breadcrumbs(
-                state.path,
+                path,
                 volume?.path ?: FilePath.ROOT,
                 volume?.label ?: FilePath.ROOT,
             )
         }
         val name = state.site?.let { it.name.ifBlank { it.host } } ?: FilePath.ROOT
-        return breadcrumbs(state.path, FilePath.ROOT, name)
+        return breadcrumbs(path, FilePath.ROOT, name)
     }
 
     /**
@@ -1815,7 +1821,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             archiveOpening = null
             opened.onSuccess { entries ->
-                val session = ArchiveSession(file, file.name, home, entries)
+                // Opened from inside another archive, the pane still holds that
+                // outer one -- keep it as this one's parent so backing out
+                // returns to it rather than to the cache the copy sits in.
+                val parent = pane(id).archive
+                val session = ArchiveSession(file, file.name, home, entries, parent = parent)
                 update(id) {
                     it.copy(
                         archive = session,
@@ -1881,11 +1891,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun archiveUp(id: PaneId): Boolean {
         val session = pane(id).archive ?: return false
         val up = ArchiveNav.up(session)
-        if (up == null) {
+        if (up != null) {
+            update(id) { it.copy(archive = up, entries = ArchiveNav.rows(up), selection = emptySet(), filter = "") }
+            return true
+        }
+        // At the archive's root: step out into the archive that contains this
+        // one, or -- when there is none -- out to the folder it sits in.
+        val parent = session.parent
+        if (parent != null) {
+            update(id) {
+                it.copy(archive = parent, path = parent.home, entries = ArchiveNav.rows(parent), selection = emptySet(), filter = "")
+            }
+        } else {
             update(id) { it.copy(archive = null, entries = emptyList(), selection = emptySet(), selecting = false, filter = "") }
             openPath(id, session.home)
-        } else {
-            update(id) { it.copy(archive = up, entries = ArchiveNav.rows(up), selection = emptySet(), filter = "") }
         }
         return true
     }
@@ -1894,12 +1913,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun crumbTap(id: PaneId, path: String) {
         val session = pane(id).archive
         if (session != null) {
-            val target = ArchiveNav.target(path)
-            if (target != null) {
-                val next = session.copy(at = target)
-                update(id) { it.copy(archive = next, entries = ArchiveNav.rows(next), selection = emptySet(), filter = "") }
+            val leg = ArchiveNav.leg(path)
+            if (leg != null) {
+                // A folder in this archive or one that contains it: walk the
+                // nesting chain to the depth the crumb names.
+                val (depth, at) = leg
+                val chain = generateSequence(session) { it.parent }.toList().asReversed()
+                val next = chain.getOrNull(depth)?.copy(at = at) ?: return
+                update(id) {
+                    it.copy(archive = next, path = next.home, entries = ArchiveNav.rows(next), selection = emptySet(), filter = "")
+                }
                 return
             }
+            // A real-path crumb: leave every archive and show that folder.
             update(id) { it.copy(archive = null, entries = emptyList(), selection = emptySet(), selecting = false, filter = "") }
         }
         openPath(id, path)

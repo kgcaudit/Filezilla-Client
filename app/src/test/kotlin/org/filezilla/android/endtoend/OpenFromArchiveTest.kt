@@ -11,6 +11,7 @@ import org.filezilla.android.ui.MainViewModel
 import org.filezilla.android.ui.PaneId
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -56,7 +57,11 @@ class OpenFromArchiveTest {
         AppGraph.sealPasswordsWith = { KeystorePasswordCipher() }
     }
 
-    private fun waitFor(what: String, seconds: Long = 20, condition: () -> Boolean) {
+    private fun waitFor(what: String, seconds: Long = 30, condition: () -> Boolean) {
+        // An archive opens on a background thread and resumes on the main
+        // looper; idle() runs those continuations and the sleep yields the CPU
+        // the background thread needs to land. The same wait the other
+        // end-to-end tests use.
         val deadline = System.currentTimeMillis() + seconds * 1_000
         while (System.currentTimeMillis() < deadline) {
             shadowOf(Looper.getMainLooper()).idle()
@@ -100,6 +105,65 @@ class OpenFromArchiveTest {
         assertTrue(
             "the copy should live under the viewing cache the provider declares",
             AppGraph.of(application).viewCache.holds(copy),
+        )
+    }
+
+    private fun nestedZip(): File {
+        // outer.zip -> inner.zip -> notes.txt
+        val innerBytes = java.io.ByteArrayOutputStream().also { bos ->
+            ZipOutputStream(bos).use { z ->
+                z.putNextEntry(ZipEntry("notes.txt"))
+                z.write("deep inside".toByteArray())
+                z.closeEntry()
+            }
+        }.toByteArray()
+        val outer = phone.newFile("outer.zip")
+        ZipOutputStream(outer.outputStream()).use { z ->
+            z.putNextEntry(ZipEntry("inner.zip"))
+            z.write(innerBytes)
+            z.closeEntry()
+        }
+        return outer
+    }
+
+    @Test
+    fun `backing out of a nested archive returns to the outer one, not the cache`() {
+        val outer = nestedZip()
+
+        val model = MainViewModel(application)
+        model.openArchive(PaneId.LEFT, outer, outer.parentFile!!.path)
+        waitFor("the outer archive's rows") {
+            model.inArchive(PaneId.LEFT) && model.pane(PaneId.LEFT).entries.isNotEmpty() ||
+                model.archiveOutcome != null
+        }
+        assertEquals("open should not have failed", null, model.archiveOutcome)
+        assertTrue(model.pane(PaneId.LEFT).entries.any { it.name == "inner.zip" })
+
+        // Tap the inner archive: it is unpacked to the cache and opened as the
+        // nested archive, the same as MainActivity does when readyToOpen is a
+        // browsable archive.
+        model.archiveTap(PaneId.LEFT, "inner.zip")
+        waitFor("the inner copy") { model.readyToOpen != null }
+        val innerCopy = model.readyToOpen!!
+        model.openedReady()
+        model.openArchive(PaneId.LEFT, innerCopy, innerCopy.parent ?: "")
+        waitFor("the inner archive") {
+            model.pane(PaneId.LEFT).entries.any { it.name == "notes.txt" }
+        }
+
+        // Back out of the inner archive's root.
+        model.archiveUp(PaneId.LEFT)
+
+        // The regression: it used to list the cache folder the inner copy sat
+        // in. It should be the outer archive again.
+        assertTrue("should still be inside an archive", model.inArchive(PaneId.LEFT))
+        assertTrue(
+            "backing out should show the outer archive's rows",
+            model.pane(PaneId.LEFT).entries.any { it.name == "inner.zip" },
+        )
+        assertFalse(
+            "the pane must not have wandered into the viewing cache",
+            AppGraph.of(application).viewCache.holds(File(model.pane(PaneId.LEFT).path, "x")),
         )
     }
 

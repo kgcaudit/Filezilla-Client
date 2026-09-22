@@ -72,10 +72,12 @@ class ArchiveNavTest {
     }
 
     @Test
-    fun `a breadcrumb path says whether it stays in the archive`() {
-        assertEquals("papers", ArchiveNav.target(ArchiveNav.SCHEME + "papers"))
-        assertEquals("", ArchiveNav.target(ArchiveNav.SCHEME))
+    fun `a breadcrumb path carries the archive depth and folder, or leaves`() {
+        // Depth 0 is the outermost archive; a nested one is deeper.
+        assertEquals(0 to "papers", ArchiveNav.leg(ArchiveNav.crumb(0, "papers")))
+        assertEquals(0 to "", ArchiveNav.leg(ArchiveNav.crumb(0, "")))
+        assertEquals(2 to "a/b", ArchiveNav.leg(ArchiveNav.crumb(2, "a/b")))
         // A real folder path is not one of the archive's, so it leaves.
-        assertNull(ArchiveNav.target("/sdcard/Download"))
+        assertNull(ArchiveNav.leg("/sdcard/Download"))
     }
 }
