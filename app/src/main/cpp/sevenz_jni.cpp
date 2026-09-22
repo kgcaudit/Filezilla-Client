@@ -151,18 +151,82 @@ bool wantsEntry(const std::string& name, const std::vector<std::string>& picks) 
     return false;
 }
 
-// Opens [path] as a 7z and parses its header. On success the caller must
-// SzArEx_Free the db and free look->buf and File_Close the stream. Returns
-// SZ_OK or an SRes.
-SRes openArchive(const std::string& path, CFileInStream* ar, CLookToRead2* look, CSzArEx* db) {
-    if (InFile_Open(&ar->file, path.c_str()) != 0) return SZ_ERROR_INPUT_EOF;
-    FileInStream_CreateVTable(ar);
-    ar->wres = 0;
-    LookToRead2_CreateVTable(look, False);
+// A read stream that counts what it hands out and can stop the decode.
+//
+// Why this exists: SzArEx_Extract decodes a whole solid folder in one call
+// before it returns a single byte, so a big 7z looked frozen -- no progress
+// moved and the stop button did nothing until the decode finished, which
+// for half a gigabyte is many seconds. The decoder reads its input through
+// this stream as it works, so counting those reads is a live measure of how
+// far the decode has got, and refusing a read is how it is stopped part way.
+// It sits under the real file stream and forwards to it; the SDK is not
+// touched.
+struct CountingStream {
+    ISeekInStream vt;      // first, so the interface pointer is this struct
+    ISeekInStream* inner;  // the real file stream
+    JNIEnv* env;
+    jobject sink;
+    jmethodID onProgress;
+    jmethodID isCancelled;
+    UInt64 consumed;       // compressed bytes read so far
+    UInt64 totalPacked;    // compressed bytes in the file
+    jlong totalUnpacked;   // uncompressed total, for the bar's scale
+    UInt64 sinceReport;
+    const std::string* name;
+    bool active;           // off during the header read, on during extract
+    bool cancelled;
+};
+
+SRes counting_Read(ISeekInStreamPtr pp, void* buf, size_t* size) {
+    CountingStream* s = (CountingStream*)pp;
+    SRes r = s->inner->Read(s->inner, buf, size);
+    if (r != SZ_OK) return r;
+    if (!s->active) return SZ_OK;
+    s->consumed += *size;
+    s->sinceReport += *size;
+    // Every megabyte of input: report where the decode is and ask to stop.
+    if (s->sinceReport >= (UInt64)(1 << 20)) {
+        s->sinceReport = 0;
+        // Scaled to the uncompressed total, so the bar means what the user
+        // is unpacking rather than the smaller compressed size.
+        jlong done = (jlong)s->consumed;
+        jlong total = (jlong)s->totalPacked;
+        if (s->totalUnpacked > 0 && s->totalPacked > 0) {
+            done = (jlong)((double)s->consumed / (double)s->totalPacked * (double)s->totalUnpacked);
+            total = s->totalUnpacked;
+        }
+        if (done > total) done = total;
+        jstring jn = s->env->NewStringUTF(s->name ? s->name->c_str() : "");
+        jvalue a[3];
+        a[0].j = done;
+        a[1].j = total;
+        a[2].l = jn;
+        s->env->CallVoidMethodA(s->sink, s->onProgress, a);
+        s->env->DeleteLocalRef(jn);
+        if (s->env->CallBooleanMethod(s->sink, s->isCancelled)) {
+            s->cancelled = true;
+            return SZ_ERROR_PROGRESS;  // stops SzArEx_Extract part way through
+        }
+    }
+    return SZ_OK;
+}
+
+SRes counting_Seek(ISeekInStreamPtr pp, Int64* pos, ESzSeek origin) {
+    CountingStream* s = (CountingStream*)pp;
+    return s->inner->Seek(s->inner, pos, origin);
+}
+
+// Opens [path] as a 7z and parses its header, reading through [realStream]
+// (the file's own, or the counting stream standing in front of it). The
+// caller sets that stream up and, when it wraps the file, points it at
+// ar->vt first. On success the caller must SzArEx_Free the db and free
+// look->buf and File_Close the stream. Returns SZ_OK or an SRes.
+SRes openArchive(CFileInStream* ar, CLookToRead2* look, CSzArEx* db, ISeekInStream* realStream) {
     look->buf = (Byte*)malloc(kInputBufSize);
     if (!look->buf) { File_Close(&ar->file); return SZ_ERROR_MEM; }
+    LookToRead2_CreateVTable(look, False);
     look->bufSize = kInputBufSize;
-    look->realStream = &ar->vt;
+    look->realStream = realStream;
     LookToRead2_INIT(look)
     CrcGenerateTable();
     SzArEx_Init(db);
@@ -173,6 +237,14 @@ SRes openArchive(const std::string& path, CFileInStream* ar, CLookToRead2* look,
         File_Close(&ar->file);
     }
     return res;
+}
+
+// Opens the file behind [ar] and hands back its ISeekInStream, or null.
+ISeekInStream* openFile(const std::string& path, CFileInStream* ar) {
+    if (InFile_Open(&ar->file, path.c_str()) != 0) return nullptr;
+    FileInStream_CreateVTable(ar);
+    ar->wres = 0;
+    return &ar->vt;
 }
 
 std::string nameOf(const CSzArEx& db, UInt32 i, std::vector<UInt16>& scratch) {
@@ -206,7 +278,9 @@ Java_org_filezilla_android_archive_SevenZipNative_nativeList(
     CFileInStream ar;
     CLookToRead2 look;
     CSzArEx db;
-    SRes res = openArchive(path, &ar, &look, &db);
+    ISeekInStream* stream = openFile(path, &ar);
+    if (stream == nullptr) return -(jint)SZ_ERROR_INPUT_EOF;
+    SRes res = openArchive(&ar, &look, &db, stream);
     if (res != SZ_OK) return -(jint)res;
 
     jclass sinkClass = env->GetObjectClass(sink);
@@ -272,10 +346,40 @@ Java_org_filezilla_android_archive_SevenZipNative_nativeExtract(
     jmethodID isCancelled = env->GetMethodID(sinkClass, "cancelled", "()Z");
     if (onProgress == nullptr || isCancelled == nullptr) { env->ExceptionClear(); return -100; }
 
+    // The compressed size, so the progress the decode's reads report can be
+    // scaled to the uncompressed total the bar shows.
+    UInt64 packedTotal = 0;
+    {
+        struct stat sb;
+        if (stat(path.c_str(), &sb) == 0) packedTotal = (UInt64)sb.st_size;
+    }
+
     CFileInStream ar;
     CLookToRead2 look;
     CSzArEx db;
-    SRes res = openArchive(path, &ar, &look, &db);
+
+    // The counting stream sits between the buffered reader and the file, so
+    // the decode's reads move the bar and can be stopped. It is off while
+    // the header is parsed -- those reads are not the work being watched.
+    CountingStream cs;
+    memset(&cs, 0, sizeof(cs));
+    cs.vt.Read = counting_Read;
+    cs.vt.Seek = counting_Seek;
+    cs.env = env;
+    cs.sink = sink;
+    cs.onProgress = onProgress;
+    cs.isCancelled = isCancelled;
+    cs.totalPacked = packedTotal;
+    cs.totalUnpacked = jtotalBytes;
+    cs.active = false;
+    cs.cancelled = false;
+
+    // Open the file first so the counting stream can point at it, then open
+    // the archive through the counting stream. inner must be set before the
+    // header parse, which already reads through the counting stream.
+    cs.inner = openFile(path, &ar);
+    if (cs.inner == nullptr) return -(jint)SZ_ERROR_INPUT_EOF;
+    SRes res = openArchive(&ar, &look, &db, &cs.vt);
     if (res != SZ_OK) return -(jint)res;
 
     mkdir(dest.c_str(), 0755);
@@ -287,9 +391,9 @@ Java_org_filezilla_android_archive_SevenZipNative_nativeExtract(
     Byte* outBuffer = nullptr;
     size_t outBufferSize = 0;
 
-    jlong doneBytes = 0;
     jint outcome = 0;
     std::vector<UInt16> scratch;
+    cs.active = true;
 
     for (UInt32 i = 0; i < db.NumFiles; ++i) {
         if (env->CallBooleanMethod(sink, isCancelled)) { outcome = 1; break; }
@@ -307,10 +411,13 @@ Java_org_filezilla_android_archive_SevenZipNative_nativeExtract(
         }
         makeDirs(full);
 
+        // What the progress line names while this file's folder decodes.
+        cs.name = &name;
         size_t offset = 0, outSizeProcessed = 0;
         SRes r = SzArEx_Extract(&db, &look.vt, i, &blockIndex,
             &outBuffer, &outBufferSize, &offset, &outSizeProcessed, &g_alloc, &g_alloc);
         if (r != SZ_OK) {
+            if (cs.cancelled) { outcome = 1; break; }
             // A folder this decoder cannot do (AES, say): skip the file and
             // report the reason at the end, the same as a bad rar entry.
             outcome = -(jint)r;
@@ -323,15 +430,6 @@ Java_org_filezilla_android_archive_SevenZipNative_nativeExtract(
             fwrite(outBuffer + offset, 1, outSizeProcessed, fp);
         }
         fclose(fp);
-
-        doneBytes += (jlong)outSizeProcessed;
-        jstring jname = env->NewStringUTF(name.c_str());
-        jvalue args[3];
-        args[0].j = doneBytes;
-        args[1].j = jtotalBytes;
-        args[2].l = jname;
-        env->CallVoidMethodA(sink, onProgress, args);
-        env->DeleteLocalRef(jname);
     }
 
     ISzAlloc_Free(&g_alloc, outBuffer);
