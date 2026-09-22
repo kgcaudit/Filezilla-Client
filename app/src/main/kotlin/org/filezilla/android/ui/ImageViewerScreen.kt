@@ -10,11 +10,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
@@ -73,13 +77,23 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
     // While reading, the phone's own bars go away so the page has the whole
     // screen; bringing the menu up brings them back, and leaving the reader
     // restores them. A swipe from the edge still peeks at them meanwhile.
+    // The bars carry light icons throughout, because the reader is black and
+    // the phone's dark clock would be invisible on it.
     val view = androidx.compose.ui.platform.LocalView.current
     androidx.compose.runtime.DisposableEffect(view) {
         val window = (view.context as? android.app.Activity)?.window
         val controller = window?.let { androidx.core.view.WindowCompat.getInsetsController(it, view) }
+        val wasLightStatus = controller?.isAppearanceLightStatusBars ?: true
+        val wasLightNav = controller?.isAppearanceLightNavigationBars ?: true
         controller?.systemBarsBehavior =
             androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        onDispose { controller?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars()) }
+        controller?.isAppearanceLightStatusBars = false
+        controller?.isAppearanceLightNavigationBars = false
+        onDispose {
+            controller?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            controller?.isAppearanceLightStatusBars = wasLightStatus
+            controller?.isAppearanceLightNavigationBars = wasLightNav
+        }
     }
     LaunchedEffect(chrome, view) {
         val window = (view.context as? android.app.Activity)?.window ?: return@LaunchedEffect
@@ -87,6 +101,18 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
         val bars = androidx.core.view.WindowInsetsCompat.Type.systemBars()
         if (chrome) controller.show(bars) else controller.hide(bars)
     }
+
+    // The top strip the phone keeps for its status bar and camera, remembered
+    // so the page sits below it even once the bar is hidden -- otherwise a
+    // centre-punch camera would bite a hole out of the art. Latched at its
+    // largest, since hiding the bar drops its own inset to zero.
+    val density = LocalDensity.current
+    val statusTop = WindowInsets.statusBars.getTop(density)
+    val cutoutTop = WindowInsets.displayCutout.getTop(density)
+    var reservedTopPx by rememberSaveable { mutableStateOf(0) }
+    val reservedTop = maxOf(reservedTopPx, statusTop, cutoutTop)
+    LaunchedEffect(reservedTop) { reservedTopPx = reservedTop }
+    val reservedTopDp = with(density) { reservedTop.toDp() }
 
     // Kept so the book reopens here, and so the bar shows where it is.
     LaunchedEffect(pager) {
@@ -105,7 +131,7 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
             HorizontalPager(
                 state = pager,
                 reverseLayout = rtl,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().padding(top = reservedTopDp),
             ) { page ->
                 ReaderPage(
                     ref = viewer.images[page],
