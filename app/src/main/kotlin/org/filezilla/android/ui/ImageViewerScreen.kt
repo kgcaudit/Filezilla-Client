@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -59,6 +60,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.filezilla.android.R
+import org.filezilla.android.viewer.Spreads
 
 /**
  * A comic reader over a set of images.
@@ -72,13 +74,30 @@ import org.filezilla.android.R
  */
 @Composable
 fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
-    // A comic gets one extra page past its last: the end card, which names the
-    // next volume and goes on to it, or says the series is done.
-    val pageCount = viewer.images.size + if (viewer.book) 1 else 0
-    val pager = rememberPagerState(initialPage = viewer.index, pageCount = { pageCount })
     val scope = rememberCoroutineScope()
     val rtl = model.readerRtl
     var chrome by rememberSaveable(viewer.comicKey) { mutableStateOf(false) }
+
+    // Two pages side by side, but only for a comic on a wide screen -- a phone
+    // held sideways, or a tablet -- and only when the setting allows it. A
+    // portrait phone, or a loose folder of pictures, stays one page.
+    val landscape = androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
+        android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    val twoPage = viewer.book && model.readerTwoPage && landscape
+    val spreads = remember(viewer.images.size, twoPage) { Spreads.of(viewer.images.size, twoPage) }
+
+    // A comic gets one extra spread past its last: the end card, which names
+    // the next volume and goes on to it, or says the series is done.
+    val spreadCount = spreads.size + if (viewer.book) 1 else 0
+    // Keyed on the pairing so a change of it -- the setting, or a turn to
+    // landscape -- reopens the pager on the spread holding the same page,
+    // rather than at some stale index into a list that just changed length.
+    val pager = androidx.compose.runtime.key(twoPage) {
+        rememberPagerState(
+            initialPage = Spreads.spreadOf(viewer.index, twoPage),
+            pageCount = { spreadCount },
+        )
+    }
 
     // While reading, the phone's own bars go away so the page has the whole
     // screen; bringing the menu up brings them back, and leaving the reader
@@ -120,13 +139,14 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
     LaunchedEffect(reservedTop) { reservedTopPx = reservedTop }
     val reservedTopDp = with(density) { reservedTop.toDp() }
 
-    // Kept so the book reopens here, and so the bar shows where it is.
-    LaunchedEffect(pager) {
-        snapshotFlow { pager.currentPage }.collect { model.setImageIndex(it) }
+    // Kept by page, not by spread, so the place survives the pairing changing:
+    // the first page of the spread on screen is what is remembered.
+    LaunchedEffect(pager, twoPage) {
+        snapshotFlow { pager.currentPage }.collect { model.setImageIndex(Spreads.firstPage(it, twoPage)) }
     }
 
     fun turn(forward: Boolean) {
-        val to = (pager.currentPage + if (forward) 1 else -1).coerceIn(0, pageCount - 1)
+        val to = (pager.currentPage + if (forward) 1 else -1).coerceIn(0, spreadCount - 1)
         scope.launch { pager.animateScrollToPage(to) }
     }
 
@@ -142,10 +162,10 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
                 // is already drawn instead of on a spinner.
                 beyondViewportPageCount = 1,
                 modifier = Modifier.fillMaxSize().padding(top = reservedTopDp),
-            ) { page ->
-                if (page < viewer.images.size) {
-                    ReaderPage(
-                        ref = viewer.images[page],
+            ) { spread ->
+                if (spread < spreads.size) {
+                    ReaderSpread(
+                        refs = spreads[spread].map { viewer.images[it] },
                         model = model,
                         rtl = rtl,
                         onTurn = ::turn,
@@ -160,26 +180,31 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
                 }
             }
 
+            val onImage = pager.currentPage < spreads.size
+            val shownPages = spreads.getOrNull(pager.currentPage).orEmpty()
+
             AnimatedVisibility(visible = chrome, modifier = Modifier.align(Alignment.TopCenter)) {
                 ReaderTopBar(
-                    name = viewer.images.getOrNull(pager.currentPage)?.name.orEmpty(),
+                    name = shownPages.firstOrNull()?.let { viewer.images[it].name }.orEmpty(),
                     rtl = rtl,
+                    twoPage = model.readerTwoPage,
                     onRtl = model::applyReaderRtl,
+                    onTwoPage = model::applyReaderTwoPage,
                     onClose = model::closeImageViewer,
                 )
             }
 
-            val onImage = pager.currentPage < viewer.images.size
             if (viewer.images.size > 1) {
                 AnimatedVisibility(
                     visible = chrome && onImage,
                     modifier = Modifier.align(Alignment.BottomCenter),
                 ) {
                     ReaderBottomBar(
-                        page = pager.currentPage.coerceAtMost(viewer.images.size - 1),
+                        firstPage = shownPages.firstOrNull() ?: 0,
+                        lastPage = shownPages.lastOrNull() ?: 0,
                         count = viewer.images.size,
                         rtl = rtl,
-                        onSeek = { scope.launch { pager.scrollToPage(it) } },
+                        onSeek = { page -> scope.launch { pager.scrollToPage(Spreads.spreadOf(page, twoPage)) } },
                     )
                 }
             }
@@ -191,7 +216,9 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
 private fun ReaderTopBar(
     name: String,
     rtl: Boolean,
+    twoPage: Boolean,
     onRtl: (Boolean) -> Unit,
+    onTwoPage: (Boolean) -> Unit,
     onClose: () -> Unit,
 ) {
     Row(
@@ -224,13 +251,18 @@ private fun ReaderTopBar(
                     trailingIcon = { Switch(checked = rtl, onCheckedChange = { onRtl(it) }) },
                     onClick = { onRtl(!rtl) },
                 )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.reader_two_page)) },
+                    trailingIcon = { Switch(checked = twoPage, onCheckedChange = { onTwoPage(it) }) },
+                    onClick = { onTwoPage(!twoPage) },
+                )
             }
         }
     }
 }
 
 @Composable
-private fun ReaderBottomBar(page: Int, count: Int, rtl: Boolean, onSeek: (Int) -> Unit) {
+private fun ReaderBottomBar(firstPage: Int, lastPage: Int, count: Int, rtl: Boolean, onSeek: (Int) -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -240,13 +272,14 @@ private fun ReaderBottomBar(page: Int, count: Int, rtl: Boolean, onSeek: (Int) -
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            "${page + 1} / $count",
+            // A spread shows a range, "12-13 / 200"; a single page one number.
+            if (lastPage > firstPage) "${firstPage + 1}-${lastPage + 1} / $count" else "${firstPage + 1} / $count",
             style = MaterialTheme.typography.labelLarge,
             color = Color.White,
         )
         // Dragged live for the number, and the page turned when let go, so a
         // long book is not decoded once for every value the finger crosses.
-        var dragged by remember(page) { mutableFloatStateOf(page.toFloat()) }
+        var dragged by remember(firstPage) { mutableFloatStateOf(firstPage.toFloat()) }
         Slider(
             value = dragged,
             onValueChange = { dragged = it },
@@ -306,29 +339,29 @@ private fun ReaderEndCard(
     }
 }
 
+/**
+ * One spread: a single page, or two side by side. The pair reads in the
+ * book's direction -- for a leftward book the earlier page is on the right --
+ * and zooms, pans and takes taps as one, so a two-page spread behaves like the
+ * one open page it is meant to look like.
+ */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun ReaderPage(
-    ref: MainViewModel.ImageRef,
+private fun ReaderSpread(
+    refs: List<MainViewModel.ImageRef>,
     model: MainViewModel,
     rtl: Boolean,
     onTurn: (forward: Boolean) -> Unit,
     onToggleChrome: () -> Unit,
 ) {
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        val reqWidth = constraints.maxWidth
+        // Each page of a spread is decoded to its own half of the screen.
+        val reqWidth = if (refs.isEmpty()) constraints.maxWidth else constraints.maxWidth / refs.size
         val reqHeight = constraints.maxHeight
-        var bitmap by remember(ref) { mutableStateOf<Bitmap?>(null) }
-        var failed by remember(ref) { mutableStateOf(false) }
 
-        LaunchedEffect(ref, reqWidth, reqHeight) {
-            val decoded = model.loadImage(ref, reqWidth, reqHeight)
-            if (decoded == null) failed = true else bitmap = decoded
-        }
-
-        var scale by remember(ref) { mutableStateOf(1f) }
-        var offsetX by remember(ref) { mutableStateOf(0f) }
-        var offsetY by remember(ref) { mutableStateOf(0f) }
+        var scale by remember(refs) { mutableStateOf(1f) }
+        var offsetX by remember(refs) { mutableStateOf(0f) }
+        var offsetY by remember(refs) { mutableStateOf(0f) }
         val transform = rememberTransformableState { zoom, pan, _ ->
             scale = (scale * zoom).coerceIn(1f, 6f)
             if (scale > 1f) {
@@ -340,6 +373,61 @@ private fun ReaderPage(
             }
         }
 
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer(scaleX = scale, scaleY = scale, translationX = offsetX, translationY = offsetY)
+                .transformable(state = transform, canPan = { scale > 1f })
+                .pointerInput(refs, rtl) {
+                    detectTapGestures(
+                        onDoubleTap = {
+                            if (scale > 1f) {
+                                scale = 1f; offsetX = 0f; offsetY = 0f
+                            } else {
+                                scale = 3f
+                            }
+                        },
+                        onTap = { at ->
+                            // Zoomed in, a tap only brings the controls back; at
+                            // rest, the sides turn the page the way the book
+                            // reads and the middle toggles.
+                            val third = size.width / 3f
+                            when {
+                                scale > 1f -> onToggleChrome()
+                                at.x < third -> onTurn(rtl)
+                                at.x > size.width - third -> onTurn(!rtl)
+                                else -> onToggleChrome()
+                            }
+                        },
+                    )
+                },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // A leftward book reads right page first, so the pair is laid the
+            // other way round within the spread.
+            val ordered = if (rtl) refs.reversed() else refs
+            for (ref in ordered) {
+                PageImage(ref, model, reqWidth, reqHeight, Modifier.weight(1f).fillMaxHeight())
+            }
+        }
+    }
+}
+
+@Composable
+private fun PageImage(
+    ref: MainViewModel.ImageRef,
+    model: MainViewModel,
+    reqWidth: Int,
+    reqHeight: Int,
+    modifier: Modifier,
+) {
+    var bitmap by remember(ref) { mutableStateOf<Bitmap?>(null) }
+    var failed by remember(ref) { mutableStateOf(false) }
+    LaunchedEffect(ref, reqWidth, reqHeight) {
+        val decoded = model.loadImage(ref, reqWidth, reqHeight)
+        if (decoded == null) failed = true else bitmap = decoded
+    }
+    Box(modifier, contentAlignment = Alignment.Center) {
         when {
             failed -> Text(
                 stringResource(R.string.viewer_image_failed),
@@ -351,38 +439,7 @@ private fun ReaderPage(
                 bitmap = bitmap!!.asImageBitmap(),
                 contentDescription = ref.name,
                 contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer(
-                        scaleX = scale,
-                        scaleY = scale,
-                        translationX = offsetX,
-                        translationY = offsetY,
-                    )
-                    .transformable(state = transform, canPan = { scale > 1f })
-                    .pointerInput(ref, rtl) {
-                        detectTapGestures(
-                            onDoubleTap = {
-                                if (scale > 1f) {
-                                    scale = 1f; offsetX = 0f; offsetY = 0f
-                                } else {
-                                    scale = 3f
-                                }
-                            },
-                            onTap = { at ->
-                                // Zoomed in, a tap only brings the controls
-                                // back; at rest, the sides turn the page the
-                                // way the book reads and the middle toggles.
-                                val third = size.width / 3f
-                                when {
-                                    scale > 1f -> onToggleChrome()
-                                    at.x < third -> onTurn(rtl)
-                                    at.x > size.width - third -> onTurn(!rtl)
-                                    else -> onToggleChrome()
-                                }
-                            },
-                        )
-                    },
+                modifier = Modifier.fillMaxSize(),
             )
         }
     }
