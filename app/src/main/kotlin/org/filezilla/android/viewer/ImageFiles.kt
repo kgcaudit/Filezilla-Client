@@ -66,22 +66,42 @@ object ImageFiles {
 
     /**
      * The largest power of two by which [width]x[height] can be halved and
-     * still cover [reqWidth]x[reqHeight].
+     * still cover [reqWidth]x[reqHeight] -- then shrunk further, whatever the
+     * target, until the result is small enough to hold and to draw.
      *
-     * A target of zero -- a size not known yet -- means decode at full size,
-     * which is what a caller that has not been laid out should get rather than
-     * a picture shrunk to nothing.
+     * The second part is the one that matters for safety. Covering the target
+     * alone leaves an image of an extreme shape at nearly full size: a webtoon
+     * strip a couple of thousand pixels wide but twenty thousand tall is barely
+     * wider than the screen, so the cover rule never shrinks it, and it decodes
+     * to a bitmap far past the hundred-megabyte ceiling a Canvas can draw and
+     * the few thousand pixels a GPU texture can be -- which does not fail
+     * quietly, it takes the app down. So a hard cap on the longest side and on
+     * the total pixels applies on top, regardless of the target or its absence.
      */
     fun sampleSize(width: Int, height: Int, reqWidth: Int, reqHeight: Int): Int {
-        if (reqWidth <= 0 || reqHeight <= 0) return 1
         var sample = 1
-        var halfW = width / 2
-        var halfH = height / 2
-        while (halfW >= reqWidth && halfH >= reqHeight) {
+        if (reqWidth > 0 && reqHeight > 0) {
+            var halfW = width / 2
+            var halfH = height / 2
+            while (halfW >= reqWidth && halfH >= reqHeight) {
+                sample *= 2
+                halfW /= 2
+                halfH /= 2
+            }
+        }
+        while (
+            width / sample > MAX_DIMENSION ||
+            height / sample > MAX_DIMENSION ||
+            (width.toLong() / sample) * (height.toLong() / sample) > MAX_PIXELS
+        ) {
             sample *= 2
-            halfW /= 2
-            halfH /= 2
         }
         return sample
     }
+
+    // The longest a decoded side may be, kept under the smallest GPU texture
+    // limit worth supporting, and the most pixels one may hold, so three of
+    // them prefetched still sit well within a phone's memory.
+    private const val MAX_DIMENSION = 4096
+    private const val MAX_PIXELS = 8_000_000L
 }

@@ -25,8 +25,25 @@ class ImageFilesTest {
     }
 
     @Test
-    fun `no target means full size`() {
-        assertEquals(1, ImageFiles.sampleSize(4000, 3000, 0, 0))
+    fun `a normal page is not shrunk by the safety cap`() {
+        // 1400x2000 is under both the target-cover rule and the hard cap.
+        assertEquals(1, ImageFiles.sampleSize(1400, 2000, 1080, 2200))
+    }
+
+    @Test
+    fun `a very tall webtoon strip is shrunk enough to hold and to draw`() {
+        // The crash: 2070x19337 is barely wider than a phone, so covering the
+        // screen never shrank it, and its full-size bitmap was too big to draw.
+        val sample = ImageFiles.sampleSize(2070, 19337, 1080, 2200)
+        assertTrue("it must be shrunk at all", sample >= 8)
+        assertTrue("no side past the texture limit", 2070 / sample <= 4096 && 19337 / sample <= 4096)
+        assertTrue("within the pixel cap", (2070L / sample) * (19337L / sample) <= 8_000_000L)
+    }
+
+    @Test
+    fun `the cap applies even with no target`() {
+        // 4000x3000 is 12MP, past the cap, so it is shrunk even unmeasured.
+        assertEquals(2, ImageFiles.sampleSize(4000, 3000, 0, 0))
     }
 
     @Test
