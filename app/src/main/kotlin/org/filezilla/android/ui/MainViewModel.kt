@@ -2010,8 +2010,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val partial = graph.viewCache.partialFor(key)
                     try {
                         Archives.open(session.file).use { archive ->
-                            archive.open(entry, password).use { source ->
-                                partial.outputStream().use { sink -> source.copyTo(sink) }
+                            // The native readers unpack straight into the cache
+                            // slot; the rest hand back a stream to copy in. A
+                            // 7z or rar entry is otherwise written to a temp
+                            // file and read all the way back out to write here
+                            // again -- twice the disk for a 100 MB comic.
+                            if (!archive.extractTo(entry, partial, password)) {
+                                archive.open(entry, password).use { source ->
+                                    partial.outputStream().use { sink -> source.copyTo(sink) }
+                                }
                             }
                         }
                     } catch (failure: Throwable) {

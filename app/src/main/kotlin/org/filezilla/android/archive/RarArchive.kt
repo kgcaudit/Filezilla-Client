@@ -20,27 +20,12 @@ class RarArchive private constructor(
 ) : Archive {
 
     override fun open(entry: ArchiveEntry, password: CharArray?): InputStream {
-        if (entry.isDirectory) throw NotAnArchive("${entry.path} is a folder")
-        val temp = File.createTempFile("rar", "")
-        temp.delete()
-        temp.mkdirs()
-        val result = RarNative.extract(
-            file, temp, setOf(entry.path), password, entry.size.coerceAtLeast(0),
-            skipExisting = false,
-            object : RarNative.Sink {
-                override fun entry(name: String, size: Long, isDirectory: Boolean, modifiedMillis: Long, encrypted: Boolean) = Unit
-                override fun progress(doneBytes: Long, totalBytes: Long, name: String) = Unit
-                override fun cancelled() = false
-            },
-        )
-        if (result == RarNative.Result.WRONG_PASSWORD) {
+        val temp = File.createTempFile("rar", "").apply { delete(); mkdirs() }
+        val out = try {
+            extractOne(entry, temp, password)
+        } catch (failure: Throwable) {
             temp.deleteRecursively()
-            throw WrongPassword("the password does not open this entry")
-        }
-        val out = File(temp, entry.path)
-        if (result != RarNative.Result.OK || !out.isFile) {
-            temp.deleteRecursively()
-            throw NotAnArchive("could not read ${entry.path} from ${file.name}")
+            throw failure
         }
         // Deleted when the reader is done with it, so a preview leaves
         // nothing behind in the cache.
@@ -50,6 +35,42 @@ class RarArchive private constructor(
                 temp.deleteRecursively()
             }
         }
+    }
+
+    override fun extractTo(entry: ArchiveEntry, dest: File, password: CharArray?): Boolean {
+        // Unpacked beside the destination and moved onto it -- a rename on the
+        // one volume, so the caller gets its file without the entry being
+        // written here and copied out again.
+        val temp = File(dest.parentFile, dest.name + ".x." + java.util.UUID.randomUUID()).apply { mkdirs() }
+        return try {
+            val out = extractOne(entry, temp, password)
+            dest.delete()
+            out.renameTo(dest)
+        } finally {
+            temp.deleteRecursively()
+        }
+    }
+
+    /** Unpacks the one [entry] under [into], or throws; returns the file written. */
+    private fun extractOne(entry: ArchiveEntry, into: File, password: CharArray?): File {
+        if (entry.isDirectory) throw NotAnArchive("${entry.path} is a folder")
+        val result = RarNative.extract(
+            file, into, setOf(entry.path), password, entry.size.coerceAtLeast(0),
+            skipExisting = false,
+            object : RarNative.Sink {
+                override fun entry(name: String, size: Long, isDirectory: Boolean, modifiedMillis: Long, encrypted: Boolean) = Unit
+                override fun progress(doneBytes: Long, totalBytes: Long, name: String) = Unit
+                override fun cancelled() = false
+            },
+        )
+        if (result == RarNative.Result.WRONG_PASSWORD) {
+            throw WrongPassword("the password does not open this entry")
+        }
+        val out = File(into, entry.path)
+        if (result != RarNative.Result.OK || !out.isFile) {
+            throw NotAnArchive("could not read ${entry.path} from ${file.name}")
+        }
+        return out
     }
 
     override fun close() = Unit

@@ -1,6 +1,7 @@
 package org.filezilla.android.archive
 
 import java.io.Closeable
+import java.io.File
 import java.io.InputStream
 
 /**
@@ -58,6 +59,19 @@ interface Archive : Closeable {
      * what a wrong key produces.
      */
     fun open(entry: ArchiveEntry, password: CharArray? = null): InputStream
+
+    /**
+     * Puts one entry straight into [dest], returning true when it did.
+     *
+     * The native readers can only unpack by writing a file, so [open] on them
+     * writes a temp file and hands back a stream over it -- and a caller that
+     * wants a file then copies that stream out to one, unpacking a large
+     * entry to disk and immediately reading it all back to write it again.
+     * This lets those readers write the one copy the caller wanted in the
+     * first place. The default answers false: an archive that streams from
+     * memory has nothing to gain, and the caller reads [open] itself.
+     */
+    fun extractTo(entry: ArchiveEntry, dest: File, password: CharArray? = null): Boolean = false
 }
 
 /** The password was wrong, or none was given for an entry that needs one. */
