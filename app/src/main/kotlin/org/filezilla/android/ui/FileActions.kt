@@ -1,12 +1,14 @@
 package org.filezilla.android.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
@@ -34,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.filezilla.android.R
 
@@ -184,63 +187,76 @@ fun SelectionBar(
             IconButton(onClick = onClear) {
                 Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.menu_select_none))
             }
+            // One line, and never squeezed to a column of single characters:
+            // the count keeps its own width and the actions take the rest.
             Text(
                 stringResource(R.string.selection_count, count),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
-                modifier = Modifier.weight(1f).padding(start = 4.dp),
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 4.dp),
             )
-            // One tap for the thing a server pane is mostly used for. Copy,
-            // swipe and paste does the same and takes three.
-            onDownload?.let { download ->
-                IconButton(onClick = download) {
+            // The actions scroll sideways within whatever is left, so a narrow
+            // phone with a bar full of them can still reach the last one rather
+            // than having it pushed off the edge or wrapped onto another line.
+            Row(
+                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // One tap for the thing a server pane is mostly used for. Copy,
+                // swipe and paste does the same and takes three.
+                onDownload?.let { download ->
+                    IconButton(onClick = download) {
+                        Icon(
+                            Icons.Filled.Download,
+                            contentDescription = stringResource(R.string.action_download_selected),
+                        )
+                    }
+                }
+                onShare?.let { share ->
+                    IconButton(onClick = share, enabled = canShare) {
+                        Icon(
+                            Icons.Filled.Share,
+                            contentDescription = stringResource(R.string.action_share_selected),
+                        )
+                    }
+                }
+                onCompress?.let { compress ->
+                    IconButton(onClick = compress) {
+                        Icon(
+                            Icons.Filled.FolderZip,
+                            contentDescription = stringResource(R.string.archive_compress),
+                        )
+                    }
+                }
+                onExtract?.let { extract ->
+                    IconButton(onClick = extract) {
+                        Icon(
+                            Icons.Filled.Unarchive,
+                            contentDescription = stringResource(R.string.archive_extract_all),
+                        )
+                    }
+                }
+                IconButton(onClick = onCut) {
+                    Icon(Icons.Filled.ContentCut, contentDescription = stringResource(R.string.action_cut))
+                }
+                IconButton(onClick = onCopy) {
+                    Icon(Icons.Filled.ContentCopy, contentDescription = stringResource(R.string.action_copy))
+                }
+                IconButton(onClick = onRename, enabled = canRename) {
                     Icon(
-                        Icons.Filled.Download,
-                        contentDescription = stringResource(R.string.action_download_selected),
+                        Icons.Filled.Edit,
+                        contentDescription = stringResource(R.string.action_rename_selected),
                     )
                 }
-            }
-            onShare?.let { share ->
-                IconButton(onClick = share, enabled = canShare) {
+                IconButton(onClick = onDelete) {
                     Icon(
-                        Icons.Filled.Share,
-                        contentDescription = stringResource(R.string.action_share_selected),
+                        Icons.Filled.Delete,
+                        contentDescription = stringResource(R.string.action_delete_selected),
                     )
                 }
-            }
-            onCompress?.let { compress ->
-                IconButton(onClick = compress) {
-                    Icon(
-                        Icons.Filled.FolderZip,
-                        contentDescription = stringResource(R.string.archive_compress),
-                    )
-                }
-            }
-            onExtract?.let { extract ->
-                IconButton(onClick = extract) {
-                    Icon(
-                        Icons.Filled.Unarchive,
-                        contentDescription = stringResource(R.string.archive_extract_all),
-                    )
-                }
-            }
-            IconButton(onClick = onCut) {
-                Icon(Icons.Filled.ContentCut, contentDescription = stringResource(R.string.action_cut))
-            }
-            IconButton(onClick = onCopy) {
-                Icon(Icons.Filled.ContentCopy, contentDescription = stringResource(R.string.action_copy))
-            }
-            IconButton(onClick = onRename, enabled = canRename) {
-                Icon(
-                    Icons.Filled.Edit,
-                    contentDescription = stringResource(R.string.action_rename_selected),
-                )
-            }
-            IconButton(onClick = onDelete) {
-                Icon(
-                    Icons.Filled.Delete,
-                    contentDescription = stringResource(R.string.action_delete_selected),
-                )
             }
         }
     }
@@ -386,6 +402,9 @@ fun ArchiveSelectionBar(
                 stringResource(R.string.selection_count, count),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f).padding(start = 4.dp),
             )
             IconButton(onClick = onExtract) {
