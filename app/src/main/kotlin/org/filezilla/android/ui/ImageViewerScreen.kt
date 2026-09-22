@@ -60,19 +60,20 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
     }
 
     Surface(Modifier.fillMaxSize(), color = Color.Black) {
-        Box(Modifier.fillMaxSize()) {
+        // The picture keeps clear of the system status bar rather than running
+        // up under it -- the bar stays the phone's, over the black surface, and
+        // the viewer begins beneath it.
+        Box(Modifier.fillMaxSize().statusBarsPadding()) {
             HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
                 ZoomableImage(viewer.images[page], model)
             }
 
             // A thin bar over the picture: the way back, the name, the place
-            // in the set. Below the status bar so it never lands on the clock,
-            // and white on a dark scrim so it reads on any image under it.
+            // in the set. White on a faint scrim so it reads on any image.
             Row(
                 Modifier
                     .fillMaxWidth()
                     .background(Color.Black.copy(alpha = 0.32f))
-                    .statusBarsPadding()
                     .padding(horizontal = 4.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
