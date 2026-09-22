@@ -14,12 +14,16 @@ package org.filezilla.android.viewer
 object Webtoon {
 
     /**
-     * A tall image is one whose height is well past its width. A normal comic
-     * page is about half as tall again as it is wide; a webtoon strip is
-     * several times taller, so the line is drawn high enough that a merely
-     * tall page is not mistaken for one.
+     * A tall image is one whose height is at least twice its width. A normal
+     * comic or manga page is about half as tall again as it is wide (three to
+     * two, so around 1.5); a webtoon page -- whether one long strip or a run of
+     * screen-shaped panels stacked to be scrolled -- is twice as tall or more.
+     * The line sits at two: high enough that an ordinary page is never mistaken
+     * for a strip, low enough that a page shaped like the phone's own screen,
+     * which reads as a slideshow rather than a scroll when paged, is caught and
+     * opened to scroll instead.
      */
-    private const val RATIO = 2.5
+    private const val RATIO = 2.0
 
     /** The most a band decodes to on its long side, kept modest so a scroll is cheap. */
     const val MAX_BAND = 2048

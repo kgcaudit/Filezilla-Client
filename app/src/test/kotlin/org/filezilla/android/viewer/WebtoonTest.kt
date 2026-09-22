@@ -16,11 +16,14 @@ class WebtoonTest {
     fun `a tall strip is a webtoon, a normal page is not`() {
         assertTrue(Webtoon.isWebtoon(1080, 8000))
         assertTrue(Webtoon.isWebtoon(2070, 19337))
+        // A page shaped like the phone's own screen (here 935x1932, about 2.07
+        // tall) reads as a slideshow when paged, so it counts as a strip.
+        assertTrue(Webtoon.isWebtoon(935, 1932))
         // A normal comic page, about 3:2 tall, is not a strip.
         assertFalse(Webtoon.isWebtoon(1400, 2000))
         // Exactly at the line counts; just under does not.
-        assertTrue(Webtoon.isWebtoon(1000, 2500))
-        assertFalse(Webtoon.isWebtoon(1000, 2499))
+        assertTrue(Webtoon.isWebtoon(1000, 2000))
+        assertFalse(Webtoon.isWebtoon(1000, 1999))
         assertFalse(Webtoon.isWebtoon(0, 5000))
     }
 
