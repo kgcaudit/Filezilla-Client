@@ -50,10 +50,10 @@ object SevenZipNative {
 
     private external fun nativeVersion(): Int
 
-    private external fun nativeList(path: String, sink: Sink): Int
+    private external fun nativeList(volumes: Array<String>, sink: Sink): Int
 
     private external fun nativeExtract(
-        path: String,
+        volumes: Array<String>,
         destDir: String,
         picks: Array<String>?,
         password: String?,
@@ -62,10 +62,35 @@ object SevenZipNative {
         sink: Sink,
     ): Int
 
+    /**
+     * The volume set a 7z is spread across, first part first.
+     *
+     * A large 7z can be split into `name.7z.001`, `name.7z.002`, ...; each
+     * part is a raw slice of the one archive, so they are read as a single
+     * run of bytes. Opened only from the first part; a lone `.7z` is its own
+     * one-volume set.
+     */
+    fun volumesOf(file: File): Array<String> {
+        val match = Regex("""(.+)\.(\d{3})""").matchEntire(file.name)
+        if (match == null || match.groupValues[2].toInt() != 1) return arrayOf(file.path)
+        val stem = match.groupValues[1]
+        val width = match.groupValues[2].length
+        val parent = file.parentFile ?: return arrayOf(file.path)
+        val parts = mutableListOf<File>()
+        var n = 1
+        while (true) {
+            val part = File(parent, "$stem.${n.toString().padStart(width, '0')}")
+            if (!part.isFile) break
+            parts += part
+            n++
+        }
+        return if (parts.isEmpty()) arrayOf(file.path) else parts.map { it.path }.toTypedArray()
+    }
+
     /** The entries in [file], or throws [NotAnArchive] with the reader's own code. */
     fun list(file: File): List<ArchiveEntry> {
         val entries = mutableListOf<ArchiveEntry>()
-        val code = nativeList(file.path, object : Sink {
+        val code = nativeList(volumesOf(file), object : Sink {
             override fun entry(
                 name: String,
                 size: Long,
@@ -117,7 +142,7 @@ object SevenZipNative {
         sink: Sink,
     ): Result {
         val code = nativeExtract(
-            file.path,
+            volumesOf(file),
             into.path,
             picks?.toTypedArray(),
             password?.let { String(it) },

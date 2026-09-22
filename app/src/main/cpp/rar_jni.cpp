@@ -89,6 +89,16 @@ struct ExtractState {
     long sinceReport;
 };
 
+// Whether the next volume unrar wants exists. p1 is its path -- wide for the
+// W message, char for the other. A multi-volume rar names its parts in order
+// (movie.part2.rar, movie.r00, ...); unrar derives the next and asks here.
+bool nextVolumeExists(UINT msg, LPARAM p1) {
+    std::string path = (msg == UCM_CHANGEVOLUMEW)
+        ? wideToUtf8((wchar_t*)p1) : std::string((const char*)p1);
+    struct stat sb;
+    return stat(path.c_str(), &sb) == 0;
+}
+
 int CALLBACK extractCallback(UINT msg, LPARAM userData, LPARAM p1, LPARAM p2) {
     ExtractState* st = (ExtractState*)userData;
     switch (msg) {
@@ -120,8 +130,24 @@ int CALLBACK extractCallback(UINT msg, LPARAM userData, LPARAM p1, LPARAM p2) {
             return -1;
         case UCM_CHANGEVOLUME:
         case UCM_CHANGEVOLUMEW:
-            // A missing next volume: do not prompt, just stop.
-            if (p2 == RAR_VOL_ASK) return -1;
+            // Continue to the next volume when it is there, so a multi-volume
+            // archive unpacks across its parts; stop when it is genuinely
+            // missing rather than prompting for it.
+            if (p2 == RAR_VOL_ASK) return nextVolumeExists(msg, p1) ? 0 : -1;
+            return 0;
+        default:
+            return 0;
+    }
+}
+
+// The listing needs volume changes handled too, or a multi-volume archive
+// shows only the files that start in its first part. It never needs the
+// password -- names are readable unless the header itself is encrypted.
+int CALLBACK listCallback(UINT msg, LPARAM, LPARAM p1, LPARAM p2) {
+    switch (msg) {
+        case UCM_CHANGEVOLUME:
+        case UCM_CHANGEVOLUMEW:
+            if (p2 == RAR_VOL_ASK) return nextVolumeExists(msg, p1) ? 0 : -1;
             return 0;
         default:
             return 0;
@@ -163,6 +189,7 @@ Java_org_filezilla_android_archive_RarNative_nativeList(
     memset(&open, 0, sizeof(open));
     open.ArcName = (char*)path.c_str();
     open.OpenMode = RAR_OM_LIST;
+    open.Callback = listCallback;
 
     HANDLE h = RAROpenArchiveEx(&open);
     if (open.OpenResult != ERAR_SUCCESS) {

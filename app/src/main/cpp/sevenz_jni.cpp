@@ -249,14 +249,13 @@ SRes counting_Seek(ISeekInStreamPtr pp, Int64* pos, ESzSeek origin) {
     return s->inner->Seek(s->inner, pos, origin);
 }
 
-// Opens [path] as a 7z and parses its header, reading through [realStream]
-// (the file's own, or the counting stream standing in front of it). The
-// caller sets that stream up and, when it wraps the file, points it at
-// ar->vt first. On success the caller must SzArEx_Free the db and free
-// look->buf and File_Close the stream. Returns SZ_OK or an SRes.
-SRes openArchive(CFileInStream* ar, CLookToRead2* look, CSzArEx* db, ISeekInStream* realStream) {
+// Parses the 7z header, reading through [realStream] (the volumes, or the
+// counting stream in front of them). The caller owns the volume files and
+// closes them. On success the caller must SzArEx_Free the db and free
+// look->buf. Returns SZ_OK or an SRes.
+SRes openArchive(CLookToRead2* look, CSzArEx* db, ISeekInStream* realStream) {
     look->buf = (Byte*)malloc(kInputBufSize);
-    if (!look->buf) { File_Close(&ar->file); return SZ_ERROR_MEM; }
+    if (!look->buf) return SZ_ERROR_MEM;
     LookToRead2_CreateVTable(look, False);
     look->bufSize = kInputBufSize;
     look->realStream = realStream;
@@ -267,17 +266,98 @@ SRes openArchive(CFileInStream* ar, CLookToRead2* look, CSzArEx* db, ISeekInStre
     if (res != SZ_OK) {
         SzArEx_Free(db, &g_alloc);
         free(look->buf);
-        File_Close(&ar->file);
     }
     return res;
 }
 
-// Opens the file behind [ar] and hands back its ISeekInStream, or null.
-ISeekInStream* openFile(const std::string& path, CFileInStream* ar) {
-    if (InFile_Open(&ar->file, path.c_str()) != 0) return nullptr;
-    FileInStream_CreateVTable(ar);
-    ar->wres = 0;
-    return &ar->vt;
+// A set of split volumes read as one stream. A .7z can be split into
+// name.7z.001, .002, ...: each part is a raw slice, so the whole archive is
+// their concatenation. The single-file case is just one volume.
+struct MultiVolume {
+    ISeekInStream vt;      // first, so the interface pointer is this struct
+    std::vector<CSzFile> files;
+    std::vector<UInt64> sizes;
+    UInt64 total;
+    UInt64 pos;
+};
+
+SRes multi_Read(ISeekInStreamPtr pp, void* buf, size_t* size) {
+    MultiVolume* m = (MultiVolume*)pp;
+    UInt64 avail = m->total - m->pos;
+    size_t want = *size;
+    if ((UInt64)want > avail) want = (size_t)avail;
+    if (want == 0) { *size = 0; return SZ_OK; }
+    // The volume the current position falls in.
+    UInt64 base = 0;
+    size_t vi = 0;
+    for (; vi + 1 < m->files.size(); ++vi) {
+        if (m->pos < base + m->sizes[vi]) break;
+        base += m->sizes[vi];
+    }
+    UInt64 localOff = m->pos - base;
+    UInt64 volRemain = m->sizes[vi] - localOff;
+    size_t n = want;
+    if ((UInt64)n > volRemain) n = (size_t)volRemain;  // one read stays in one volume
+    Int64 sp = (Int64)localOff;
+    if (File_Seek(&m->files[vi], &sp, SZ_SEEK_SET) != 0) return SZ_ERROR_READ;
+    size_t got = n;
+    if (File_Read(&m->files[vi], buf, &got) != 0) return SZ_ERROR_READ;
+    m->pos += got;
+    *size = got;
+    return SZ_OK;
+}
+
+SRes multi_Seek(ISeekInStreamPtr pp, Int64* pos, ESzSeek origin) {
+    MultiVolume* m = (MultiVolume*)pp;
+    Int64 p = *pos;
+    if (origin == SZ_SEEK_CUR) p += (Int64)m->pos;
+    else if (origin == SZ_SEEK_END) p += (Int64)m->total;
+    if (p < 0 || (UInt64)p > m->total) return SZ_ERROR_PARAM;
+    m->pos = (UInt64)p;
+    *pos = p;
+    return SZ_OK;
+}
+
+// Opens every path as a volume in order. Returns the joined stream, or null
+// (closing any it opened) if one cannot be opened. Sets *total to the sum.
+ISeekInStream* openVolumes(const std::vector<std::string>& paths, MultiVolume* m, UInt64* total) {
+    m->vt.Read = multi_Read;
+    m->vt.Seek = multi_Seek;
+    m->total = 0;
+    m->pos = 0;
+    for (const auto& path : paths) {
+        CSzFile f;
+        File_Construct(&f);
+        if (InFile_Open(&f, path.c_str()) != 0) {
+            for (auto& of : m->files) File_Close(&of);
+            m->files.clear();
+            return nullptr;
+        }
+        UInt64 len = 0;
+        File_GetLength(&f, &len);
+        m->files.push_back(f);
+        m->sizes.push_back(len);
+        m->total += len;
+    }
+    if (total) *total = m->total;
+    return &m->vt;
+}
+
+void closeVolumes(MultiVolume* m) {
+    for (auto& f : m->files) File_Close(&f);
+    m->files.clear();
+}
+
+std::vector<std::string> pathsFrom(JNIEnv* env, jobjectArray jvolumes) {
+    std::vector<std::string> out;
+    if (!jvolumes) return out;
+    jsize n = env->GetArrayLength(jvolumes);
+    for (jsize i = 0; i < n; ++i) {
+        jstring s = (jstring)env->GetObjectArrayElement(jvolumes, i);
+        out.push_back(toUtf8(env, s));
+        env->DeleteLocalRef(s);
+    }
+    return out;
 }
 
 std::string nameOf(const CSzArEx& db, UInt32 i, std::vector<UInt16>& scratch) {
@@ -305,16 +385,17 @@ Java_org_filezilla_android_archive_SevenZipNative_nativeVersion(JNIEnv*, jclass)
 // reader cannot parse (an encrypted header among them).
 JNIEXPORT jint JNICALL
 Java_org_filezilla_android_archive_SevenZipNative_nativeList(
-        JNIEnv* env, jclass, jstring jpath, jobject sink) {
-    std::string path = toUtf8(env, jpath);
+        JNIEnv* env, jclass, jobjectArray jvolumes, jobject sink) {
+    std::vector<std::string> volumes = pathsFrom(env, jvolumes);
+    if (volumes.empty()) return -(jint)SZ_ERROR_INPUT_EOF;
 
-    CFileInStream ar;
+    MultiVolume vols;
     CLookToRead2 look;
     CSzArEx db;
-    ISeekInStream* stream = openFile(path, &ar);
+    ISeekInStream* stream = openVolumes(volumes, &vols, nullptr);
     if (stream == nullptr) return -(jint)SZ_ERROR_INPUT_EOF;
-    SRes res = openArchive(&ar, &look, &db, stream);
-    if (res != SZ_OK) return -(jint)res;
+    SRes res = openArchive(&look, &db, stream);
+    if (res != SZ_OK) { closeVolumes(&vols); return -(jint)res; }
 
     jclass sinkClass = env->GetObjectClass(sink);
     jmethodID entry = env->GetMethodID(sinkClass, "entry", "(Ljava/lang/String;JZJZZ)V");
@@ -322,7 +403,7 @@ Java_org_filezilla_android_archive_SevenZipNative_nativeList(
         env->ExceptionClear();
         SzArEx_Free(&db, &g_alloc);
         free(look.buf);
-        File_Close(&ar.file);
+        closeVolumes(&vols);
         return -100;
     }
 
@@ -350,7 +431,7 @@ Java_org_filezilla_android_archive_SevenZipNative_nativeList(
 
     SzArEx_Free(&db, &g_alloc);
     free(look.buf);
-    File_Close(&ar.file);
+    closeVolumes(&vols);
     return 0;
 }
 
@@ -359,9 +440,10 @@ Java_org_filezilla_android_archive_SevenZipNative_nativeList(
 // Returns 0 ok, 1 cancelled, 2 wrong/missing password, negative an SRes error.
 JNIEXPORT jint JNICALL
 Java_org_filezilla_android_archive_SevenZipNative_nativeExtract(
-        JNIEnv* env, jclass, jstring jpath, jstring jdest,
+        JNIEnv* env, jclass, jobjectArray jvolumes, jstring jdest,
         jobjectArray jpicks, jstring jpassword, jlong jtotalBytes, jboolean jskipExisting, jobject sink) {
-    std::string path = toUtf8(env, jpath);
+    std::vector<std::string> volumes = pathsFrom(env, jvolumes);
+    if (volumes.empty()) return -(jint)SZ_ERROR_INPUT_EOF;
     std::string dest = toUtf8(env, jdest);
 
     std::vector<std::string> picks;
@@ -379,20 +461,12 @@ Java_org_filezilla_android_archive_SevenZipNative_nativeExtract(
     jmethodID isCancelled = env->GetMethodID(sinkClass, "cancelled", "()Z");
     if (onProgress == nullptr || isCancelled == nullptr) { env->ExceptionClear(); return -100; }
 
-    // The compressed size, so the progress the decode's reads report can be
-    // scaled to the uncompressed total the bar shows.
-    UInt64 packedTotal = 0;
-    {
-        struct stat sb;
-        if (stat(path.c_str(), &sb) == 0) packedTotal = (UInt64)sb.st_size;
-    }
-
-    CFileInStream ar;
+    MultiVolume vols;
     CLookToRead2 look;
     CSzArEx db;
 
-    // The counting stream sits between the buffered reader and the file, so
-    // the decode's reads move the bar and can be stopped. It is off while
+    // The counting stream sits between the buffered reader and the volumes,
+    // so the decode's reads move the bar and can be stopped. It is off while
     // the header is parsed -- those reads are not the work being watched.
     CountingStream cs;
     memset(&cs, 0, sizeof(cs));
@@ -402,18 +476,20 @@ Java_org_filezilla_android_archive_SevenZipNative_nativeExtract(
     cs.sink = sink;
     cs.onProgress = onProgress;
     cs.isCancelled = isCancelled;
-    cs.totalPacked = packedTotal;
     cs.totalUnpacked = jtotalBytes;
     cs.active = false;
     cs.cancelled = false;
 
-    // Open the file first so the counting stream can point at it, then open
-    // the archive through the counting stream. inner must be set before the
-    // header parse, which already reads through the counting stream.
-    cs.inner = openFile(path, &ar);
+    // Open the volumes first so the counting stream can point at them, then
+    // open the archive through the counting stream. inner must be set before
+    // the header parse, which already reads through the counting stream. The
+    // compressed total is the sum of the volumes, for scaling the bar.
+    UInt64 packedTotal = 0;
+    cs.inner = openVolumes(volumes, &vols, &packedTotal);
     if (cs.inner == nullptr) return -(jint)SZ_ERROR_INPUT_EOF;
-    SRes res = openArchive(&ar, &look, &db, &cs.vt);
-    if (res != SZ_OK) return -(jint)res;
+    cs.totalPacked = packedTotal;
+    SRes res = openArchive(&look, &db, &cs.vt);
+    if (res != SZ_OK) { closeVolumes(&vols); return -(jint)res; }
 
     mkdir(dest.c_str(), 0755);
 
@@ -483,7 +559,7 @@ Java_org_filezilla_android_archive_SevenZipNative_nativeExtract(
     ISzAlloc_Free(&g_alloc, outBuffer);
     SzArEx_Free(&db, &g_alloc);
     free(look.buf);
-    File_Close(&ar.file);
+    closeVolumes(&vols);
     return outcome;
 }
 

@@ -48,10 +48,31 @@ object RarNative {
         sink: Sink,
     ): Int
 
+    /**
+     * The first part of a multi-volume rar, which is where reading starts.
+     *
+     * `movie.part2.rar` opens the whole set from `movie.part1.rar`, and an
+     * old-style `movie.r00` from `movie.rar`. A single `.rar` is its own
+     * first volume. The native reader follows the chain from there.
+     */
+    fun firstVolume(file: File): File {
+        val parent = file.parentFile ?: return file
+        Regex("""(?i)^(.*\.part)(\d+)(\.rar)$""").matchEntire(file.name)?.let { m ->
+            val one = "1".padStart(m.groupValues[2].length, '0')
+            val first = File(parent, m.groupValues[1] + one + m.groupValues[3])
+            return if (first.isFile) first else file
+        }
+        Regex("""(?i)^(.*)\.r\d\d$""").matchEntire(file.name)?.let { m ->
+            val first = File(parent, m.groupValues[1] + ".rar")
+            return if (first.isFile) first else file
+        }
+        return file
+    }
+
     /** The entries in [file], or throws [NotAnArchive] with the reader's own code. */
     fun list(file: File): List<ArchiveEntry> {
         val entries = mutableListOf<ArchiveEntry>()
-        val code = nativeList(file.path, object : Sink {
+        val code = nativeList(firstVolume(file).path, object : Sink {
             override fun entry(name: String, size: Long, isDirectory: Boolean, modifiedMillis: Long, encrypted: Boolean) {
                 val path = if (isDirectory) name.trimEnd('/') + "/" else name
                 entries += ArchiveEntry(
@@ -89,7 +110,7 @@ object RarNative {
         sink: Sink,
     ): Result {
         val code = nativeExtract(
-            file.path,
+            firstVolume(file).path,
             into.path,
             picks?.toTypedArray(),
             password?.let { String(it) },

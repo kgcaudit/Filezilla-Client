@@ -48,6 +48,10 @@ object Archives {
      * is [kindOf], which has the file in front of it.
      */
     fun looksLikeArchive(name: String): Boolean {
+        // A split 7z's first volume is name.7z.001; its extension is the
+        // number, so it is recognised by the whole tail. Only the first part
+        // opens the set -- the others carry no 7z header of their own.
+        if (name.lowercase().endsWith(".7z.001")) return true
         val extension = name.substringAfterLast('.', "").lowercase()
         return extension.isNotEmpty() && Kind.entries.any { extension in it.extensions }
     }
@@ -66,11 +70,13 @@ object Archives {
     /**
      * The part of an archive's name to unpack it beside.
      *
-     * `holiday.zip` becomes `holiday`, and a split ALZ's `holiday.a00`
-     * becomes `holiday` too rather than `holiday.a00`'s own folder.
+     * `holiday.zip` becomes `holiday`, a split ALZ's `holiday.a00` becomes
+     * `holiday` too rather than its own folder, and a split 7z's
+     * `holiday.7z.001` drops the number and the `.7z` to become `holiday`.
      */
     fun folderNameFor(name: String): String {
-        val stem = name.substringBeforeLast('.', name)
+        val withoutVolume = name.replace(Regex("""\.\d{3}$"""), "")
+        val stem = withoutVolume.substringBeforeLast('.', withoutVolume)
         return stem.ifBlank { name }
     }
 }
