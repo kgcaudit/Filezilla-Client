@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -164,8 +165,19 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
                 modifier = Modifier.fillMaxSize().padding(top = reservedTopDp),
             ) { spread ->
                 if (spread < spreads.size) {
+                    val pages = spreads[spread]
+                    // A lone page sits on its book side rather than centred: the
+                    // cover on the right for a leftward-read book (the left for
+                    // manga), and a lone last page on the opposite side, so a
+                    // spread of one still reads as half of an open book.
+                    val align = when {
+                        !twoPage || pages.size == 2 -> SpreadAlign.FILL
+                        spread == 0 -> if (rtl) SpreadAlign.LEFT else SpreadAlign.RIGHT
+                        else -> if (rtl) SpreadAlign.RIGHT else SpreadAlign.LEFT
+                    }
                     ReaderSpread(
-                        refs = spreads[spread].map { viewer.images[it] },
+                        refs = pages.map { viewer.images[it] },
+                        align = align,
                         model = model,
                         rtl = rtl,
                         onTurn = ::turn,
@@ -345,18 +357,27 @@ private fun ReaderEndCard(
  * and zooms, pans and takes taps as one, so a two-page spread behaves like the
  * one open page it is meant to look like.
  */
+/** How a spread's page(s) sit across the screen. */
+private enum class SpreadAlign { FILL, LEFT, RIGHT }
+
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun ReaderSpread(
     refs: List<MainViewModel.ImageRef>,
+    align: SpreadAlign,
     model: MainViewModel,
     rtl: Boolean,
     onTurn: (forward: Boolean) -> Unit,
     onToggleChrome: () -> Unit,
 ) {
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        // Each page of a spread is decoded to its own half of the screen.
-        val reqWidth = if (refs.isEmpty()) constraints.maxWidth else constraints.maxWidth / refs.size
+        // A page decodes to the width it will fill: a full page across, or a
+        // half when it shares the screen or sits on one side of it.
+        val reqWidth = when {
+            align != SpreadAlign.FILL -> constraints.maxWidth / 2
+            refs.isEmpty() -> constraints.maxWidth
+            else -> constraints.maxWidth / refs.size
+        }
         val reqHeight = constraints.maxHeight
 
         var scale by remember(refs) { mutableStateOf(1f) }
@@ -403,11 +424,23 @@ private fun ReaderSpread(
                 },
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // A leftward book reads right page first, so the pair is laid the
-            // other way round within the spread.
-            val ordered = if (rtl) refs.reversed() else refs
-            for (ref in ordered) {
-                PageImage(ref, model, reqWidth, reqHeight, Modifier.weight(1f).fillMaxHeight())
+            val cell = Modifier.weight(1f).fillMaxHeight()
+            when (align) {
+                // A leftward book reads its right page first, so a pair is laid
+                // the other way round within the spread.
+                SpreadAlign.FILL -> {
+                    val ordered = if (rtl) refs.reversed() else refs
+                    for (ref in ordered) PageImage(ref, model, reqWidth, reqHeight, cell)
+                }
+                // A lone page on one half, the other half left black.
+                SpreadAlign.LEFT -> {
+                    PageImage(refs.first(), model, reqWidth, reqHeight, cell)
+                    Spacer(Modifier.weight(1f))
+                }
+                SpreadAlign.RIGHT -> {
+                    Spacer(Modifier.weight(1f))
+                    PageImage(refs.first(), model, reqWidth, reqHeight, cell)
+                }
             }
         }
     }
