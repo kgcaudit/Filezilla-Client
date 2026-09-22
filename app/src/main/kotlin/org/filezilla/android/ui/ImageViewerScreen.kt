@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -24,11 +25,13 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -69,7 +72,10 @@ import org.filezilla.android.R
  */
 @Composable
 fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
-    val pager = rememberPagerState(initialPage = viewer.index, pageCount = { viewer.images.size })
+    // A comic gets one extra page past its last: the end card, which names the
+    // next volume and goes on to it, or says the series is done.
+    val pageCount = viewer.images.size + if (viewer.book) 1 else 0
+    val pager = rememberPagerState(initialPage = viewer.index, pageCount = { pageCount })
     val scope = rememberCoroutineScope()
     val rtl = model.readerRtl
     var chrome by rememberSaveable(viewer.comicKey) { mutableStateOf(false) }
@@ -120,7 +126,7 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
     }
 
     fun turn(forward: Boolean) {
-        val to = (pager.currentPage + if (forward) 1 else -1).coerceIn(0, viewer.images.size - 1)
+        val to = (pager.currentPage + if (forward) 1 else -1).coerceIn(0, pageCount - 1)
         scope.launch { pager.animateScrollToPage(to) }
     }
 
@@ -137,13 +143,21 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
                 beyondViewportPageCount = 1,
                 modifier = Modifier.fillMaxSize().padding(top = reservedTopDp),
             ) { page ->
-                ReaderPage(
-                    ref = viewer.images[page],
-                    model = model,
-                    rtl = rtl,
-                    onTurn = ::turn,
-                    onToggleChrome = { chrome = !chrome },
-                )
+                if (page < viewer.images.size) {
+                    ReaderPage(
+                        ref = viewer.images[page],
+                        model = model,
+                        rtl = rtl,
+                        onTurn = ::turn,
+                        onToggleChrome = { chrome = !chrome },
+                    )
+                } else {
+                    ReaderEndCard(
+                        nextComic = viewer.nextComic,
+                        onOpenNext = { viewer.nextComic?.let(model::openComicFile) },
+                        onClose = model::closeImageViewer,
+                    )
+                }
             }
 
             AnimatedVisibility(visible = chrome, modifier = Modifier.align(Alignment.TopCenter)) {
@@ -155,10 +169,14 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
                 )
             }
 
+            val onImage = pager.currentPage < viewer.images.size
             if (viewer.images.size > 1) {
-                AnimatedVisibility(visible = chrome, modifier = Modifier.align(Alignment.BottomCenter)) {
+                AnimatedVisibility(
+                    visible = chrome && onImage,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                ) {
                     ReaderBottomBar(
-                        page = pager.currentPage,
+                        page = pager.currentPage.coerceAtMost(viewer.images.size - 1),
                         count = viewer.images.size,
                         rtl = rtl,
                         onSeek = { scope.launch { pager.scrollToPage(it) } },
@@ -242,6 +260,49 @@ private fun ReaderBottomBar(page: Int, count: Int, rtl: Boolean, onSeek: (Int) -
                 .fillMaxWidth()
                 .graphicsLayer(scaleX = if (rtl) -1f else 1f),
         )
+    }
+}
+
+/**
+ * The page past the last: on to the next volume, or the end of the series.
+ */
+@Composable
+private fun ReaderEndCard(
+    nextComic: java.io.File?,
+    onOpenNext: () -> Unit,
+    onClose: () -> Unit,
+) {
+    Column(
+        Modifier.fillMaxSize().padding(32.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        if (nextComic != null) {
+            Text(
+                stringResource(R.string.reader_next_volume),
+                style = MaterialTheme.typography.labelLarge,
+                color = Color.White.copy(alpha = 0.7f),
+            )
+            Text(
+                nextComic.nameWithoutExtension,
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.White,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Button(onClick = onOpenNext) {
+                Text(stringResource(R.string.reader_continue))
+            }
+        } else {
+            Text(
+                stringResource(R.string.reader_series_end),
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.White,
+            )
+        }
+        TextButton(onClick = onClose) {
+            Text(stringResource(R.string.action_close), color = Color.White)
+        }
     }
 }
 

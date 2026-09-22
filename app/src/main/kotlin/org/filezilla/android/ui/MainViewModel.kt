@@ -1693,8 +1693,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * The images the viewer can swipe through, which one is on screen, and --
      * for a comic, whose pages are worth remembering -- the key its place is
      * saved under. Null [comicKey] is a one-off view that keeps no place.
+     *
+     * [book] marks a comic archive rather than a loose folder of pictures, so
+     * the reader can offer an end and a next; [nextComic] is the following
+     * volume in the same series, when there is one to go on to.
      */
-    data class ImageViewer(val images: List<ImageRef>, val index: Int, val comicKey: String?)
+    data class ImageViewer(
+        val images: List<ImageRef>,
+        val index: Int,
+        val comicKey: String?,
+        val book: Boolean = false,
+        val nextComic: java.io.File? = null,
+    )
 
     var imageViewer by mutableStateOf<ImageViewer?>(null)
         private set
@@ -1729,10 +1739,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * Opens the viewer on [images], at [index] unless a place was kept for
      * [comicKey] -- then it reopens quietly where it was last left.
      */
-    fun openImageViewer(images: List<ImageRef>, index: Int, comicKey: String?) {
+    fun openImageViewer(
+        images: List<ImageRef>,
+        index: Int,
+        comicKey: String?,
+        book: Boolean = false,
+        nextComic: java.io.File? = null,
+    ) {
         if (images.isEmpty()) return
         val start = comicKey?.let { graph.preferences.comicPage(it) } ?: index
-        imageViewer = ImageViewer(images, start.coerceIn(0, images.size - 1), comicKey)
+        imageViewer = ImageViewer(images, start.coerceIn(0, images.size - 1), comicKey, book, nextComic)
     }
 
     /**
@@ -1747,6 +1763,55 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             index = images.indexOfFirst { it.name == file.name },
             comicKey = "dir\u0000$folder",
         )
+    }
+
+    /**
+     * The next comic in the same series as [file], sitting beside it, or null.
+     *
+     * Only a real file on the phone has a "beside": a comic unpacked into the
+     * viewing cache has none, so it never runs on to a next.
+     */
+    private fun nextComicAfter(file: java.io.File): java.io.File? {
+        if (graph.viewCache.holds(file)) return null
+        val folder = file.parentFile ?: return null
+        val names = folder.list()?.toList() ?: return null
+        return org.filezilla.android.viewer.ComicSeries.nextVolume(file.name, names)
+            ?.let { java.io.File(folder, it) }
+    }
+
+    /**
+     * Opens a comic archive straight into the reader, at its first page or
+     * wherever it was last left. Used to run on to the next volume when one
+     * ends, so it lands in the reader rather than in a list of its pages.
+     */
+    fun openComicFile(file: java.io.File) {
+        archiveOpening = file.name
+        viewModelScope.launch {
+            val opened = withContext(Dispatchers.IO) { runCatching { Archives.open(file).use { it.entries } } }
+            archiveOpening = null
+            val entries = opened.getOrNull()
+            if (entries == null) {
+                archiveOutcome = ArchiveOutcome(R.string.archive_not_readable)
+                return@launch
+            }
+            val session = ArchiveSession(file, file.name, file.parent ?: "", entries)
+            val pages = entries.asSequence()
+                .filter { !it.isDirectory && ImageFiles.looksImage(it.name) }
+                .sortedWith(compareBy(org.filezilla.android.viewer.ComicSeries.NATURAL) { it.path })
+                .map { ImageRef.InArchive(session, it) }
+                .toList()
+            if (pages.isEmpty()) {
+                archiveOutcome = ArchiveOutcome(R.string.archive_not_readable)
+                return@launch
+            }
+            openImageViewer(
+                images = pages,
+                index = 0,
+                comicKey = "arc\u0000${file.path}\u0000",
+                book = true,
+                nextComic = nextComicAfter(file),
+            )
+        }
     }
 
     fun closeImageViewer() {
@@ -2044,8 +2109,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     ArchiveNav.entryFor(session, r.name)?.let { ImageRef.InArchive(session, it) }
                 }
                 // The book is the archive and the folder within it; its place is
-                // kept under that, so it reopens where it was left.
-                openImageViewer(refs, images.indexOfFirst { it.name == name }, "arc\u0000${session.file.path}\u0000${session.at}")
+                // kept under that, so it reopens where it was left, and it runs
+                // on to the next volume beside it when it ends.
+                openImageViewer(
+                    images = refs,
+                    index = images.indexOfFirst { it.name == name },
+                    comicKey = "arc\u0000${session.file.path}\u0000${session.at}",
+                    book = true,
+                    nextComic = nextComicAfter(session.file),
+                )
             }
             else -> openArchiveEntry(id, session, name, password = null)
         }

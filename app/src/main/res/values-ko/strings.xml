@@ -405,4 +405,7 @@
     <string name="viewer_save_failed">저장하지 못했습니다</string>
     <string name="reader_settings">뷰어 설정</string>
     <string name="reader_direction_rtl">왼쪽으로 넘기기 (일본만화)</string>
+    <string name="reader_next_volume">다음 편</string>
+    <string name="reader_continue">이어보기</string>
+    <string name="reader_series_end">마지막 편입니다.</string>
 </resources>

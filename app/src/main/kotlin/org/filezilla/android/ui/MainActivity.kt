@@ -889,7 +889,11 @@ private fun AppScreen(
     // normal way. Back closes the reader before it touches the panes.
     model.imageViewer?.let { viewer ->
         BackHandler { model.closeImageViewer() }
-        ImageViewerScreen(viewer, model)
+        // Keyed on the book, so running on to the next volume starts its reader
+        // fresh -- at page one, not wherever the last one was left.
+        androidx.compose.runtime.key(viewer.comicKey ?: "") {
+            ImageViewerScreen(viewer, model)
+        }
     }
     model.textViewer?.let { viewer ->
         BackHandler { model.closeTextViewer() }
