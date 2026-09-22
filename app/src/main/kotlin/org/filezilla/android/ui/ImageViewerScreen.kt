@@ -17,10 +17,13 @@ import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -43,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -58,47 +62,36 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.filezilla.android.R
 import org.filezilla.android.viewer.Spreads
+import org.filezilla.android.viewer.Webtoon
 
 /**
- * A comic reader over a set of images.
+ * A comic reader over a set of images, in one of two shapes.
  *
- * The picture fills the screen with nothing on top of it -- a page of a comic
- * is the thing being read, and a filename and a page number laid over the art
- * are in the way. A tap in the middle brings the controls back and hides them
- * again; a tap on the side turns the page the way the book reads; a swipe does
- * the same. The place is kept as the pages turn, so a book reopens where it
- * was left.
+ * A page comic turns one screen at a time, left or right; a webtoon is one long
+ * strip scrolled top to bottom. Which shape a book gets is decided from the
+ * proportions of its first image -- a strip is far taller than it is wide -- and
+ * can be switched by hand from the settings. Everything above the picture is the
+ * same either way: the bars go dark and hide while reading, a tap brings them
+ * back, and the place is kept so a book reopens where it was left.
  */
 @Composable
 fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
-    val scope = rememberCoroutineScope()
-    val rtl = model.readerRtl
     var chrome by rememberSaveable(viewer.comicKey) { mutableStateOf(false) }
 
-    // Two pages side by side, but only for a comic on a wide screen -- a phone
-    // held sideways, or a tablet -- and only when the setting allows it. A
-    // portrait phone, or a loose folder of pictures, stays one page.
-    val landscape = androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
-        android.content.res.Configuration.ORIENTATION_LANDSCAPE
-    val twoPage = viewer.book && model.readerTwoPage && landscape
-    val spreads = remember(viewer.images.size, twoPage) { Spreads.of(viewer.images.size, twoPage) }
-
-    // A comic gets one extra spread past its last: the end card, which names
-    // the next volume and goes on to it, or says the series is done.
-    val spreadCount = spreads.size + if (viewer.book) 1 else 0
-    // Keyed on the pairing so a change of it -- the setting, or a turn to
-    // landscape -- reopens the pager on the spread holding the same page,
-    // rather than at some stale index into a list that just changed length.
-    val pager = androidx.compose.runtime.key(twoPage) {
-        rememberPagerState(
-            initialPage = Spreads.spreadOf(viewer.index, twoPage),
-            pageCount = { spreadCount },
-        )
+    // The shape: read from the first page's proportions, unless the reader was
+    // told by hand which to use. A tall-and-thin first image reads as a strip.
+    var autoWebtoon by rememberSaveable(viewer.comicKey) { mutableStateOf(false) }
+    LaunchedEffect(viewer.images) {
+        viewer.images.firstOrNull()?.let { model.imageSize(it) }
+            ?.let { autoWebtoon = Webtoon.isWebtoon(it.width, it.height) }
     }
+    var webtoonOverride by rememberSaveable(viewer.comicKey) { mutableStateOf<Boolean?>(null) }
+    val webtoon = webtoonOverride ?: autoWebtoon
 
     // While reading, the phone's own bars go away so the page has the whole
     // screen; bringing the menu up brings them back, and leaving the reader
@@ -140,6 +133,70 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
     LaunchedEffect(reservedTop) { reservedTopPx = reservedTop }
     val reservedTopDp = with(density) { reservedTop.toDp() }
 
+    Surface(Modifier.fillMaxSize(), color = Color.Black) {
+        Box(Modifier.fillMaxSize()) {
+            if (webtoon) {
+                WebtoonReader(
+                    viewer = viewer,
+                    model = model,
+                    reservedTopDp = reservedTopDp,
+                    chrome = chrome,
+                    onToggleChrome = { chrome = !chrome },
+                    onWebtoon = { webtoonOverride = it },
+                )
+            } else {
+                PagedReader(
+                    viewer = viewer,
+                    model = model,
+                    reservedTopDp = reservedTopDp,
+                    chrome = chrome,
+                    onToggleChrome = { chrome = !chrome },
+                    onWebtoon = { webtoonOverride = it },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The page-at-a-time reader: a pager of spreads, one page or two.
+ *
+ * A tap in the middle brings the controls back and hides them again; a tap on
+ * the side turns the page the way the book reads; a swipe does the same.
+ */
+@Composable
+private fun PagedReader(
+    viewer: MainViewModel.ImageViewer,
+    model: MainViewModel,
+    reservedTopDp: Dp,
+    chrome: Boolean,
+    onToggleChrome: () -> Unit,
+    onWebtoon: (Boolean) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val rtl = model.readerRtl
+
+    // Two pages side by side, but only for a comic on a wide screen -- a phone
+    // held sideways, or a tablet -- and only when the setting allows it. A
+    // portrait phone, or a loose folder of pictures, stays one page.
+    val landscape = androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
+        android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    val twoPage = viewer.book && model.readerTwoPage && landscape
+    val spreads = remember(viewer.images.size, twoPage) { Spreads.of(viewer.images.size, twoPage) }
+
+    // A comic gets one extra spread past its last: the end card, which names
+    // the next volume and goes on to it, or says the series is done.
+    val spreadCount = spreads.size + if (viewer.book) 1 else 0
+    // Keyed on the pairing so a change of it -- the setting, or a turn to
+    // landscape -- reopens the pager on the spread holding the same page,
+    // rather than at some stale index into a list that just changed length.
+    val pager = androidx.compose.runtime.key(twoPage) {
+        rememberPagerState(
+            initialPage = Spreads.spreadOf(viewer.index, twoPage),
+            pageCount = { spreadCount },
+        )
+    }
+
     // Kept by page, not by spread, so the place survives the pairing changing:
     // the first page of the spread on screen is what is remembered.
     LaunchedEffect(pager, twoPage) {
@@ -151,39 +208,165 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
         scope.launch { pager.animateScrollToPage(to) }
     }
 
-    Surface(Modifier.fillMaxSize(), color = Color.Black) {
-        // The picture fills the whole screen, under where the bars were; only
-        // the menu, when it is up, keeps clear of them.
-        Box(Modifier.fillMaxSize()) {
-            HorizontalPager(
-                state = pager,
-                reverseLayout = rtl,
-                // The next page (and the one before) are composed off-screen so
-                // they decode ahead of time; a turn then lands on a page that
-                // is already drawn instead of on a spinner.
-                beyondViewportPageCount = 1,
-                modifier = Modifier.fillMaxSize().padding(top = reservedTopDp),
-            ) { spread ->
-                if (spread < spreads.size) {
-                    val pages = spreads[spread]
-                    // A lone page sits on its book side rather than centred: the
-                    // cover on the right for a leftward-read book (the left for
-                    // manga), and a lone last page on the opposite side, so a
-                    // spread of one still reads as half of an open book.
-                    val align = when {
-                        !twoPage || pages.size == 2 -> SpreadAlign.FILL
-                        spread == 0 -> if (rtl) SpreadAlign.LEFT else SpreadAlign.RIGHT
-                        else -> if (rtl) SpreadAlign.RIGHT else SpreadAlign.LEFT
+    // The picture fills the whole screen, under where the bars were; only the
+    // menu, when it is up, keeps clear of them.
+    Box(Modifier.fillMaxSize()) {
+        HorizontalPager(
+            state = pager,
+            reverseLayout = rtl,
+            // The next page (and the one before) are composed off-screen so
+            // they decode ahead of time; a turn then lands on a page that is
+            // already drawn instead of on a spinner.
+            beyondViewportPageCount = 1,
+            modifier = Modifier.fillMaxSize().padding(top = reservedTopDp),
+        ) { spread ->
+            if (spread < spreads.size) {
+                val pages = spreads[spread]
+                // A lone page sits on its book side rather than centred: the
+                // cover on the right for a leftward-read book (the left for
+                // manga), and a lone last page on the opposite side, so a
+                // spread of one still reads as half of an open book.
+                val align = when {
+                    !twoPage || pages.size == 2 -> SpreadAlign.FILL
+                    spread == 0 -> if (rtl) SpreadAlign.LEFT else SpreadAlign.RIGHT
+                    else -> if (rtl) SpreadAlign.RIGHT else SpreadAlign.LEFT
+                }
+                ReaderSpread(
+                    refs = pages.map { viewer.images[it] },
+                    align = align,
+                    model = model,
+                    rtl = rtl,
+                    onTurn = ::turn,
+                    onToggleChrome = onToggleChrome,
+                )
+            } else {
+                ReaderEndCard(
+                    nextComic = viewer.nextComic,
+                    onOpenNext = { viewer.nextComic?.let(model::openComicFile) },
+                    onClose = model::closeImageViewer,
+                )
+            }
+        }
+
+        val onImage = pager.currentPage < spreads.size
+        val shownPages = spreads.getOrNull(pager.currentPage).orEmpty()
+
+        AnimatedVisibility(visible = chrome, modifier = Modifier.align(Alignment.TopCenter)) {
+            ReaderTopBar(
+                name = shownPages.firstOrNull()?.let { viewer.images[it].name }.orEmpty(),
+                webtoon = false,
+                rtl = rtl,
+                twoPage = model.readerTwoPage,
+                onWebtoon = onWebtoon,
+                onRtl = model::applyReaderRtl,
+                onTwoPage = model::applyReaderTwoPage,
+                onClose = model::closeImageViewer,
+            )
+        }
+
+        if (viewer.images.size > 1) {
+            AnimatedVisibility(
+                visible = chrome && onImage,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            ) {
+                ReaderBottomBar(
+                    firstPage = shownPages.firstOrNull() ?: 0,
+                    lastPage = shownPages.lastOrNull() ?: 0,
+                    count = viewer.images.size,
+                    rtl = rtl,
+                    onSeek = { page -> scope.launch { pager.scrollToPage(Spreads.spreadOf(page, twoPage)) } },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The strip reader: every page cut into bands and stacked in one long scroll.
+ *
+ * Only the bands on screen are decoded, so a strip twenty thousand pixels tall
+ * scrolls without ever holding more than a screenful in memory. Each page's
+ * size is read as the scroll reaches it, in order, so a long series does not
+ * pay for all of it up front. A tap anywhere brings the controls back.
+ */
+@Composable
+private fun WebtoonReader(
+    viewer: MainViewModel.ImageViewer,
+    model: MainViewModel,
+    reservedTopDp: Dp,
+    chrome: Boolean,
+    onToggleChrome: () -> Unit,
+    onWebtoon: (Boolean) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val images = viewer.images
+
+    // Each page's pixel size, filled in reading order. A zero stands for a page
+    // that would not read, so it plans to nothing rather than stalling the run.
+    val sizes = remember(images) {
+        mutableStateListOf<android.util.Size?>().apply { repeat(images.size) { add(null) } }
+    }
+    LaunchedEffect(images) {
+        for (i in images.indices) {
+            if (sizes[i] == null) sizes[i] = model.imageSize(images[i]) ?: android.util.Size(0, 0)
+        }
+    }
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val viewportWidth = constraints.maxWidth
+
+        // Only the pages known so far, from the top without a gap: the strip is
+        // read downward, so the bands appear as their sizes arrive and the rest
+        // waits below a spinner rather than leaving holes in the scroll.
+        val prefix = ArrayList<Pair<Int, Int>>()
+        for (size in sizes) {
+            if (size == null) break
+            prefix.add(size.width to size.height)
+        }
+        val allKnown = prefix.size == images.size
+        val bands = remember(prefix.toList(), viewportWidth) { Webtoon.plan(prefix, viewportWidth) }
+
+        val listState = rememberLazyListState()
+
+        // Reopen where the book was left. Waits until the bands reach that page,
+        // since they are laid as sizes load, and runs once.
+        var restored by rememberSaveable(viewer.comicKey) { mutableStateOf(viewer.index == 0) }
+        LaunchedEffect(bands.size) {
+            if (!restored) {
+                val target = bands.indexOfFirst { it.page >= viewer.index }
+                if (target >= 0) {
+                    listState.scrollToItem(target)
+                    restored = true
+                }
+            }
+        }
+        // The page at the top of the screen is the one whose place is kept.
+        LaunchedEffect(listState, bands) {
+            snapshotFlow { listState.firstVisibleItemIndex }.collect { index ->
+                if (restored) bands.getOrNull(index)?.let { model.setImageIndex(it.page) }
+            }
+        }
+
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = reservedTopDp)
+                // A tap toggles the controls; drags still scroll, since tap
+                // detection lets anything that moves pass through to the list.
+                .pointerInput(Unit) { detectTapGestures(onTap = { onToggleChrome() }) },
+        ) {
+            items(bands.size, key = { "${bands[it].page}:${bands[it].srcTop}" }) { i ->
+                val band = bands[i]
+                BandImage(band = band, ref = images[band.page], viewportWidthPx = viewportWidth, model = model)
+            }
+            when {
+                !allKnown -> item(key = "loading") {
+                    Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Color.White)
                     }
-                    ReaderSpread(
-                        refs = pages.map { viewer.images[it] },
-                        align = align,
-                        model = model,
-                        rtl = rtl,
-                        onTurn = ::turn,
-                        onToggleChrome = { chrome = !chrome },
-                    )
-                } else {
+                }
+                viewer.book -> item(key = "end") {
                     ReaderEndCard(
                         nextComic = viewer.nextComic,
                         onOpenNext = { viewer.nextComic?.let(model::openComicFile) },
@@ -191,35 +374,71 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
                     )
                 }
             }
+        }
 
-            val onImage = pager.currentPage < spreads.size
-            val shownPages = spreads.getOrNull(pager.currentPage).orEmpty()
+        val currentPage = bands.getOrNull(listState.firstVisibleItemIndex)?.page ?: 0
 
-            AnimatedVisibility(visible = chrome, modifier = Modifier.align(Alignment.TopCenter)) {
-                ReaderTopBar(
-                    name = shownPages.firstOrNull()?.let { viewer.images[it].name }.orEmpty(),
-                    rtl = rtl,
-                    twoPage = model.readerTwoPage,
-                    onRtl = model::applyReaderRtl,
-                    onTwoPage = model::applyReaderTwoPage,
-                    onClose = model::closeImageViewer,
+        AnimatedVisibility(visible = chrome, modifier = Modifier.align(Alignment.TopCenter)) {
+            ReaderTopBar(
+                name = images.getOrNull(currentPage)?.name.orEmpty(),
+                webtoon = true,
+                rtl = false,
+                twoPage = model.readerTwoPage,
+                onWebtoon = onWebtoon,
+                onRtl = model::applyReaderRtl,
+                onTwoPage = model::applyReaderTwoPage,
+                onClose = model::closeImageViewer,
+            )
+        }
+
+        if (images.size > 1) {
+            AnimatedVisibility(visible = chrome, modifier = Modifier.align(Alignment.BottomCenter)) {
+                ReaderBottomBar(
+                    firstPage = currentPage,
+                    lastPage = currentPage,
+                    count = images.size,
+                    rtl = false,
+                    onSeek = { page ->
+                        scope.launch {
+                            val target = bands.indexOfFirst { it.page >= page }
+                            if (target >= 0) listState.scrollToItem(target)
+                        }
+                    },
                 )
             }
+        }
+    }
+}
 
-            if (viewer.images.size > 1) {
-                AnimatedVisibility(
-                    visible = chrome && onImage,
-                    modifier = Modifier.align(Alignment.BottomCenter),
-                ) {
-                    ReaderBottomBar(
-                        firstPage = shownPages.firstOrNull() ?: 0,
-                        lastPage = shownPages.lastOrNull() ?: 0,
-                        count = viewer.images.size,
-                        rtl = rtl,
-                        onSeek = { page -> scope.launch { pager.scrollToPage(Spreads.spreadOf(page, twoPage)) } },
-                    )
-                }
-            }
+/** One band of a strip: sized to its slice of the page, decoded when reached. */
+@Composable
+private fun BandImage(
+    band: Webtoon.Band,
+    ref: MainViewModel.ImageRef,
+    viewportWidthPx: Int,
+    model: MainViewModel,
+) {
+    // The band's height on screen is its source rows scaled to the width it
+    // fills, so the box stands at the right height before the pixels arrive and
+    // the scroll does not jump as bands decode.
+    val heightDp = with(LocalDensity.current) {
+        if (band.imageWidth <= 0) 0.dp
+        else ((band.srcBottom - band.srcTop).toFloat() * viewportWidthPx / band.imageWidth).toDp()
+    }
+    var bitmap by remember(band) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(band) {
+        bitmap = model.loadBand(ref, band.srcTop, band.srcBottom, band.sample)
+    }
+    Box(Modifier.fillMaxWidth().height(heightDp), contentAlignment = Alignment.Center) {
+        bitmap?.let {
+            androidx.compose.foundation.Image(
+                bitmap = it.asImageBitmap(),
+                contentDescription = null,
+                // The box already holds the band's own shape, so the bitmap
+                // fills it exactly rather than being fitted inside it.
+                contentScale = ContentScale.FillBounds,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
     }
 }
@@ -227,8 +446,10 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
 @Composable
 private fun ReaderTopBar(
     name: String,
+    webtoon: Boolean,
     rtl: Boolean,
     twoPage: Boolean,
+    onWebtoon: (Boolean) -> Unit,
     onRtl: (Boolean) -> Unit,
     onTwoPage: (Boolean) -> Unit,
     onClose: () -> Unit,
@@ -259,15 +480,24 @@ private fun ReaderTopBar(
             }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                 DropdownMenuItem(
-                    text = { Text(stringResource(R.string.reader_direction_rtl)) },
-                    trailingIcon = { Switch(checked = rtl, onCheckedChange = { onRtl(it) }) },
-                    onClick = { onRtl(!rtl) },
+                    text = { Text(stringResource(R.string.reader_webtoon)) },
+                    trailingIcon = { Switch(checked = webtoon, onCheckedChange = { onWebtoon(it) }) },
+                    onClick = { onWebtoon(!webtoon) },
                 )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.reader_two_page)) },
-                    trailingIcon = { Switch(checked = twoPage, onCheckedChange = { onTwoPage(it) }) },
-                    onClick = { onTwoPage(!twoPage) },
-                )
+                // Paging direction and two-up only make sense page by page, so
+                // they are put away while the strip reader is on.
+                if (!webtoon) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.reader_direction_rtl)) },
+                        trailingIcon = { Switch(checked = rtl, onCheckedChange = { onRtl(it) }) },
+                        onClick = { onRtl(!rtl) },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.reader_two_page)) },
+                        trailingIcon = { Switch(checked = twoPage, onCheckedChange = { onTwoPage(it) }) },
+                        onClick = { onTwoPage(!twoPage) },
+                    )
+                }
             }
         }
     }

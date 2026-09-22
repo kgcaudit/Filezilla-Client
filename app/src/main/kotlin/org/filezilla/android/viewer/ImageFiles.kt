@@ -2,6 +2,9 @@ package org.filezilla.android.viewer
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.BitmapRegionDecoder
+import android.graphics.Rect
+import android.util.Size
 import java.io.File
 
 /**
@@ -97,6 +100,44 @@ object ImageFiles {
             sample *= 2
         }
         return sample
+    }
+
+    /**
+     * The real pixel size of the image in [bytes], from its header alone.
+     *
+     * A webtoon strip is planned before any of it is decoded -- how tall it is
+     * decides how many bands to cut it into -- so its size is needed without
+     * paying to decode the whole thing. Null if the bytes are not an image.
+     */
+    fun sizeOf(bytes: ByteArray): Size? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        return Size(bounds.outWidth, bounds.outHeight)
+    }
+
+    /**
+     * Decodes just the rows [top, bottom) of the image in [bytes], shrunk by
+     * [sample], as one band of a webtoon strip.
+     *
+     * A strip is far too tall to hold whole, so only the slice on screen is
+     * ever turned into a bitmap. The region decoder reads the one band out of
+     * the source without touching the rest -- which is what lets a strip
+     * twenty thousand pixels tall scroll on a phone. Null rather than a throw
+     * for bytes that will not decode.
+     */
+    @Suppress("DEPRECATION")
+    fun decodeRegion(bytes: ByteArray, top: Int, bottom: Int, sample: Int): Bitmap? {
+        val decoder = runCatching {
+            BitmapRegionDecoder.newInstance(bytes, 0, bytes.size, false)
+        }.getOrNull() ?: return null
+        return try {
+            val options = BitmapFactory.Options().apply { inSampleSize = sample.coerceAtLeast(1) }
+            val rect = Rect(0, top, decoder.width, bottom.coerceAtMost(decoder.height))
+            runCatching { decoder.decodeRegion(rect, options) }.getOrNull()
+        } finally {
+            decoder.recycle()
+        }
     }
 
     // The longest a decoded side may be, kept under the smallest GPU texture

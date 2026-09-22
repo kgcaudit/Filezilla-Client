@@ -406,6 +406,7 @@
     <string name="reader_settings">뷰어 설정</string>
     <string name="reader_direction_rtl">왼쪽으로 넘기기 (일본만화)</string>
     <string name="reader_two_page">두 페이지씩 보기 (가로)</string>
+    <string name="reader_webtoon">웹툰 세로보기 (위아래로 스크롤)</string>
     <string name="reader_next_volume">다음 편</string>
     <string name="reader_continue">이어보기</string>
     <string name="reader_series_end">마지막 편입니다.</string>

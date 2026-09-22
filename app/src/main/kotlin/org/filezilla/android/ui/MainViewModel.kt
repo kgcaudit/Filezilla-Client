@@ -1863,14 +1863,56 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             when (ref) {
                 is ImageRef.OnDisk -> ImageFiles.decode(ref.file, reqWidth, reqHeight)
                 is ImageRef.InArchive -> {
-                    val bytes = runCatching {
-                        Archives.open(ref.session.file).use { archive ->
-                            archive.open(ref.entry).use { it.readBytes() }
-                        }
-                    }.getOrNull() ?: return@withContext null
+                    val bytes = imageBytes(ref) ?: return@withContext null
                     ImageFiles.decode(bytes, reqWidth, reqHeight)
                 }
             }
+        }
+
+    /**
+     * A few recently read image files, kept whole in memory.
+     *
+     * A webtoon strip is decoded a band at a time, and every band reads the
+     * same source file -- so without this, scrolling one strip would unpack it
+     * from its archive dozens of times over. Small and access-ordered: the
+     * strip in front and its neighbours stay, the rest fall out, and a handful
+     * of image files is little beside the bitmaps they decode to.
+     */
+    private val imageByteCache = object : LinkedHashMap<String, ByteArray>(8, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ByteArray>): Boolean =
+            size > IMAGE_BYTE_CACHE
+    }
+
+    private fun imageCacheKey(ref: ImageRef): String = when (ref) {
+        is ImageRef.OnDisk -> "f:${ref.file.path}"
+        is ImageRef.InArchive -> "a:${ref.session.file.path}\u0000${ref.entry.path}"
+    }
+
+    /** The raw bytes of [ref]'s image, from the small cache or freshly read. */
+    private fun imageBytes(ref: ImageRef): ByteArray? {
+        val key = imageCacheKey(ref)
+        synchronized(imageByteCache) { imageByteCache[key] }?.let { return it }
+        val bytes = runCatching {
+            when (ref) {
+                is ImageRef.OnDisk -> ref.file.readBytes()
+                is ImageRef.InArchive -> Archives.open(ref.session.file).use { archive ->
+                    archive.open(ref.entry).use { it.readBytes() }
+                }
+            }
+        }.getOrNull() ?: return null
+        synchronized(imageByteCache) { imageByteCache[key] = bytes }
+        return bytes
+    }
+
+    /** [ref]'s real pixel size, read from its header alone, for planning a strip. */
+    suspend fun imageSize(ref: ImageRef): android.util.Size? = withContext(Dispatchers.IO) {
+        imageBytes(ref)?.let { ImageFiles.sizeOf(it) }
+    }
+
+    /** Decodes the rows [top, bottom) of [ref], shrunk by [sample], as one band of a strip. */
+    suspend fun loadBand(ref: ImageRef, top: Int, bottom: Int, sample: Int): android.graphics.Bitmap? =
+        withContext(Dispatchers.IO) {
+            imageBytes(ref)?.let { ImageFiles.decodeRegion(it, top, bottom, sample) }
         }
 
     fun acknowledgeReadOnly() {
@@ -3523,5 +3565,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private companion object {
         /** The slot the phone's own folder is remembered in, per pane. */
         const val LOCAL_SOURCE_KEY = "local"
+
+        /** How many whole image files the band decoder keeps around at once. */
+        const val IMAGE_BYTE_CACHE = 4
     }
 }
