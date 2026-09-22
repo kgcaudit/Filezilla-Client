@@ -29,6 +29,7 @@ import org.filezilla.android.archive.ArchiveExtract
 import org.filezilla.android.archive.ArchiveWriter
 import org.filezilla.android.archive.Archives
 import org.filezilla.android.archive.RarNative
+import org.filezilla.android.archive.SevenZipNative
 import org.filezilla.android.archive.ExtractResult
 import org.filezilla.android.data.SiteEntity
 import org.filezilla.android.files.FileMode
@@ -2222,6 +2223,68 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun runSevenZExtract(
+        id: PaneId,
+        session: ArchiveSession,
+        picks: Set<String>,
+        into: java.io.File,
+        overwrite: Boolean,
+        onDone: () -> Unit,
+    ) {
+        val stop = java.util.concurrent.atomic.AtomicBoolean(false)
+        val extracting = getApplication<android.app.Application>().getString(R.string.archive_extracting)
+        archiveBusy = ArchiveBusy(extracting, "", 0L, 0L, { stop.set(true) }, bytes = true)
+
+        val covered = if (picks.isEmpty()) null else picks
+        val total = session.entries
+            .filter { !it.isDirectory && (covered == null || it.path in ArchiveBrowsing.expand(session.entries, picks)) }
+            .sumOf { it.size.coerceAtLeast(0) }
+
+        viewModelScope.launch {
+            val outcome = withContext(Dispatchers.IO) {
+                runCatching {
+                    into.mkdirs()
+                    val result = SevenZipNative.extract(
+                        session.file, into,
+                        covered?.let { ArchiveBrowsing.expand(session.entries, it) },
+                        total, skipExisting = !overwrite,
+                        object : SevenZipNative.Sink {
+                            override fun entry(name: String, size: Long, isDirectory: Boolean, modifiedMillis: Long, encrypted: Boolean, unsupported: Boolean) = Unit
+                            override fun progress(doneBytes: Long, totalBytes: Long, name: String) {
+                                archiveBusy = archiveBusy?.copy(done = doneBytes, total = totalBytes, path = name)
+                            }
+                            override fun cancelled() = stop.get()
+                        },
+                    )
+                    result to into
+                }
+            }
+            archiveBusy = null
+
+            outcome.onSuccess { (result, into) ->
+                when (result) {
+                    SevenZipNative.Result.CANCELLED -> {
+                        val written = into.walkTopDown().count { it.isFile }
+                        archiveOutcome = ArchiveOutcome(R.string.archive_extract_stopped, listOf(written))
+                    }
+                    else -> {
+                        val written = into.walkTopDown().count { it.isFile }
+                        archiveOutcome = when {
+                            written == 0 -> ArchiveOutcome(R.string.archive_extract_none)
+                            result == SevenZipNative.Result.FAILED ->
+                                ArchiveOutcome(R.string.archive_extracted_some, listOf(written, 0))
+                            else -> ArchiveOutcome(R.string.archive_extracted, listOf(written, into.name))
+                        }
+                    }
+                }
+                relistLocalPanes()
+                onDone()
+            }.onFailure {
+                archiveOutcome = ArchiveOutcome(R.string.archive_not_readable)
+            }
+        }
+    }
+
     private fun runExtract(
         id: PaneId,
         session: ArchiveSession,
@@ -2237,6 +2300,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // same way, so the bar and the stop button are unchanged.
         if (Archives.kindOf(session.file) == Archives.Kind.RAR) {
             runRarExtract(id, session, picks, into, overwrite, password, onDone)
+            return
+        }
+        // 7z is solid too, and unpacked by the native reader in one call for
+        // the same reason. It has no password path here -- the reference
+        // decoder has no AES -- so an encrypted 7z's entries were already
+        // marked unreadable when it was listed.
+        if (Archives.kindOf(session.file) == Archives.Kind.SEVENZ) {
+            runSevenZExtract(id, session, picks, into, overwrite, onDone)
             return
         }
         val stop = java.util.concurrent.atomic.AtomicBoolean(false)

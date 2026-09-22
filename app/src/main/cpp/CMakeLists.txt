@@ -38,3 +38,29 @@ set_target_properties(olorar PROPERTIES CXX_STANDARD 14 CXX_STANDARD_REQUIRED ON
 
 find_library(log-lib log)
 target_link_libraries(olorar ${log-lib})
+
+# 7z, built from Igor Pavlov's public-domain LZMA SDK (lzma-sdk-license.txt
+# in sevenz/). Only the reference 7z-extraction subset is vendored -- the
+# same files the SDK's own 7zDec sample links -- so the decoder is 7-Zip's
+# own code rather than a Kotlin port of LZMA2, PPMd and the branch filters,
+# where a mistake would be silent corruption. It reads only; nothing here
+# writes a 7z. The upstream makefile's 7zdec object list, minus its CLI
+# (7zMain) and the x86 assembly (LzmaDec.c has a C path). AES is not in the
+# reference decoder, so an encrypted 7z lists but is marked unreadable.
+set(SEVENZ_SOURCES
+    sevenz/Bcj2.c sevenz/Bra.c sevenz/Bra86.c sevenz/BraIA64.c
+    sevenz/CpuArch.c sevenz/Delta.c sevenz/Lzma2Dec.c sevenz/LzmaDec.c
+    sevenz/Ppmd7.c sevenz/Ppmd7Dec.c sevenz/7zCrc.c sevenz/7zCrcOpt.c
+    sevenz/7zAlloc.c sevenz/7zArcIn.c sevenz/7zBuf.c sevenz/7zBuf2.c
+    sevenz/7zDec.c sevenz/7zFile.c sevenz/7zStream.c
+)
+
+add_library(olo7z SHARED sevenz_jni.cpp ${SEVENZ_SOURCES})
+
+# Z7_PPMD_SUPPORT turns on the PPMd coder, the one method the sample gates
+# off by default; the branch filters and LZMA/LZMA2 are on without a flag.
+target_compile_definitions(olo7z PRIVATE Z7_PPMD_SUPPORT)
+
+target_compile_options(olo7z PRIVATE -O2 -w)
+
+target_link_libraries(olo7z ${log-lib})

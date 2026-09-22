@@ -48,3 +48,10 @@
 -keep class org.filezilla.android.archive.RarNative { *; }
 -keep interface org.filezilla.android.archive.RarNative$Sink { *; }
 -keepclassmembers class * implements org.filezilla.android.archive.RarNative$Sink { *; }
+
+# The 7z bridge is the same: native code resolves Java_..._SevenZipNative_*
+# by name and looks up Sink's methods with GetMethodID, so R8 must leave the
+# bridge and its callback interface unrenamed.
+-keep class org.filezilla.android.archive.SevenZipNative { *; }
+-keep interface org.filezilla.android.archive.SevenZipNative$Sink { *; }
+-keepclassmembers class * implements org.filezilla.android.archive.SevenZipNative$Sink { *; }
