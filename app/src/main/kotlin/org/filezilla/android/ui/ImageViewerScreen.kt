@@ -70,6 +70,24 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
     val rtl = model.readerRtl
     var chrome by rememberSaveable(viewer.comicKey) { mutableStateOf(false) }
 
+    // While reading, the phone's own bars go away so the page has the whole
+    // screen; bringing the menu up brings them back, and leaving the reader
+    // restores them. A swipe from the edge still peeks at them meanwhile.
+    val view = androidx.compose.ui.platform.LocalView.current
+    androidx.compose.runtime.DisposableEffect(view) {
+        val window = (view.context as? android.app.Activity)?.window
+        val controller = window?.let { androidx.core.view.WindowCompat.getInsetsController(it, view) }
+        controller?.systemBarsBehavior =
+            androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        onDispose { controller?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars()) }
+    }
+    LaunchedEffect(chrome, view) {
+        val window = (view.context as? android.app.Activity)?.window ?: return@LaunchedEffect
+        val controller = androidx.core.view.WindowCompat.getInsetsController(window, view)
+        val bars = androidx.core.view.WindowInsetsCompat.Type.systemBars()
+        if (chrome) controller.show(bars) else controller.hide(bars)
+    }
+
     // Kept so the book reopens here, and so the bar shows where it is.
     LaunchedEffect(pager) {
         snapshotFlow { pager.currentPage }.collect { model.setImageIndex(it) }
@@ -81,9 +99,9 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
     }
 
     Surface(Modifier.fillMaxSize(), color = Color.Black) {
-        // The picture keeps clear of the system status bar rather than running
-        // up under it -- the bar stays the phone's, over the black surface.
-        Box(Modifier.fillMaxSize().statusBarsPadding()) {
+        // The picture fills the whole screen, under where the bars were; only
+        // the menu, when it is up, keeps clear of them.
+        Box(Modifier.fillMaxSize()) {
             HorizontalPager(
                 state = pager,
                 reverseLayout = rtl,
@@ -132,6 +150,7 @@ private fun ReaderTopBar(
         Modifier
             .fillMaxWidth()
             .background(Color.Black.copy(alpha = 0.5f))
+            .statusBarsPadding()
             .padding(horizontal = 4.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
