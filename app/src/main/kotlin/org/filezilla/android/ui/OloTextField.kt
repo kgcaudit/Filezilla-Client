@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -34,10 +35,12 @@ import androidx.compose.ui.unit.dp
  * decoration box, which is why this is built on that rather than by drawing
  * a border around a BasicTextField and reinventing the parts that already
  * work.
+ *
+ * There are two of these: one over a plain string, for the boxes that just
+ * take a word, and one over a [TextFieldValue], for the rename prompt that
+ * needs to open with the whole name selected. They share their frame; only
+ * the state they carry differs.
  */
-// The decoration box is what lets the padding be named at all; the
-// high-level OutlinedTextField does not expose it.
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OloTextField(
     value: String,
@@ -65,51 +68,135 @@ fun OloTextField(
 ) {
     val own = remember { MutableInteractionSource() }
     val interactionSource = interactions ?: own
-    val focused by interactionSource.collectIsFocusedAsState()
-    val colors = OutlinedTextFieldDefaults.colors()
-    val textStyle = LocalTextStyle.current.merge(MaterialTheme.typography.bodyLarge)
-
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier.heightIn(min = minHeight),
         singleLine = true,
         readOnly = readOnly,
-        textStyle = textStyle.copy(color = MaterialTheme.colorScheme.onSurface),
-        cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+        textStyle = oloTextStyle(),
+        cursorBrush = oloCursor(),
         keyboardOptions = keyboardOptions,
         keyboardActions = keyboardActions,
         visualTransformation = visualTransformation,
         interactionSource = interactionSource,
         decorationBox = { inner ->
-            OutlinedTextFieldDefaults.DecorationBox(
-                value = value,
-                innerTextField = inner,
-                enabled = true,
-                singleLine = true,
+            OloDecoration(
+                text = value,
+                inner = inner,
+                label = label,
+                placeholder = placeholder,
+                supportingText = supportingText,
+                isError = isError,
                 visualTransformation = visualTransformation,
                 interactionSource = interactionSource,
-                isError = isError,
-                label = { Text(label) },
-                placeholder = placeholder?.let { { Text(it) } },
-                supportingText = supportingText?.let { { Text(it) } },
                 trailingIcon = trailingIcon,
+            )
+        },
+    )
+}
+
+/**
+ * The same box over a [TextFieldValue], so the caller owns the selection.
+ *
+ * The rename prompt opens with the whole name selected -- a long name was
+ * otherwise impossible to replace, because the cursor landed at the end and
+ * the field scrolled the rest of it off the left where a finger could not
+ * reach to move the cursor back. Holding the selection means the name comes up
+ * highlighted and one keystroke replaces it, or a tap drops in to edit.
+ */
+@Composable
+fun OloTextField(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    isError: Boolean = false,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    supportingText: String? = null,
+    minHeight: Dp = 48.dp,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier.heightIn(min = minHeight),
+        singleLine = true,
+        textStyle = oloTextStyle(),
+        cursorBrush = oloCursor(),
+        keyboardOptions = keyboardOptions,
+        keyboardActions = keyboardActions,
+        interactionSource = interactionSource,
+        decorationBox = { inner ->
+            OloDecoration(
+                text = value.text,
+                inner = inner,
+                label = label,
+                placeholder = null,
+                supportingText = supportingText,
+                isError = isError,
+                visualTransformation = VisualTransformation.None,
+                interactionSource = interactionSource,
+                trailingIcon = null,
+            )
+        },
+    )
+}
+
+@Composable
+private fun oloTextStyle() =
+    LocalTextStyle.current.merge(MaterialTheme.typography.bodyLarge)
+        .copy(color = MaterialTheme.colorScheme.onSurface)
+
+@Composable
+private fun oloCursor() =
+    androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary)
+
+// The decoration box is what lets the padding be named at all; the
+// high-level OutlinedTextField does not expose it. Shared by both boxes so
+// they wear exactly the same frame.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun OloDecoration(
+    text: String,
+    inner: @Composable () -> Unit,
+    label: String,
+    placeholder: String?,
+    supportingText: String?,
+    isError: Boolean,
+    visualTransformation: VisualTransformation,
+    interactionSource: MutableInteractionSource,
+    trailingIcon: (@Composable () -> Unit)?,
+) {
+    val focused by interactionSource.collectIsFocusedAsState()
+    val colors = OutlinedTextFieldDefaults.colors()
+    OutlinedTextFieldDefaults.DecorationBox(
+        value = text,
+        innerTextField = inner,
+        enabled = true,
+        singleLine = true,
+        visualTransformation = visualTransformation,
+        interactionSource = interactionSource,
+        isError = isError,
+        label = { Text(label) },
+        placeholder = placeholder?.let { { Text(it) } },
+        supportingText = supportingText?.let { { Text(it) } },
+        trailingIcon = trailingIcon,
+        colors = colors,
+        // Ten instead of sixteen. Below about eight the floating label starts
+        // to sit on the frame it is supposed to break.
+        contentPadding = OutlinedTextFieldDefaults.contentPadding(
+            top = 10.dp,
+            bottom = 10.dp,
+        ),
+        container = {
+            OutlinedTextFieldDefaults.Container(
+                enabled = true,
+                isError = isError,
+                interactionSource = interactionSource,
                 colors = colors,
-                // Ten instead of sixteen. Below about eight the floating
-                // label starts to sit on the frame it is supposed to break.
-                contentPadding = OutlinedTextFieldDefaults.contentPadding(
-                    top = 10.dp,
-                    bottom = 10.dp,
-                ),
-                container = {
-                    OutlinedTextFieldDefaults.Container(
-                        enabled = true,
-                        isError = isError,
-                        interactionSource = interactionSource,
-                        colors = colors,
-                        focusedBorderThickness = if (focused) 2.dp else 1.dp,
-                    )
-                },
+                focusedBorderThickness = if (focused) 2.dp else 1.dp,
             )
         },
     )

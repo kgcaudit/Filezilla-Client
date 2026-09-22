@@ -14,16 +14,21 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import org.filezilla.android.R
 
@@ -222,34 +227,43 @@ fun OloPromptDialog(
     // Keyed on what it started from. Unkeyed, a dialog reopened on a
     // different entry keeps the first one's name in the box, because the
     // same composable is reused and remember has nothing to tell it that
-    // the question changed.
-    var text by remember(initial) { mutableStateOf(initial) }
+    // the question changed. Opened with the whole name selected, so a long
+    // one can be replaced in a keystroke rather than fought with a cursor
+    // that lands at the end and a field that scrolls the rest out of reach.
+    var value by remember(initial) {
+        mutableStateOf(TextFieldValue(initial, selection = TextRange(0, initial.length)))
+    }
+    val focusRequester = remember { FocusRequester() }
+    // The selection only shows once the box has focus, and the prompt is here
+    // to be typed into, so it takes focus itself rather than waiting for a tap.
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    val name = value.text.trim()
     OloDialog(
         title = if (titleArg == null) stringResource(title) else stringResource(title, titleArg),
         detail = detail?.let { stringResource(it) },
         onDismiss = onDismiss,
         content = {
             OloTextField(
-                value = text,
-                onValueChange = { text = it },
+                value = value,
+                onValueChange = { value = it },
                 label = stringResource(label),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
                 // The keyboard's own key finishes the job. Without this it
                 // says "next" and moves to nothing, so the only way to
                 // confirm a name is to put the keyboard away first.
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(
-                    onDone = { if (text.isNotBlank()) onConfirm(text.trim()) },
+                    onDone = { if (name.isNotBlank()) onConfirm(name) },
                 ),
             )
         },
         action = {
             ConfirmButton(
                 text = stringResource(confirmLabel),
-                onClick = { onConfirm(text.trim()) },
+                onClick = { onConfirm(name) },
                 // A blank name is not a name, and the operation would refuse
                 // it anyway -- better to not offer than to offer and fail.
-                enabled = text.isNotBlank(),
+                enabled = name.isNotBlank(),
             )
         },
     )
