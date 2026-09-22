@@ -69,6 +69,16 @@ object ArchiveExtract {
         into: File,
         picks: Collection<String> = emptyList(),
         password: CharArray? = null,
+        /**
+         * What to do with a file that is already there.
+         *
+         * True replaces it; false leaves it and does not write the
+         * archive's copy -- which is how "unpack into the same folder,
+         * keeping what is there" (resuming a stopped unpack) works. Only
+         * ever false when unpacking into a folder that already exists;
+         * a fresh folder has nothing to collide with.
+         */
+        overwrite: Boolean = true,
         cancelled: () -> Boolean = { false },
         onProgress: Progress = Progress { _, _, _ -> },
     ): ExtractResult {
@@ -110,6 +120,9 @@ object ArchiveExtract {
                 skipped += ExtractResult.Skipped(entry.path, ExtractResult.Reason.ESCAPES)
                 continue
             }
+            // Keep what is already there when told to: the file is not
+            // rewritten and not counted as a failure, it is simply left.
+            if (!overwrite && target.isFile) continue
             target.parentFile?.mkdirs()
 
             var stoppedHere = false

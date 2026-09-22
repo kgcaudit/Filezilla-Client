@@ -26,6 +26,7 @@ class RarArchive private constructor(
         temp.mkdirs()
         val result = RarNative.extract(
             file, temp, setOf(entry.path), password, entry.size.coerceAtLeast(0),
+            skipExisting = false,
             object : RarNative.Sink {
                 override fun entry(name: String, size: Long, isDirectory: Boolean, modifiedMillis: Long, encrypted: Boolean) = Unit
                 override fun progress(doneBytes: Long, totalBytes: Long, name: String) = Unit

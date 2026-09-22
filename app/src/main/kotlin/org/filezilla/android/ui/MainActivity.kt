@@ -786,6 +786,14 @@ private fun AppScreen(
         }
     }
 
+    model.archiveConflict?.let { conflict ->
+        ArchiveConflictDialog(
+            folderName = conflict.folderName,
+            onChoose = model::resolveArchiveConflict,
+            onDismiss = model::dismissArchiveConflict,
+        )
+    }
+
     if (model.archivePasswordAsked) {
         ArchivePasswordDialog(
             wrong = model.archivePasswordWrong,

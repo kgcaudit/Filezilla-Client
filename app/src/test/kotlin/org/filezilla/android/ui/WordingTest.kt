@@ -133,6 +133,12 @@ class WordingTest {
             // picked archive and the overflow's item inside an open one.
             // One act, one word, said in the two places it is offered.
             "archive_extract_all",
+            // The three conflict choices and their explanations, shared by
+            // the download dialog and the unpack-into-an-existing-folder
+            // one: the same three answers to the same kind of question.
+            "conflict_keep_both", "conflict_keep_both_detail",
+            "conflict_overwrite", "conflict_overwrite_detail",
+            "conflict_skip", "conflict_skip_detail",
             // Our own "open with" sheet, and the system chooser it hands
             // off to: the same question asked by two pieces of machinery,
             // and it must read as one question.

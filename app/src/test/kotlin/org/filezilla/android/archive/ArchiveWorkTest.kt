@@ -111,6 +111,30 @@ class ArchiveWorkTest {
     }
 
     @Test
+    fun `unpacking again keeps existing files when told not to overwrite`() {
+        val into = temporary.newFolder("out")
+        // A file already there, standing in for a previous unpack.
+        File(into, "hello.txt").writeText("mine, keep me\n")
+        Archives.open(fixture("plain.egg")).use { archive ->
+            val result = ArchiveExtract.run(archive, into, overwrite = false)
+            // The existing file is untouched; the one that was not there is written.
+            assertEquals("mine, keep me\n", File(into, "hello.txt").readText())
+            assertTrue(result.written.none { it.name == "hello.txt" })
+            assertTrue(File(into, "stored.txt").isFile)
+        }
+    }
+
+    @Test
+    fun `overwriting replaces the file that is already there`() {
+        val into = temporary.newFolder("out")
+        File(into, "hello.txt").writeText("old\n")
+        Archives.open(fixture("plain.egg")).use { archive ->
+            ArchiveExtract.run(archive, into, overwrite = true)
+            assertEquals("hello from an egg\n".repeat(40), File(into, "hello.txt").readText())
+        }
+    }
+
+        @Test
     fun `picking a folder brings what is under it`() {
         val into = temporary.newFolder("out")
         Archives.open(fixture("folder.egg")).use { archive ->

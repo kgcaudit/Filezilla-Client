@@ -1782,7 +1782,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private sealed interface PendingPassword {
         val id: PaneId
         val session: ArchiveSession
-        data class Extract(override val id: PaneId, override val session: ArchiveSession, val picks: Set<String>) : PendingPassword
+        data class Extract(override val id: PaneId, override val session: ArchiveSession, val picks: Set<String>, val into: java.io.File, val overwrite: Boolean) : PendingPassword
         data class Open(override val id: PaneId, override val session: ArchiveSession, val name: String) : PendingPassword
     }
 
@@ -1918,7 +1918,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val pending = pendingPassword ?: return
         archivePasswordAsked = false
         when (pending) {
-            is PendingPassword.Extract -> runExtract(pending.id, pending.session, pending.picks, password)
+            is PendingPassword.Extract -> runExtract(pending.id, pending.session, pending.picks, pending.into, pending.overwrite, password)
             is PendingPassword.Open -> openArchiveEntry(pending.id, pending.session, pending.name, password)
         }
     }
@@ -1989,21 +1989,77 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val isFolder = session.entries.none { it.path == base && !it.isDirectory }
             if (isFolder) "$base/" else base
         }.let { ArchiveBrowsing.expand(session.entries, it) }
-        beginExtract(id, session, picks)
+        askDestination(id, session, picks)
     }
 
-    private fun beginExtract(id: PaneId, session: ArchiveSession, picks: Set<String>) {
+    /** An unpack whose destination folder already exists, awaiting an answer. */
+    data class ArchiveConflict(
+        val id: PaneId,
+        val session: ArchiveSession,
+        val picks: Set<String>,
+        val folderName: String,
+    )
+
+    var archiveConflict by mutableStateOf<ArchiveConflict?>(null)
+        private set
+
+    /**
+     * Decides where an unpack lands, asking once when a folder of that name
+     * is already there.
+     *
+     * The whole archive gets one answer -- overwrite what is there, keep it,
+     * or a new numbered folder -- and it is applied to every file, rather
+     * than a question per file.
+     */
+    private fun askDestination(id: PaneId, session: ArchiveSession, picks: Set<String>) {
+        val base = java.io.File(unpackInto(session.file), Archives.folderNameFor(session.name))
+        if (base.exists()) {
+            archiveConflict = ArchiveConflict(id, session, picks, base.name)
+        } else {
+            beginExtract(id, session, picks, base, overwrite = true)
+        }
+    }
+
+    fun dismissArchiveConflict() {
+        archiveConflict = null
+    }
+
+    /** The answer to "a folder of this name is already here". */
+    fun resolveArchiveConflict(choice: ConflictChoice) {
+        val conflict = archiveConflict ?: return
+        archiveConflict = null
+        val root = unpackInto(conflict.session.file)
+        val base = java.io.File(root, Archives.folderNameFor(conflict.session.name))
+        val into: java.io.File
+        val overwrite: Boolean
+        when (choice) {
+            // Keep both: a new numbered folder, so nothing already there is
+            // touched -- the safe default and today's behaviour.
+            ConflictChoice.KEEP_BOTH -> {
+                into = java.io.File(root, freeNameIn(root.path, Archives.folderNameFor(conflict.session.name)))
+                overwrite = true
+            }
+            // Overwrite: into the existing folder, replacing same-name files.
+            ConflictChoice.OVERWRITE -> { into = base; overwrite = true }
+            // Skip: into the existing folder, keeping files already there --
+            // resuming an unpack that was stopped part way.
+            ConflictChoice.SKIP -> { into = base; overwrite = false }
+        }
+        beginExtract(conflict.id, conflict.session, conflict.picks, into, overwrite)
+    }
+
+    private fun beginExtract(id: PaneId, session: ArchiveSession, picks: Set<String>, into: java.io.File, overwrite: Boolean) {
         val locked = session.entries.any {
             !it.isDirectory && it.encrypted &&
                 it.unreadable != ArchiveEntry.Unreadable.ENCRYPTED_METHOD &&
                 (picks.isEmpty() || it.path in picks)
         }
         if (locked) {
-            pendingPassword = PendingPassword.Extract(id, session, picks)
+            pendingPassword = PendingPassword.Extract(id, session, picks, into, overwrite)
             archivePasswordAsked = true
             return
         }
-        runExtract(id, session, picks, null)
+        runExtract(id, session, picks, into, overwrite, null)
     }
 
     /**
@@ -2015,7 +2071,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val files = names.map { java.io.File(folder, it) }.filter { ArchiveNav.browsable(it.name) }
         if (files.isEmpty()) return
         clearSelectionIn(id)
-        extractNext(id, files, 0, 0, 0)
+        // One archive gets the same destination question as one opened and
+        // unpacked; several keep numbering, so a batch is not a wall of
+        // prompts.
+        if (files.size == 1) {
+            val file = files.first()
+            archiveOpening = file.name
+            viewModelScope.launch {
+                val entries = withContext(Dispatchers.IO) {
+                    runCatching { Archives.open(file).use { it.entries } }
+                }.getOrNull()
+                archiveOpening = null
+                if (entries == null) {
+                    archiveOutcome = ArchiveOutcome(R.string.archive_not_readable)
+                } else {
+                    askDestination(id, ArchiveSession(file, file.name, file.parent ?: "", entries), emptySet())
+                }
+            }
+        } else {
+            extractNext(id, files, 0, 0, 0)
+        }
     }
 
     /** One archive at a time, so several selected archives each get their own folder. */
@@ -2035,14 +2110,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val opened = withContext(Dispatchers.IO) { runCatching { Archives.open(file).use { it.entries } } }
             archiveOpening = null
             val session = opened.getOrNull()?.let { ArchiveSession(file, file.name, file.parent ?: "", it) }
+            // A batch keeps numbering rather than asking per archive: several
+            // files each getting a folder dialog would be a wall of prompts.
+            val into = java.io.File(unpackInto(file), freeNameIn(file.parent ?: "", Archives.folderNameFor(file.name)))
             if (session == null) {
                 extractNext(id, files, index + 1, done, skipped + 1)
             } else if (session.entries.any { it.encrypted }) {
                 // A locked one in a batch asks on its own, then the batch goes on.
-                pendingPassword = PendingPassword.Extract(id, session, emptySet())
+                pendingPassword = PendingPassword.Extract(id, session, emptySet(), into, overwrite = true)
                 archivePasswordAsked = true
             } else {
-                runExtract(id, session, emptySet(), null) { relistLocalPanes() }
+                runExtract(id, session, emptySet(), into, overwrite = true, null) { relistLocalPanes() }
             }
         }
     }
@@ -2051,10 +2129,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         id: PaneId,
         session: ArchiveSession,
         picks: Set<String>,
+        into: java.io.File,
+        overwrite: Boolean,
         password: CharArray?,
         onDone: () -> Unit,
     ) {
-        val root = unpackInto(session.file)
         val stop = java.util.concurrent.atomic.AtomicBoolean(false)
         val extracting = getApplication<android.app.Application>().getString(R.string.archive_extracting)
         archiveBusy = ArchiveBusy(extracting, "", 0L, 0L, { stop.set(true) }, bytes = true)
@@ -2067,12 +2146,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val outcome = withContext(Dispatchers.IO) {
                 runCatching {
-                    val into = java.io.File(root, freeNameIn(root.path, Archives.folderNameFor(session.name)))
                     into.mkdirs()
                     val result = RarNative.extract(
                         session.file, into,
                         covered?.let { ArchiveBrowsing.expand(session.entries, it) },
-                        password, total,
+                        password, total, skipExisting = !overwrite,
                         object : RarNative.Sink {
                             override fun entry(name: String, size: Long, isDirectory: Boolean, modifiedMillis: Long, encrypted: Boolean) = Unit
                             override fun progress(doneBytes: Long, totalBytes: Long, name: String) {
@@ -2090,7 +2168,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 when (result) {
                     RarNative.Result.WRONG_PASSWORD -> {
                         runCatching { into.deleteRecursively() }
-                        pendingPassword = PendingPassword.Extract(id, session, picks)
+                        pendingPassword = PendingPassword.Extract(id, session, picks, into, overwrite)
                         archivePasswordAsked = true
                         archivePasswordWrong = true
                         return@onSuccess
@@ -2123,6 +2201,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         id: PaneId,
         session: ArchiveSession,
         picks: Set<String>,
+        into: java.io.File,
+        overwrite: Boolean,
         password: CharArray?,
         onDone: () -> Unit = {},
     ) {
@@ -2131,10 +2211,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // everything before it once per file. It reports and stops the
         // same way, so the bar and the stop button are unchanged.
         if (Archives.kindOf(session.file) == Archives.Kind.RAR) {
-            runRarExtract(id, session, picks, password, onDone)
+            runRarExtract(id, session, picks, into, overwrite, password, onDone)
             return
         }
-        val root = unpackInto(session.file)
         val stop = java.util.concurrent.atomic.AtomicBoolean(false)
         val extracting = getApplication<android.app.Application>().getString(R.string.archive_extracting)
         archiveBusy = ArchiveBusy(extracting, "", 0L, 0L, { stop.set(true) }, bytes = true)
@@ -2142,7 +2221,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val outcome = withContext(Dispatchers.IO) {
                 runCatching {
-                    val into = java.io.File(root, freeNameIn(root.path, Archives.folderNameFor(session.name)))
                     into.mkdirs()
                     Archives.open(session.file).use { opened ->
                         ArchiveExtract.run(
@@ -2150,6 +2228,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             into = into,
                             picks = picks,
                             password = password,
+                            overwrite = overwrite,
                             cancelled = { stop.get() },
                         ) { done, total, path ->
                             archiveBusy = archiveBusy?.copy(done = done, total = total, path = path)
@@ -2165,7 +2244,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     result.skipped.all { it.reason == ExtractResult.Reason.PASSWORD }
                 if (allLocked) {
                     runCatching { into.delete() }
-                    pendingPassword = PendingPassword.Extract(id, session, picks)
+                    pendingPassword = PendingPassword.Extract(id, session, picks, into, overwrite)
                     archivePasswordAsked = true
                     archivePasswordWrong = true
                     return@onSuccess

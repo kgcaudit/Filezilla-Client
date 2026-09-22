@@ -44,6 +44,7 @@ object RarNative {
         picks: Array<String>?,
         password: String?,
         totalBytes: Long,
+        skipExisting: Boolean,
         sink: Sink,
     ): Int
 
@@ -84,6 +85,7 @@ object RarNative {
         picks: Set<String>?,
         password: CharArray?,
         totalBytes: Long,
+        skipExisting: Boolean,
         sink: Sink,
     ): Result {
         val code = nativeExtract(
@@ -92,6 +94,7 @@ object RarNative {
             picks?.toTypedArray(),
             password?.let { String(it) },
             totalBytes,
+            skipExisting,
             sink,
         )
         return when {

@@ -9,6 +9,7 @@
 // compiled and driven over its own DLL C API.
 #include <jni.h>
 #include <clocale>
+#include <sys/stat.h>
 #include <string>
 #include <vector>
 #include "unrar/rar.hpp"   // pulls dll.hpp and the _UNIX typedefs it needs
@@ -214,7 +215,8 @@ Java_org_filezilla_android_archive_RarNative_nativeList(
 JNIEXPORT jint JNICALL
 Java_org_filezilla_android_archive_RarNative_nativeExtract(
         JNIEnv* env, jclass, jstring jpath, jstring jdest,
-        jobjectArray jpicks, jstring jpassword, jlong jtotalBytes, jobject sink) {
+        jobjectArray jpicks, jstring jpassword, jlong jtotalBytes,
+        jboolean jskipExisting, jobject sink) {
     std::string path = toUtf8(env, jpath);
     std::string dest = toUtf8(env, jdest);
 
@@ -267,6 +269,14 @@ Java_org_filezilla_android_archive_RarNative_nativeExtract(
         std::string name = header.FileName;
         for (auto& c : name) if (c == '\\') c = '/';
         bool take = !(header.Flags & RHDF_DIRECTORY) && wantsEntry(name, picks);
+        if (take && jskipExisting) {
+            // Leave a file that is already unpacked, the same as the Kotlin
+            // readers do -- unrar overwrites by default, so this is where
+            // "keep what is there" is enforced for rar.
+            std::string full = dest + "/" + name;
+            struct stat sb;
+            if (stat(full.c_str(), &sb) == 0) take = false;
+        }
         st.currentName = name;
         int op = take ? RAR_EXTRACT : RAR_SKIP;
         int pr = RARProcessFileW(h, op, (wchar_t*)wdest.c_str(), nullptr);

@@ -399,4 +399,6 @@
     <string name="archive_open">Open</string>
     <string name="archive_opening">Opening %1$s…</string>
     <string name="archive_open_failed">Could not open %1$s: %2$s</string>
+    <string name="archive_folder_exists_title">A folder named "%1$s" already exists</string>
+    <string name="archive_folder_exists_detail">Choose what to do with the files it unpacks. The same choice is used for every file.</string>
 </resources>

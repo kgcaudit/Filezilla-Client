@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material3.LinearProgressIndicator
@@ -159,5 +160,57 @@ fun ArchiveOpeningDialog(name: String) {
                 )
             }
         }
+    }
+}
+
+/**
+ * The question when the folder an unpack would create is already there.
+ *
+ * One answer for the whole archive -- overwrite, keep what is there, or a
+ * new numbered folder -- applied to every file, rather than a prompt per
+ * file. The three are the app's own conflict choices, worded as they are
+ * everywhere else.
+ */
+@Composable
+fun ArchiveConflictDialog(
+    folderName: String,
+    onChoose: (org.filezilla.android.storage.ConflictChoice) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    OloDialog(
+        title = stringResource(R.string.archive_folder_exists_title, folderName),
+        detail = stringResource(R.string.archive_folder_exists_detail),
+        onDismiss = onDismiss,
+        content = {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                ConflictRow(
+                    R.string.conflict_overwrite, R.string.conflict_overwrite_detail,
+                ) { onChoose(org.filezilla.android.storage.ConflictChoice.OVERWRITE) }
+                ConflictRow(
+                    R.string.conflict_skip, R.string.conflict_skip_detail,
+                ) { onChoose(org.filezilla.android.storage.ConflictChoice.SKIP) }
+                ConflictRow(
+                    R.string.conflict_keep_both, R.string.conflict_keep_both_detail,
+                ) { onChoose(org.filezilla.android.storage.ConflictChoice.KEEP_BOTH) }
+            }
+        },
+        action = {},
+    )
+}
+
+@Composable
+private fun ConflictRow(title: Int, detail: Int, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp),
+    ) {
+        Text(stringResource(title), style = MaterialTheme.typography.bodyLarge)
+        Text(
+            stringResource(detail),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
