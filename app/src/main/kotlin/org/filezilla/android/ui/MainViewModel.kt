@@ -1734,6 +1734,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         graph.preferences.setMediaPosition(file.path, positionMs)
     }
 
+    /** How large the player draws subtitles, as a fraction of the screen. */
+    fun subtitleScale(): Float = graph.preferences.subtitleScale()
+
+    /** What colour the player draws subtitles. */
+    fun subtitleColor(): Int = graph.preferences.subtitleColor()
+
+    /** Remembers the subtitle size and colour, applied to every video. */
+    fun setSubtitleStyle(scale: Float, color: Int) {
+        graph.preferences.setSubtitleStyle(scale, color)
+    }
+
     /** One image the viewer can show, on the phone or still inside an archive. */
     sealed interface ImageRef {
         val name: String

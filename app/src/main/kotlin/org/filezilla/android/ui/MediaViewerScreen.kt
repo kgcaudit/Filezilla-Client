@@ -5,25 +5,42 @@ import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.view.GestureDetector
 import android.view.MotionEvent
+import android.view.View
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ScreenRotation
+import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -47,12 +64,16 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import java.io.File
 import java.util.Locale
 import org.filezilla.android.R
+import org.filezilla.android.data.AppPreferences
 
 /**
  * The app's own player for a video or a sound.
@@ -97,6 +118,9 @@ fun MediaViewerScreen(viewer: MainViewModel.MediaViewer, model: MainViewModel) {
     // put back to the start; one left partway keeps its position, unless it is
     // within a second of the end, which reads as finished.
     var index by remember { mutableIntStateOf(viewer.index) }
+    // Bumped whenever the available tracks change, so the subtitle sheet's list
+    // rebuilds -- both when a new file loads and after a pick takes effect.
+    var tracksVersion by remember { mutableIntStateOf(0) }
     DisposableEffect(exo) {
         val listener = object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -108,6 +132,10 @@ fun MediaViewerScreen(viewer: MainViewModel.MediaViewer, model: MainViewModel) {
                 if (state == Player.STATE_ENDED) {
                     viewer.items.getOrNull(exo.currentMediaItemIndex)?.let { model.setMediaPosition(it, 0L) }
                 }
+            }
+
+            override fun onTracksChanged(tracks: Tracks) {
+                tracksVersion++
             }
         }
         exo.addListener(listener)
@@ -171,6 +199,36 @@ fun MediaViewerScreen(viewer: MainViewModel.MediaViewer, model: MainViewModel) {
         seekTarget = -1L
     }
 
+    // The top bar -- filename, rotate, and subtitle buttons -- rides with the
+    // player's own controls: it shows when they show and hides when they hide,
+    // so a video plays under a clear screen and the chrome is one tap away.
+    var controlsVisible by remember { mutableStateOf(true) }
+    var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
+    var showSubtitleSheet by remember { mutableStateOf(false) }
+
+    // Subtitle look, kept for the whole app. Applied to the player's subtitle
+    // view whenever it or the settings change, and written back so the next
+    // video opens the same way.
+    var subScale by rememberSaveable { mutableStateOf(model.subtitleScale()) }
+    var subColor by rememberSaveable { mutableStateOf(model.subtitleColor()) }
+    LaunchedEffect(playerViewRef, subScale, subColor) {
+        val subtitleView = playerViewRef?.subtitleView ?: return@LaunchedEffect
+        subtitleView.setApplyEmbeddedStyles(false)
+        subtitleView.setApplyEmbeddedFontSizes(false)
+        subtitleView.setFractionalTextSize(subScale)
+        subtitleView.setStyle(
+            CaptionStyleCompat(
+                subColor,
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT,
+                CaptionStyleCompat.EDGE_TYPE_OUTLINE,
+                android.graphics.Color.BLACK,
+                null,
+            ),
+        )
+    }
+    LaunchedEffect(subScale, subColor) { model.setSubtitleStyle(subScale, subColor) }
+
     Surface(Modifier.fillMaxSize(), color = Color.Black) {
         Box(Modifier.fillMaxSize()) {
             AndroidView(
@@ -182,6 +240,13 @@ fun MediaViewerScreen(viewer: MainViewModel.MediaViewer, model: MainViewModel) {
                     playerView.setShowNextButton(viewer.items.size > 1)
                     playerView.setShowPreviousButton(viewer.items.size > 1)
                     playerView.setBackgroundColor(android.graphics.Color.BLACK)
+                    // The top bar follows the controls in and out.
+                    playerView.setControllerVisibilityListener(
+                        PlayerView.ControllerVisibilityListener { visibility ->
+                            controlsVisible = visibility == View.VISIBLE
+                        },
+                    )
+                    playerViewRef = playerView
 
                     // Sideways-drag scrubbing, watched but never consumed: the
                     // listener always returns false, so a tap still reaches the
@@ -234,48 +299,61 @@ fun MediaViewerScreen(viewer: MainViewModel.MediaViewer, model: MainViewModel) {
                 modifier = Modifier.fillMaxSize(),
             )
             // A way back, over the top-left, since the player's own controls
-            // have no exit; and a turn button opposite it.
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.35f))
-                    .padding(top = reservedTopDp)
-                    .padding(horizontal = 4.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            // have no exit; the subtitle and turn buttons opposite it. Shown
+            // only while the controls are, so the picture is otherwise clear.
+            AnimatedVisibility(
+                visible = controlsVisible,
+                modifier = Modifier.align(Alignment.TopStart),
             ) {
-                IconButton(onClick = model::closeMediaViewer) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.action_back),
-                        tint = Color.White,
-                    )
-                }
-                Text(
-                    viewer.items.getOrNull(index)?.name.orEmpty(),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 4.dp),
-                )
-                IconButton(
-                    onClick = {
-                        orientation = when (orientation) {
-                            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE ->
-                                ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-                            ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT ->
-                                ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                            else -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                        }
-                    },
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(Color.Black.copy(alpha = 0.35f))
+                        .padding(top = reservedTopDp)
+                        .padding(horizontal = 4.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(
-                        Icons.Filled.ScreenRotation,
-                        contentDescription = stringResource(R.string.action_rotate),
-                        tint = Color.White,
+                    IconButton(onClick = model::closeMediaViewer) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back),
+                            tint = Color.White,
+                        )
+                    }
+                    Text(
+                        viewer.items.getOrNull(index)?.name.orEmpty(),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 4.dp),
                     )
+                    IconButton(onClick = { showSubtitleSheet = true }) {
+                        Icon(
+                            Icons.Filled.Subtitles,
+                            contentDescription = stringResource(R.string.action_subtitles),
+                            tint = Color.White,
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            orientation = when (orientation) {
+                                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE ->
+                                    ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                                ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT ->
+                                    ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                                else -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                            }
+                        },
+                    ) {
+                        Icon(
+                            Icons.Filled.ScreenRotation,
+                            contentDescription = stringResource(R.string.action_rotate),
+                            tint = Color.White,
+                        )
+                    }
                 }
             }
             // Where the scrub would land, shown only while a drag is in hand.
@@ -301,6 +379,171 @@ fun MediaViewerScreen(viewer: MainViewModel.MediaViewer, model: MainViewModel) {
             }
         }
     }
+
+    if (showSubtitleSheet) {
+        SubtitleSheet(
+            player = exo,
+            tracksVersion = tracksVersion,
+            scale = subScale,
+            color = subColor,
+            onScale = { subScale = it },
+            onColor = { subColor = it },
+            onDismiss = { showSubtitleSheet = false },
+        )
+    }
+}
+
+/**
+ * The subtitle settings, in a sheet up from the bottom.
+ *
+ * Two things, in the one place: which subtitle to show -- off, or any of the
+ * tracks the film carries or was found beside it -- and how it looks, its size
+ * on a slider and its colour among a few. The look is the app's throughout; the
+ * choice of track is this film's.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@androidx.annotation.OptIn(UnstableApi::class)
+@Composable
+private fun SubtitleSheet(
+    player: Player,
+    tracksVersion: Int,
+    scale: Float,
+    color: Int,
+    onScale: (Float) -> Unit,
+    onColor: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState()
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 16.dp),
+        ) {
+            Text(
+                stringResource(R.string.action_subtitles),
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Spacer(Modifier.height(12.dp))
+
+            Text(
+                stringResource(R.string.subtitle_track),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            val textGroups = remember(tracksVersion, player) {
+                player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
+            }
+            val anySelected = textGroups.any { group ->
+                (0 until group.length).any { group.isTrackSelected(it) }
+            }
+            SubtitleChoice(
+                label = stringResource(R.string.subtitle_off),
+                selected = !anySelected,
+            ) {
+                player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                    .build()
+            }
+            val fallback = stringResource(R.string.subtitle_default_name)
+            textGroups.forEach { group ->
+                for (i in 0 until group.length) {
+                    if (!group.isTrackSupported(i)) continue
+                    val format = group.getTrackFormat(i)
+                    val label = format.label ?: trackLanguageName(format.language) ?: fallback
+                    SubtitleChoice(label = label, selected = group.isTrackSelected(i)) {
+                        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+                            .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, i))
+                            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                            .build()
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Text(
+                stringResource(R.string.subtitle_size),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Slider(
+                value = scale,
+                onValueChange = onScale,
+                valueRange = AppPreferences.MIN_SUBTITLE_SCALE..AppPreferences.MAX_SUBTITLE_SCALE,
+            )
+
+            Spacer(Modifier.height(8.dp))
+            Text(
+                stringResource(R.string.subtitle_color),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                for (swatch in SUBTITLE_COLORS) {
+                    val chosen = swatch == color
+                    Box(
+                        Modifier
+                            .size(36.dp)
+                            .border(
+                                width = if (chosen) 3.dp else 1.dp,
+                                color = if (chosen) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.outline
+                                },
+                                shape = CircleShape,
+                            )
+                            .padding(4.dp)
+                            .background(Color(swatch), CircleShape)
+                            .clickable { onColor(swatch) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SubtitleChoice(label: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = onClick)
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 4.dp),
+        )
+    }
+}
+
+// The colours the subtitle can be, white first: the caption colours people
+// reach for, on a dark film.
+private val SUBTITLE_COLORS = listOf(
+    0xFFFFFFFF.toInt(),
+    0xFFFFEB3B.toInt(),
+    0xFF00E5FF.toInt(),
+    0xFF76FF03.toInt(),
+    0xFFFF5252.toInt(),
+)
+
+/** A readable name for a subtitle track's language code, for the picker. */
+private fun trackLanguageName(language: String?): String? = when (language?.lowercase()) {
+    null -> null
+    "ko", "kor" -> "한국어"
+    "en", "eng" -> "English"
+    "ja", "jpn" -> "日本語"
+    "zh", "chi", "zho" -> "中文"
+    else -> language.uppercase(Locale.ROOT)
 }
 
 /** A duration as h:mm:ss, or m:ss under an hour. */

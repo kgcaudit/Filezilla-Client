@@ -319,6 +319,25 @@ class AppPreferences(context: Context) {
 
     private fun mediaPositionKey(key: String) = "$KEY_MEDIA_POSITION${comicHash(key)}"
 
+    /**
+     * How the player draws subtitles: a text height as a fraction of the screen,
+     * and a colour. One setting for the whole app rather than per file, since a
+     * reader who wants larger yellow captions wants them on everything. The
+     * default height is media3's own, and the default colour white.
+     */
+    fun subtitleScale(): Float =
+        prefs.getFloat(KEY_SUBTITLE_SCALE, DEFAULT_SUBTITLE_SCALE)
+            .coerceIn(MIN_SUBTITLE_SCALE, MAX_SUBTITLE_SCALE)
+
+    fun subtitleColor(): Int = prefs.getInt(KEY_SUBTITLE_COLOR, DEFAULT_SUBTITLE_COLOR)
+
+    fun setSubtitleStyle(scale: Float, color: Int) {
+        prefs.edit()
+            .putFloat(KEY_SUBTITLE_SCALE, scale.coerceIn(MIN_SUBTITLE_SCALE, MAX_SUBTITLE_SCALE))
+            .putInt(KEY_SUBTITLE_COLOR, color)
+            .apply()
+    }
+
     private fun comicKeys(): List<String> =
         prefs.getString(KEY_COMIC_KEYS, null)
             ?.split(KEY_SEPARATOR)
@@ -392,6 +411,17 @@ class AppPreferences(context: Context) {
         const val KEY_COMIC_KEYS = "comic_page_keys"
         const val KEY_MEDIA_POSITION = "media_pos_"
         const val KEY_MEDIA_KEYS = "media_pos_keys"
+        const val KEY_SUBTITLE_SCALE = "subtitle_scale"
+        const val KEY_SUBTITLE_COLOR = "subtitle_color"
+
+        // media3's SubtitleView.DEFAULT_TEXT_SIZE_FRACTION, and the range the
+        // player's own subtitle settings offer -- roughly half again as small
+        // to twice as large. White by default, the caption colour everyone
+        // expects.
+        const val DEFAULT_SUBTITLE_SCALE = 0.0533f
+        const val MIN_SUBTITLE_SCALE = 0.03f
+        const val MAX_SUBTITLE_SCALE = 0.12f
+        const val DEFAULT_SUBTITLE_COLOR = 0xFFFFFFFF.toInt()
 
         /** A newline, which no path and no site id contains. */
         const val KEY_SEPARATOR = "\n"

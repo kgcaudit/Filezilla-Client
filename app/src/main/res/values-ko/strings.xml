@@ -250,6 +250,12 @@
     <string name="exit_confirm">한 번 더 누르면 종료됩니다</string>
     <string name="action_back">뒤로</string>
     <string name="action_rotate">화면 회전</string>
+    <string name="action_subtitles">자막</string>
+    <string name="subtitle_off">끄기</string>
+    <string name="subtitle_track">자막 선택</string>
+    <string name="subtitle_size">크기</string>
+    <string name="subtitle_color">색상</string>
+    <string name="subtitle_default_name">자막</string>
     <string name="transfers_running">%1$d개 전송 중</string>
     <string name="transfers_waiting">%1$d개 전송 대기 중</string>
     <string name="transfers_percent">%1$d%%</string>
