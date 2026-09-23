@@ -63,6 +63,29 @@ class DialogShellTest {
     }
 
     /**
+     * A dialog reporting work in progress cannot be dismissed by a stray touch.
+     *
+     * The work dialogs -- compressing, extracting, fetching a file to open,
+     * scanning a server -- wire their stop to the dialog's dismiss, and a dialog
+     * dismisses on a tap outside it or a back gesture. So a touch anywhere on
+     * the screen during a long compress cancelled it. A dialog whose action is
+     * the stop button must therefore turn both routes off, so stopping is the
+     * button's job and only its. This reads the sources because it is a fact
+     * about how the dialog is built, and one a new work dialog would forget.
+     */
+    @Test
+    fun `a work dialog only stops from its stop button`() {
+        val leaky = sources()
+            .filter { "R.string.action_stop" in it.readText() && "OloDialog(" in it.readText() }
+            .filterNot { "dismissOnClickOutside = false" in it.readText() }
+            .map { it.name }
+            .sorted()
+            .toList()
+
+        assertEquals(emptyList<String>(), leaky)
+    }
+
+    /**
      * A name is asked for in one place.
      *
      * Two prompts is how the label came to be wrong in one of them; this is

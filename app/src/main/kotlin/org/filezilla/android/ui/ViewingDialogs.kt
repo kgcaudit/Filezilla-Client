@@ -25,11 +25,15 @@ import org.filezilla.android.R
 fun ViewingDialog(viewing: MainViewModel.Viewing, onCancel: () -> Unit) {
     OloDialog(
         title = stringResource(R.string.viewing_title),
-        onDismiss = onCancel,
-        // No confirming button. There is nothing to confirm: the only
-        // thing to decide is whether to carry on, and the dismissing
-        // button already says that.
+        // A stray touch outside, or a back gesture, must not cancel the fetch:
+        // stopping is the stop button's job and only its, so nothing else
+        // closes this while the file is on its way.
+        onDismiss = {},
         dismissLabel = null,
+        properties = androidx.compose.ui.window.DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+        ),
         content = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 FileHeading(viewing.name, isDirectory = false)
