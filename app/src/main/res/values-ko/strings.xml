@@ -249,6 +249,7 @@
     <string name="open_no_app">이 파일을 열 수 있는 앱이 없습니다</string>
     <string name="exit_confirm">한 번 더 누르면 종료됩니다</string>
     <string name="action_back">뒤로</string>
+    <string name="action_rotate">화면 회전</string>
     <string name="transfers_running">%1$d개 전송 중</string>
     <string name="transfers_waiting">%1$d개 전송 대기 중</string>
     <string name="transfers_percent">%1$d%%</string>

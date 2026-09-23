@@ -252,6 +252,7 @@
     <string name="open_no_app">No app on this phone opens that file</string>
     <string name="exit_confirm">Press back again to leave</string>
     <string name="action_back">Back</string>
+    <string name="action_rotate">Rotate screen</string>
     <string name="transfers_running">%1$d transferring</string>
     <string name="transfers_waiting">%1$d waiting to transfer</string>
     <string name="transfers_percent">%1$d%%</string>
