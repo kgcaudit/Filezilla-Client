@@ -188,6 +188,11 @@ dependencies {
     implementation(libs.androidx.lifecycle.service)
     implementation(libs.androidx.documentfile)
 
+    // In-app audio/video playback: ExoPlayer for the engine, the PlayerView for
+    // the controls. media3-session (background audio) is added in phase 2.
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.ui)
+
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)

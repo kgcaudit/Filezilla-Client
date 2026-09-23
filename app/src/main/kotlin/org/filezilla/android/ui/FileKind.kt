@@ -39,6 +39,12 @@ fun kindOf(name: String, isDirectory: Boolean): FileKind {
     return BY_EXTENSION[name.substring(cut + 1).lowercase()] ?: FileKind.OTHER
 }
 
+/** Whether the app's own player shows this file: a video or a sound. */
+fun looksMedia(name: String): Boolean = kindOf(name, false).let { it == FileKind.VIDEO || it == FileKind.AUDIO }
+
+/** A video, so the player shows a picture rather than only controls. */
+fun looksVideo(name: String): Boolean = kindOf(name, false) == FileKind.VIDEO
+
 private val BY_EXTENSION: Map<String, FileKind> = buildMap {
     // alz and egg are ESTsoft's, they are everywhere in Korea, and this
     // app opens both -- so a row that is one should look like an archive

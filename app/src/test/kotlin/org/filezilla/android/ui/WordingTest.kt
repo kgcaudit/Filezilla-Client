@@ -116,6 +116,9 @@ class WordingTest {
             // text reader and the image reader and on the reader's end card:
             // one "close" for the one thing it does, wherever it is shown.
             "action_close",
+            // "Back": the app bar's up arrow and the media player's back arrow,
+            // the one word the back-arrow glyph is allowed to mean.
+            "action_back",
             // The verb a prompt's button carries. Two prompts each make
             // something and two each rename something, and they have to
             // say it the same way -- which is the whole reason the button

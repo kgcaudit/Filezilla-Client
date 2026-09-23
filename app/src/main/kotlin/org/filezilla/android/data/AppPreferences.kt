@@ -291,6 +291,34 @@ class AppPreferences(context: Context) {
         edit.apply()
     }
 
+    /**
+     * How far into a video or a sound it was left, in milliseconds, so it
+     * reopens where it stopped. Capped the same way comics are; the oldest is
+     * forgotten first. Zero (or none) means start from the beginning.
+     */
+    fun mediaPosition(key: String): Long =
+        prefs.getLong(mediaPositionKey(key), 0L).coerceAtLeast(0L)
+
+    fun setMediaPosition(key: String, positionMs: Long) {
+        val edit = prefs.edit()
+        val keys = (mediaKeys() - key).toMutableList()
+        keys += key
+        while (keys.size > MAX_REMEMBERED_MEDIA) {
+            edit.remove(mediaPositionKey(keys.removeAt(0)))
+        }
+        edit.putLong(mediaPositionKey(key), positionMs.coerceAtLeast(0L))
+        edit.putString(KEY_MEDIA_KEYS, keys.joinToString(KEY_SEPARATOR))
+        edit.apply()
+    }
+
+    private fun mediaKeys(): List<String> =
+        prefs.getString(KEY_MEDIA_KEYS, null)
+            ?.split(KEY_SEPARATOR)
+            ?.filter { it.isNotEmpty() }
+            .orEmpty()
+
+    private fun mediaPositionKey(key: String) = "$KEY_MEDIA_POSITION${comicHash(key)}"
+
     private fun comicKeys(): List<String> =
         prefs.getString(KEY_COMIC_KEYS, null)
             ?.split(KEY_SEPARATOR)
@@ -362,6 +390,8 @@ class AppPreferences(context: Context) {
         const val KEY_COMIC_PAGE = "comic_page_"
         const val KEY_COMIC_WEBTOON = "comic_webtoon_"
         const val KEY_COMIC_KEYS = "comic_page_keys"
+        const val KEY_MEDIA_POSITION = "media_pos_"
+        const val KEY_MEDIA_KEYS = "media_pos_keys"
 
         /** A newline, which no path and no site id contains. */
         const val KEY_SEPARATOR = "\n"
@@ -380,5 +410,6 @@ class AppPreferences(context: Context) {
 
         /** How many comics keep their place; the oldest is forgotten first. */
         internal const val MAX_REMEMBERED_COMICS = 500
+        internal const val MAX_REMEMBERED_MEDIA = 300
     }
 }

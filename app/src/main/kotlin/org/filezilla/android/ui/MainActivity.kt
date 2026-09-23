@@ -492,6 +492,10 @@ private fun AppScreen(
                             model.openTextViewer(file, editable = true)
                         ImageFiles.looksImage(file.name) ->
                             model.openLocalImage(id, file)
+                        // A video or a sound opens in the app's own player, with
+                        // the rest of its kind in the folder as a playlist.
+                        looksMedia(file.name) ->
+                            model.openLocalMedia(id, file)
                         else -> {
                             askWhichApp = false
                             openingFile = file
@@ -796,6 +800,10 @@ private fun AppScreen(
                     model.openTextViewer(ready, editable = false)
                 ImageFiles.looksImage(ready.name) ->
                     model.openImageViewer(listOf(MainViewModel.ImageRef.OnDisk(ready)), 0, comicKey = null)
+                // A server video or sound, fetched to the cache, opens in the
+                // app's own player on that copy (Phase 1: cache then play).
+                looksMedia(ready.name) ->
+                    model.openCachedMedia(ready)
                 else -> {
                     askWhichApp = false
                     openingFile = ready
@@ -908,6 +916,13 @@ private fun AppScreen(
     model.textViewer?.let { viewer ->
         BackHandler { model.closeTextViewer() }
         TextViewerScreen(viewer, model)
+    }
+    model.mediaViewer?.let { viewer ->
+        // Keyed on the opened file so tapping a different one rebuilds the
+        // player rather than swapping the source under a running one.
+        androidx.compose.runtime.key(viewer.items.getOrNull(viewer.index)?.path ?: "") {
+            MediaViewerScreen(viewer, model)
+        }
     }
 }
 

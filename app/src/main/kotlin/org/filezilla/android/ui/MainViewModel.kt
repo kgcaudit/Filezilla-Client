@@ -1677,6 +1677,63 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var textViewer by mutableStateOf<TextViewer?>(null)
         private set
 
+    /**
+     * What the media player is showing: a playlist of files on the phone, which
+     * one is playing, and the key its place is saved under.
+     *
+     * The files are on disk -- a phone file, or a server file already fetched to
+     * the cache -- because a player reads a file, not a listing. A folder of
+     * videos or songs opens as a playlist so one runs on to the next, the way a
+     * folder of pictures swipes through.
+     */
+    data class MediaViewer(
+        val items: List<java.io.File>,
+        val index: Int,
+    )
+
+    var mediaViewer by mutableStateOf<MediaViewer?>(null)
+        private set
+
+    /**
+     * Opens [file] in the player with the other media of its kind in the folder.
+     *
+     * Video with video, sound with sound: a folder holding both a film and its
+     * soundtrack should not fold them into one playlist, and the tap says which
+     * kind was meant. Ordered for playing by natural name, like the pages of a
+     * comic.
+     */
+    fun openLocalMedia(id: PaneId, file: java.io.File) {
+        val folder = pane(id).path
+        val wantVideo = looksVideo(file.name)
+        val siblings = pane(id).entries
+            .filter { !it.isDirectory && looksMedia(it.name) && looksVideo(it.name) == wantVideo }
+            .sortedWith(org.filezilla.android.files.NaturalOrder.by { it.name })
+        val items = siblings.map { java.io.File(folder, it.name) }
+        val index = items.indexOfFirst { it.name == file.name }.coerceAtLeast(0)
+        if (items.isEmpty()) return
+        mediaViewer = MediaViewer(items, index)
+    }
+
+    /**
+     * Opens one media file already on disk -- a server file fetched to the
+     * cache -- on its own, since its neighbours are still on the server.
+     */
+    fun openCachedMedia(file: java.io.File) {
+        mediaViewer = MediaViewer(listOf(file), 0)
+    }
+
+    fun closeMediaViewer() {
+        mediaViewer = null
+    }
+
+    /** Where a media file was last left, in milliseconds, or 0 to start over. */
+    fun mediaPosition(file: java.io.File): Long = graph.preferences.mediaPosition(file.path)
+
+    /** Remembers where a media file was left, so it reopens there. */
+    fun setMediaPosition(file: java.io.File, positionMs: Long) {
+        graph.preferences.setMediaPosition(file.path, positionMs)
+    }
+
     /** One image the viewer can show, on the phone or still inside an archive. */
     sealed interface ImageRef {
         val name: String
