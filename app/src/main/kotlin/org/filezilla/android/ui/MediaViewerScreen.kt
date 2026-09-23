@@ -53,7 +53,6 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -101,6 +100,7 @@ import org.filezilla.android.R
 import org.filezilla.android.data.AppPreferences
 import org.filezilla.android.playback.PlaybackService
 import org.filezilla.android.playback.SubtitleBundle
+import org.filezilla.android.ui.theme.DarkColors
 
 /**
  * The app's own player for a video or a sound.
@@ -897,12 +897,13 @@ private fun PlayerSettingsSheet(
     onColor: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    // The picture is dark, so the panel is dark whatever the system theme, its
-    // components readable on it; it is kept short of the screen and scrolls.
+    // The picture is dark, so the panel takes the app's own dark palette whatever
+    // the system theme -- clay on warm near-black, not Material's default lavender
+    // -- its components readable on it; it is kept short of the screen and scrolls.
     val maxPanelHeight = (LocalConfiguration.current.screenHeightDp * 0.9f).dp
     val backdrop = remember { MutableInteractionSource() }
     val panel = remember { MutableInteractionSource() }
-    MaterialTheme(colorScheme = darkColorScheme()) {
+    MaterialTheme(colorScheme = DarkColors) {
         // The backdrop dims nothing of its own -- it is only a way to tap outside
         // and put the panel away -- so nothing but the panel is laid over the film.
         Box(
