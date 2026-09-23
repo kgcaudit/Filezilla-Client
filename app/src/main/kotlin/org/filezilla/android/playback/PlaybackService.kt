@@ -1,9 +1,14 @@
 package org.filezilla.android.playback
 
 import android.content.Intent
+import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
+import android.net.Uri
+import androidx.core.content.ContextCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
@@ -14,6 +19,8 @@ import androidx.media3.session.MediaSessionService
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import java.io.ByteArrayOutputStream
+import java.util.concurrent.Executors
 
 /**
  * The media player's engine, living in a service so it outlasts the screen.
@@ -33,8 +40,15 @@ class PlaybackService : MediaSessionService() {
 
     private var session: MediaSession? = null
 
+    // One thread for pulling a poster frame out of the film for the notification,
+    // off the main thread; shut down with the service.
+    private val thumbnailExecutor = Executors.newSingleThreadExecutor()
+
     private companion object {
         const val SEEK_STEP_MS = 10_000L
+        // The long edge of the poster frame; small enough to stay light in a
+        // notification, large enough not to look coarse.
+        const val THUMBNAIL_MAX_EDGE = 640
     }
 
     @UnstableApi
@@ -70,6 +84,87 @@ class PlaybackService : MediaSessionService() {
         // skips have no place on the notification -- only the previous button was
         // showing anyway, and it did nothing a listener would expect.
         setMediaNotificationProvider(PlayPauseOnlyNotificationProvider(this))
+        // The notification shows a still frame of the film as its artwork -- a
+        // poster, not live video, which a notification cannot play. The frame is
+        // pulled off the thread and attached to the current item's metadata once
+        // per item; media3 then redraws the notification with it.
+        player.addListener(object : Player.Listener {
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                attachArtwork(mediaItem)
+            }
+        })
+        attachArtwork(player.currentMediaItem)
+    }
+
+    /**
+     * Pulls a poster frame from [item]'s film on a background thread and attaches
+     * it to the item's metadata, so the notification has a picture to show. Does
+     * nothing when the item already has artwork, and, back on the main thread,
+     * only applies the frame if that same item is still the current one -- so a
+     * quick change of film does not stamp one film's frame onto another. The item
+     * is rebuilt whole (uri and subtitles kept), only its artwork added.
+     */
+    private fun attachArtwork(item: MediaItem?) {
+        item ?: return
+        if (item.mediaMetadata.artworkData != null) return
+        val uri = item.localConfiguration?.uri ?: item.requestMetadata.mediaUri ?: return
+        val player = session?.player ?: return
+        val index = player.currentMediaItemIndex
+        thumbnailExecutor.execute {
+            val bytes = frameBytes(uri) ?: return@execute
+            ContextCompat.getMainExecutor(this).execute {
+                val p = session?.player ?: return@execute
+                if (p.currentMediaItemIndex == index &&
+                    p.currentMediaItem === item &&
+                    item.mediaMetadata.artworkData == null
+                ) {
+                    p.replaceMediaItem(
+                        index,
+                        item.buildUpon()
+                            .setMediaMetadata(
+                                item.mediaMetadata.buildUpon()
+                                    .setArtworkData(bytes, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+                                    .build(),
+                            )
+                            .build(),
+                    )
+                }
+            }
+        }
+    }
+
+    /** A representative frame of the film at [uri] as JPEG bytes, or null. */
+    private fun frameBytes(uri: Uri): ByteArray? = runCatching {
+        val retriever = MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(this, uri)
+            val frame = retriever.getFrameAtTime(-1)
+            if (frame == null) {
+                null
+            } else {
+                val scaled = scaleDown(frame, THUMBNAIL_MAX_EDGE)
+                val out = ByteArrayOutputStream()
+                scaled.compress(Bitmap.CompressFormat.JPEG, 80, out)
+                if (scaled !== frame) scaled.recycle()
+                frame.recycle()
+                out.toByteArray()
+            }
+        } finally {
+            retriever.release()
+        }
+    }.getOrNull()
+
+    /** [bitmap] shrunk so its longer edge is at most [maxEdge], or itself if already smaller. */
+    private fun scaleDown(bitmap: Bitmap, maxEdge: Int): Bitmap {
+        val longEdge = maxOf(bitmap.width, bitmap.height)
+        if (longEdge <= maxEdge || longEdge == 0) return bitmap
+        val ratio = maxEdge.toFloat() / longEdge
+        return Bitmap.createScaledBitmap(
+            bitmap,
+            (bitmap.width * ratio).toInt().coerceAtLeast(1),
+            (bitmap.height * ratio).toInt().coerceAtLeast(1),
+            true,
+        )
     }
 
     /**
@@ -145,6 +240,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        thumbnailExecutor.shutdown()
         session?.run {
             player.release()
             release()
