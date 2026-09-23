@@ -492,18 +492,24 @@ private fun MediaPlayer(
     }
 
     // On opening a file, put back the subtitle it was last watched with -- once,
-    // as soon as the tracks are known.
+    // as soon as the tracks are known. With no saved choice, the text selection
+    // is cleared to its default instead, so a previous film's "off" does not
+    // carry over and keep this one's subtitle from showing (the player, and its
+    // selection, are the service's and outlive one film).
     var subtitleAppliedFor by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(currentFile, tracksVersion) {
         val file = currentFile ?: return@LaunchedEffect
         if (subtitleAppliedFor == file.path) return@LaunchedEffect
         if (textTracks.isEmpty() && player.playbackState != Player.STATE_READY) return@LaunchedEffect
-        model.subtitleChoice(file)?.let { token ->
-            if (token == SUBTITLE_OFF_TOKEN) {
-                disableTextTracks(player)
-            } else {
-                textTracks.firstOrNull { it.token == token }?.let { applyTextTrack(player, it) }
+        when (val token = model.subtitleChoice(file)) {
+            null -> {
+                player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+                    .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                    .build()
             }
+            SUBTITLE_OFF_TOKEN -> disableTextTracks(player)
+            else -> textTracks.firstOrNull { it.token == token }?.let { applyTextTrack(player, it) }
         }
         subtitleAppliedFor = file.path
     }
