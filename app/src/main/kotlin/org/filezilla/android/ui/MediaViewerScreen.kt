@@ -15,6 +15,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -72,6 +73,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -514,10 +516,17 @@ private fun MediaPlayer(
         subtitleAppliedFor = file.path
     }
 
-    // Playback speed, cycled by the speed button, and the picture's fit --
-    // letterboxed, cropped to fill, or stretched -- cycled by the aspect button.
-    var speed by rememberSaveable { mutableFloatStateOf(1f) }
+    // Playback speed, set by dragging the speed chip sideways rather than tapping
+    // through fixed steps, and the picture's fit -- letterboxed, cropped to fill,
+    // or stretched -- cycled by the aspect button. The drag accumulates a raw
+    // value; what is applied and shown is that snapped to a twentieth, so the
+    // number stays tidy while the drag stays smooth.
+    var speedRaw by rememberSaveable { mutableFloatStateOf(1f) }
+    val speed = (speedRaw * 20f).roundToInt() / 20f
     LaunchedEffect(player, speed) { player.setPlaybackSpeed(speed) }
+    val onSpeedDrag: (Float) -> Unit = { dragPx ->
+        speedRaw = (speedRaw + dragPx * SPEED_DRAG_GAIN).coerceIn(MIN_SPEED, MAX_SPEED)
+    }
     var resizeMode by rememberSaveable { mutableIntStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
     LaunchedEffect(playerViewRef, resizeMode) { playerViewRef?.resizeMode = resizeMode }
 
@@ -714,15 +723,22 @@ private fun MediaPlayer(
                             .weight(1f)
                             .padding(horizontal = 4.dp),
                     )
-                    // Speed: a tap steps through the usual rates.
+                    // Speed: drag the chip sideways to set the rate -- right
+                    // faster, left slower -- rather than tapping through steps.
                     Text(
                         speedLabel(speed),
                         style = MaterialTheme.typography.titleSmall,
                         color = Color.White,
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
-                            .clickable { speed = nextSpeed(speed) }
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                            .background(Color.White.copy(alpha = 0.15f))
+                            .pointerInput(Unit) {
+                                detectHorizontalDragGestures { change, dragAmount ->
+                                    onSpeedDrag(dragAmount)
+                                    change.consume()
+                                }
+                            }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
                     )
                     IconButton(
                         onClick = {
@@ -1125,15 +1141,12 @@ private const val DIAL_EDGE_FRACTION = 1f / 7f
 // about a third of the height, rather than the whole of it, which felt sluggish.
 private const val DIAL_SENSITIVITY = 3f
 
-// The playback rates the speed button steps through, slow to fast.
-private val SPEEDS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
-
-/** The rate after [current] in the cycle, wrapping back to the slowest. */
-private fun nextSpeed(current: Float): Float {
-    val i = SPEEDS.indexOfFirst { kotlin.math.abs(it - current) < 0.001f }
-        .let { if (it < 0) SPEEDS.indexOf(1f) else it }
-    return SPEEDS[(i + 1) % SPEEDS.size]
-}
+// The playback-rate range, and how far a sideways drag of the speed chip moves
+// it: a pixel is a four-thousandth of a turn, so a comfortable drag spans the
+// whole range.
+private const val MIN_SPEED = 0.25f
+private const val MAX_SPEED = 3f
+private const val SPEED_DRAG_GAIN = 0.004f
 
 /** A rate as it is shown on the button: 1.0x, 1.5x, 0.5x. */
 private fun speedLabel(speed: Float): String {
