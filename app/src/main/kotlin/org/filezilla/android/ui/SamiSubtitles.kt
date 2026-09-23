@@ -30,18 +30,6 @@ object SamiSubtitles {
         out
     }.getOrNull()
 
-    /**
-     * Writes the .vtt for SAMI [bytes] (a file the app read itself, e.g. one
-     * picked through the document chooser) into [cacheDir] under [name],
-     * returning it, or null if the bytes are not SAMI.
-     */
-    fun toVttFile(cacheDir: File, name: String, bytes: ByteArray): File? = runCatching {
-        val vtt = toVtt(decodeBytes(bytes)) ?: return null
-        val out = File(cacheDir, "sami_" + keyOf(name) + ".vtt")
-        out.writeText(vtt)
-        out
-    }.getOrNull()
-
     /** The SAMI body as WebVTT, or null if it does not look like SAMI. */
     fun toVtt(raw: String): String? {
         if (!raw.contains("<sync", ignoreCase = true)) return null

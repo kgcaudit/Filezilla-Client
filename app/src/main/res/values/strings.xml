@@ -261,7 +261,6 @@
     <string name="subtitle_internal">Internal</string>
     <string name="subtitle_track_label">%1$s track %2$d</string>
     <string name="subtitle_language_unknown">Unknown</string>
-    <string name="subtitle_from_folder">Subtitle files in this folder</string>
     <string name="subtitle_size">Size</string>
     <string name="subtitle_color">Colour</string>
     <string name="transfers_running">%1$d transferring</string>

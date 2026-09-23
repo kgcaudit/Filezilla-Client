@@ -3,7 +3,6 @@ package org.filezilla.android.ui
 import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.view.GestureDetector
@@ -752,13 +751,6 @@ private fun MediaPlayer(
         }
     }
 
-    // Other subtitle files sitting in this film's own folder, offered for
-    // choosing by hand -- so an oddly named one is loaded without leaving the
-    // player for the system's file chooser, which came up the wrong way round.
-    val folderSubtitles = remember(viewer.items, index) {
-        folderSubtitleFiles(viewer.items.getOrNull(index))
-    }
-
     if (showSubtitleSheet) {
         SubtitleSheet(
             subtitleOn = subtitleOn,
@@ -769,11 +761,6 @@ private fun MediaPlayer(
             color = subColor,
             onScale = { subScale = it },
             onColor = { subColor = it },
-            folderSubtitles = folderSubtitles,
-            onPickFolderSubtitle = { file ->
-                loadPickedSubtitle(context, player, viewer.items, index, Uri.fromFile(file))
-                showSubtitleSheet = false
-            },
             onDismiss = { showSubtitleSheet = false },
         )
     }
@@ -799,8 +786,6 @@ private fun SubtitleSheet(
     color: Int,
     onScale: (Float) -> Unit,
     onColor: (Int) -> Unit,
-    folderSubtitles: List<File>,
-    onPickFolderSubtitle: (File) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState()
@@ -862,27 +847,6 @@ private fun SubtitleSheet(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                }
-            }
-
-            if (folderSubtitles.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    stringResource(R.string.subtitle_from_folder),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                folderSubtitles.forEach { file ->
-                    Text(
-                        file.name,
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onPickFolderSubtitle(file) }
-                            .padding(vertical = 6.dp),
-                    )
                 }
             }
 
@@ -1170,27 +1134,6 @@ private val SUBTITLE_MIME = mapOf(
 private val SUBTITLE_EXTENSIONS = SUBTITLE_MIME.keys + setOf("smi", "sami")
 
 /**
- * The subtitle files in [video]'s own folder that are named nearly the same as
- * it -- and so belong to it -- but not so exactly that they were attached
- * already, in name order, for choosing one by hand. A folder holding several
- * films' subtitles no longer offers one film the others': a subtitle shows only
- * when its name all but matches the film's.
- */
-private fun folderSubtitleFiles(video: File?): List<File> {
-    val dir = video?.parentFile ?: return emptyList()
-    val base = video.nameWithoutExtension.lowercase()
-    return (
-        dir.listFiles()?.filter { file ->
-            file.isFile &&
-                file.extension.lowercase() in SUBTITLE_EXTENSIONS &&
-                file.nameWithoutExtension.lowercase().let { stem ->
-                    subtitleNameMatches(base, stem) && !strictSidecarName(base, stem)
-                }
-        } ?: emptyList()
-        ).sortedWith(org.filezilla.android.files.NaturalOrder.by { it.name })
-}
-
-/**
  * Whether a subtitle's name is the film's exactly, or the film's with a tag on
  * the end -- "movie.srt", "movie.ko.srt", "movie_en.srt". These are attached to
  * the film without asking.
@@ -1200,22 +1143,6 @@ private fun strictSidecarName(videoBase: String, subtitleStem: String): Boolean 
         subtitleStem.startsWith("$videoBase.") ||
         subtitleStem.startsWith("${videoBase}_") ||
         subtitleStem.startsWith("$videoBase-")
-
-/**
- * Whether a subtitle's name is near enough the film's to be the film's. The two
- * are reduced to their letters and digits, and one has to be a leading run of
- * the other -- so a subtitle that is the film's title, or the title with a
- * language on the end, matches, while a different film in the same folder does
- * not.
- */
-private fun subtitleNameMatches(videoBase: String, subtitleStem: String): Boolean {
-    fun letters(text: String) = text.lowercase().filter { it.isLetterOrDigit() }
-    val a = letters(videoBase)
-    val b = letters(subtitleStem)
-    if (a.length < 4 || b.length < 4) return a == b
-    val (shorter, longer) = if (a.length <= b.length) a to b else b to a
-    return longer.startsWith(shorter)
-}
 
 @androidx.annotation.OptIn(UnstableApi::class)
 private fun sidecarSubtitles(video: File, cacheDir: File): List<MediaItem.SubtitleConfiguration> {
@@ -1272,73 +1199,6 @@ private data class SidecarSub(
     val language: String?,
     val label: String,
 )
-
-/**
- * Loads a subtitle the reader picked by hand and shows it, whatever its name or
- * wherever it sits. The film now playing is rebuilt with its own sidecars
- * (their default turned off so the picked one wins) plus the chosen file, the
- * rest of the playlist is left as it was, and playback resumes where it was
- * left. A picked .smi is converted to WebVTT first, like a sidecar one. The
- * whole playlist is set again rather than the one item replaced, so it goes
- * back through the service's restoring callback and the picked file survives
- * the trip.
- */
-@androidx.annotation.OptIn(UnstableApi::class)
-private fun loadPickedSubtitle(
-    context: Context,
-    player: Player,
-    items: List<File>,
-    index: Int,
-    picked: Uri,
-) {
-    val at = player.currentMediaItemIndex.takeIf { it in items.indices } ?: index
-    val video = items.getOrNull(at) ?: return
-    runCatching {
-        context.contentResolver.takePersistableUriPermission(
-            picked,
-            Intent.FLAG_GRANT_READ_URI_PERMISSION,
-        )
-    }
-    val name = pickedName(context, picked) ?: picked.lastPathSegment ?: "subtitle"
-    val ext = name.substringAfterLast('.', "").lowercase()
-    val extra = if (ext == "smi" || ext == "sami") {
-        val bytes = context.contentResolver.openInputStream(picked)?.use { it.readBytes() } ?: return
-        val vtt = SamiSubtitles.toVttFile(context.cacheDir, name, bytes) ?: return
-        MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(vtt))
-            .setMimeType(MimeTypes.TEXT_VTT)
-            .setLabel(name)
-            .setId(EXTERNAL_SUB_ID_PREFIX + name)
-            .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
-            .build()
-    } else {
-        MediaItem.SubtitleConfiguration.Builder(picked)
-            .setMimeType(SUBTITLE_MIME[ext] ?: MimeTypes.APPLICATION_SUBRIP)
-            .setLabel(name)
-            .setId(EXTERNAL_SUB_ID_PREFIX + name)
-            .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
-            .build()
-    }
-    val base = sidecarSubtitles(video, context.cacheDir)
-        .map { it.buildUpon().setSelectionFlags(0).build() }
-    val position = player.currentPosition
-    val rebuilt = items.mapIndexed { i, file ->
-        if (i == at) buildMediaItem(Uri.fromFile(video), base + extra) else mediaItemFor(file, context.cacheDir)
-    }
-    player.setMediaItems(rebuilt, at, position)
-    player.prepare()
-    player.playWhenReady = true
-}
-
-/** The display name of a picked document, for guessing its subtitle format. */
-private fun pickedName(context: Context, uri: Uri): String? = runCatching {
-    context.contentResolver.query(
-        uri,
-        arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
-        null,
-        null,
-        null,
-    )?.use { if (it.moveToFirst()) it.getString(0) else null }
-}.getOrNull()
 
 /** A rough language from a filename tag, for the track picker's label. */
 private fun languageOf(tag: String): String? = when {

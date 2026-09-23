@@ -258,7 +258,6 @@
     <string name="subtitle_internal">내부자막</string>
     <string name="subtitle_track_label">%1$s 트랙 %2$d</string>
     <string name="subtitle_language_unknown">미지정</string>
-    <string name="subtitle_from_folder">이 폴더의 자막 파일</string>
     <string name="subtitle_size">크기</string>
     <string name="subtitle_color">색상</string>
     <string name="transfers_running">%1$d개 전송 중</string>
