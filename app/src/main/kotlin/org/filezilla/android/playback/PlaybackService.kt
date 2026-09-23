@@ -6,7 +6,6 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.google.common.util.concurrent.Futures
@@ -34,21 +33,16 @@ class PlaybackService : MediaSessionService() {
         const val SEEK_STEP_MS = 10_000L
     }
 
-    // The subtitle-parsing switch is only offered under an experimental,
-    // deprecated name in this media3; the suppression is for that one call.
-    @Suppress("DEPRECATION")
     @UnstableApi
     override fun onCreate() {
         super.onCreate()
         val player = ExoPlayer.Builder(this)
-            // Keep subtitles in their own format rather than transcoding them to
-            // media3's internal cues, which threw away the format name (SUBRIP,
-            // SRT) and the mark that says a track came from a file -- so the
-            // picker could not tell an external subtitle from an inside one.
-            .setMediaSourceFactory(
-                DefaultMediaSourceFactory(this)
-                    .experimentalParseSubtitlesDuringExtraction(false),
-            )
+            // Subtitles are parsed the default way (during extraction), which
+            // matters most because a subtitle that fails to load is then
+            // non-fatal -- the film still plays. Turning it off made a bad
+            // subtitle take the whole film down with it. The format name and
+            // the external/internal mark are recovered in the picker instead
+            // (see the media viewer), so nothing is lost by keeping the default.
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)

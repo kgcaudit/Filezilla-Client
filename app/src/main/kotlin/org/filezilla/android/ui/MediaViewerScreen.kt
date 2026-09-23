@@ -1055,7 +1055,12 @@ private fun subtitleFormat(external: Boolean, format: androidx.media3.common.For
         MimeTypes.APPLICATION_TTML -> "TTML"
         MimeTypes.APPLICATION_PGS -> "PGS"
         MimeTypes.APPLICATION_DVBSUBS -> "DVB"
-        else -> mime?.substringAfterLast('/')?.uppercase() ?: "SUB"
+        // The internal cues name is never shown: fall back to the label's
+        // extension, then to a plain "SUB", when the real format is not known.
+        MimeTypes.APPLICATION_MEDIA3_CUES, null ->
+            format.label?.substringAfterLast('.', "")?.uppercase()?.takeIf { it.isNotEmpty() }
+                ?: "SUB"
+        else -> mime.substringAfterLast('/').uppercase()
     }
 }
 
