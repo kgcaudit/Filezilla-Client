@@ -247,7 +247,12 @@ private fun MediaPlayer(
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                viewer.items.getOrNull(index)?.let { model.setMediaPosition(it, 0L) }
+                // Only a file the player ran on to the next from is put back to
+                // the start; a playlist being set or cleared (opening, or leaving
+                // and clearing) must not zero the place we just saved.
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                    viewer.items.getOrNull(index)?.let { model.setMediaPosition(it, 0L) }
+                }
                 index = player.currentMediaItemIndex
             }
 

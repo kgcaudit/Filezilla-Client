@@ -59,6 +59,9 @@ class PlaybackService : MediaSessionService() {
      * Puts back what the controller drops in transit -- the uri, from the
      * request metadata, and the subtitle files, from the metadata extras -- so
      * the service's player receives a whole MediaItem rather than a hollow one.
+     * The subtitles are re-attached from the extras every time, not only when
+     * the uri went missing: the controller can keep the uri and still drop the
+     * subtitle files, which left external subtitles never reaching the player.
      */
     @UnstableApi
     private class RestoringCallback : MediaSession.Callback {
@@ -68,20 +71,14 @@ class PlaybackService : MediaSessionService() {
             mediaItems: MutableList<MediaItem>,
         ): ListenableFuture<MutableList<MediaItem>> {
             val restored = mediaItems.map { item ->
-                if (item.localConfiguration != null) {
+                val uri = item.localConfiguration?.uri ?: item.requestMetadata.mediaUri
+                if (uri == null) {
                     item
                 } else {
-                    val uri = item.requestMetadata.mediaUri
-                    if (uri == null) {
-                        item
-                    } else {
-                        item.buildUpon()
-                            .setUri(uri)
-                            .setSubtitleConfigurations(
-                                SubtitleBundle.decode(item.mediaMetadata.extras),
-                            )
-                            .build()
-                    }
+                    val builder = item.buildUpon().setUri(uri)
+                    val subtitles = SubtitleBundle.decode(item.mediaMetadata.extras)
+                    if (subtitles.isNotEmpty()) builder.setSubtitleConfigurations(subtitles)
+                    builder.build()
                 }
             }.toMutableList()
             return Futures.immediateFuture(restored)
