@@ -1198,15 +1198,25 @@ private val SUBTITLE_MIME = mapOf(
 private val SUBTITLE_EXTENSIONS = SUBTITLE_MIME.keys + setOf("smi", "sami")
 
 /**
- * Whether a subtitle's name is the film's exactly, or the film's with a tag on
- * the end -- "movie.srt", "movie.ko.srt", "movie_en.srt". These are attached to
- * the film without asking.
+ * Whether a subtitle's name is near enough the film's to be the film's. The two
+ * are reduced to their letters and digits and one has to be a leading run of the
+ * other, so the film's title -- the title with a language on the end, or a
+ * slightly different release tag -- matches, while a different film in the same
+ * folder does not. Looser than an exact match, since a subtitle downloaded on
+ * its own rarely carries the film's whole release name.
  */
-private fun strictSidecarName(videoBase: String, subtitleStem: String): Boolean =
-    subtitleStem == videoBase ||
-        subtitleStem.startsWith("$videoBase.") ||
-        subtitleStem.startsWith("${videoBase}_") ||
-        subtitleStem.startsWith("$videoBase-")
+private fun subtitleNameMatches(videoBase: String, subtitleStem: String): Boolean {
+    fun letters(text: String) = text.lowercase().filter { it.isLetterOrDigit() }
+    val a = letters(videoBase)
+    val b = letters(subtitleStem)
+    if (a.length < 4 || b.length < 4) return a == b
+    val common = a.commonPrefixWith(b).length
+    // Either one name is the leading run of the other (title, or title plus a
+    // language), or the two agree on a good opening stretch -- the title and
+    // year -- which the release tag then diverges from. Ten characters of
+    // agreement clears a different film, whose title parts ways much sooner.
+    return common >= minOf(a.length, b.length) || common >= 10
+}
 
 @androidx.annotation.OptIn(UnstableApi::class)
 private fun sidecarSubtitles(video: File, cacheDir: File): List<MediaItem.SubtitleConfiguration> {
@@ -1218,9 +1228,11 @@ private fun sidecarSubtitles(video: File, cacheDir: File): List<MediaItem.Subtit
         val ext = file.extension.lowercase()
         if (ext !in SUBTITLE_EXTENSIONS) return@mapNotNull null
         val stem = file.nameWithoutExtension.lowercase()
-        // The subtitle belongs to this film if its name is the film's, or the
-        // film's followed by a tag ("movie", "movie.ko", "movie_en").
-        if (!strictSidecarName(base, stem)) return@mapNotNull null
+        // The subtitle belongs to this film if its name is near enough the
+        // film's -- the film's, the film's with a language tag, or a close
+        // release name -- so a subtitle whose name is not word-for-word the
+        // film's still attaches.
+        if (!subtitleNameMatches(base, stem)) return@mapNotNull null
         // SAMI is rewritten to a .vtt the player can read; the rest are used as
         // they are. A .smi that will not convert is dropped rather than shown
         // blank.
@@ -1230,7 +1242,14 @@ private fun sidecarSubtitles(video: File, cacheDir: File): List<MediaItem.Subtit
         } else {
             Uri.fromFile(file) to (SUBTITLE_MIME[ext] ?: return@mapNotNull null)
         }
-        val tag = stem.removePrefix(base).trimStart('.', '_', '-', ' ')
+        // The language tag is what the subtitle's name adds after the film's,
+        // when its name really does start with the film's; a merely near name
+        // adds nothing to read a language from.
+        val tag = if (stem.startsWith(base)) {
+            stem.removePrefix(base).trimStart('.', '_', '-', ' ')
+        } else {
+            ""
+        }
         // The track is named after its file, so the picker shows which external
         // subtitle it is rather than a bare "subtitle" that reads the same as
         // every other unnamed one.
