@@ -210,7 +210,7 @@ fun FilePanes(
                     // Folders are kept here, unlike sharing: a zip of a
                     // folder is the commonest thing anybody wants a zip of.
                     onCompress = if (state.isLocal) {
-                        { model.compress(active, state.selection.toList()) }
+                        { model.askCompress(active, state.selection.toList()) }
                     } else {
                         null
                     },

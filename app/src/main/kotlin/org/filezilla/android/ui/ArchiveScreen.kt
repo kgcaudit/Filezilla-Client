@@ -198,6 +198,40 @@ fun ArchiveConflictDialog(
     )
 }
 
+/**
+ * How to compress several picked items: one archive, or one apiece.
+ *
+ * Only asked when there is more than one, since one item has one answer. Each
+ * apiece names every archive after the item it holds, so a run of chapter
+ * folders becomes a run of books.
+ */
+@Composable
+fun CompressChoiceDialog(count: Int, onChoose: (separate: Boolean) -> Unit, onDismiss: () -> Unit) {
+    OloDialog(
+        title = stringResource(R.string.archive_compress_title, count),
+        onDismiss = onDismiss,
+        content = {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                CompressRow(R.string.archive_compress_one) { onChoose(false) }
+                CompressRow(R.string.archive_compress_each) { onChoose(true) }
+            }
+        },
+        action = {},
+    )
+}
+
+@Composable
+private fun CompressRow(title: Int, onClick: () -> Unit) {
+    Text(
+        stringResource(title),
+        style = MaterialTheme.typography.bodyLarge,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+    )
+}
+
 @Composable
 private fun ConflictRow(title: Int, detail: Int, onClick: () -> Unit) {
     Column(

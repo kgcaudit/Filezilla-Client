@@ -812,6 +812,14 @@ private fun AppScreen(
         )
     }
 
+    model.compressRequest?.let { request ->
+        CompressChoiceDialog(
+            count = request.picks.size,
+            onChoose = model::runCompress,
+            onDismiss = model::dismissCompress,
+        )
+    }
+
     if (model.archivePasswordAsked) {
         ArchivePasswordDialog(
             wrong = model.archivePasswordWrong,

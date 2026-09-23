@@ -2954,6 +2954,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** A compress waiting on the choice of one archive or one per item. */
+    data class CompressRequest(val id: PaneId, val picks: List<String>)
+
+    var compressRequest by mutableStateOf<CompressRequest?>(null)
+        private set
+
+    /**
+     * Starts a compress, asking first when there is a choice to make.
+     *
+     * One item has only one sensible answer, so it is zipped straight away.
+     * Several can go into one archive or into one apiece -- a folder of
+     * chapters bundled together, or each chapter kept as its own book -- and
+     * that is a question, so it is put rather than guessed.
+     */
+    fun askCompress(id: PaneId, picks: List<String>) {
+        if (picks.isEmpty()) return
+        if (picks.size <= 1) compress(id, picks) else compressRequest = CompressRequest(id, picks)
+    }
+
+    fun dismissCompress() {
+        compressRequest = null
+    }
+
+    /** Carries out the pending compress, [separate] for one archive per item. */
+    fun runCompress(separate: Boolean) {
+        val request = compressRequest ?: return
+        compressRequest = null
+        if (separate) compressEach(request.id, request.picks) else compress(request.id, request.picks)
+    }
+
     /**
      * Makes a zip of [picks] in [folder], and puts it there.
      *
@@ -3005,6 +3035,56 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 runCatching { target.delete() }
                 archiveOutcome = ArchiveOutcome(R.string.archive_compress_stopped, listOf(target.name))
             }
+        }
+    }
+
+    /**
+     * Zips each of [picks] into its own archive, named after it.
+     *
+     * A folder of chapters kept as one book each: "1권/" becomes "1권.zip"
+     * beside it, and so on. Done one after another so the progress bar means
+     * something, and stoppable partway -- what was made stays, the one being
+     * written when stopped is thrown away rather than left half done.
+     */
+    private fun compressEach(id: PaneId, picks: List<String>) {
+        if (picks.isEmpty()) return
+        val folder = pane(id).path.takeIf { it.isNotEmpty() && pane(id).isLocal } ?: return
+        val sources = picks.map { java.io.File(folder, it) }
+
+        val stop = java.util.concurrent.atomic.AtomicBoolean(false)
+        val compressing = getApplication<android.app.Application>().getString(R.string.archive_compressing)
+        archiveBusy = ArchiveBusy(compressing, "", 0L, 0L, onStop = { stop.set(true) }, bytes = true)
+
+        viewModelScope.launch {
+            val made = withContext(Dispatchers.IO) {
+                var count = 0
+                for (source in sources) {
+                    if (stop.get()) break
+                    val stem = Archives.folderNameFor(source.name)
+                    val target = java.io.File(folder, freeNameIn(folder, "$stem.zip"))
+                    val result = runCatching {
+                        ArchiveWriter.zip(listOf(source), target, cancelled = { stop.get() }) { done, total, name ->
+                            archiveBusy = archiveBusy?.copy(done = done, total = total, path = name)
+                        }
+                    }.getOrNull()
+                    if (result == null || result.cancelled) {
+                        // A half-written zip opens and is wrong, so it goes;
+                        // a stop ends the run, a failure skips to the next.
+                        runCatching { target.delete() }
+                        if (result?.cancelled == true) break else continue
+                    }
+                    count++
+                }
+                count
+            }
+            archiveBusy = null
+            archiveOutcome = if (made > 0) {
+                ArchiveOutcome(R.string.archive_compressed_each, listOf(made))
+            } else {
+                ArchiveOutcome(R.string.archive_compress_stopped, listOf(""))
+            }
+            clearSelectionIn(id)
+            relistLocalPanes()
         }
     }
 
