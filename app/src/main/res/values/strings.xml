@@ -256,6 +256,7 @@
     <string name="action_subtitles">Subtitles</string>
     <string name="subtitle_off">Off</string>
     <string name="subtitle_track">Subtitle</string>
+    <string name="action_load_subtitle">Load subtitle file</string>
     <string name="subtitle_size">Size</string>
     <string name="subtitle_color">Colour</string>
     <string name="subtitle_default_name">Subtitle</string>

@@ -253,6 +253,7 @@
     <string name="action_subtitles">자막</string>
     <string name="subtitle_off">끄기</string>
     <string name="subtitle_track">자막 선택</string>
+    <string name="action_load_subtitle">자막 파일 불러오기</string>
     <string name="subtitle_size">크기</string>
     <string name="subtitle_color">색상</string>
     <string name="subtitle_default_name">자막</string>

@@ -3,9 +3,13 @@ package org.filezilla.android.playback
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
 
 /**
  * The media player's engine, living in a service so it outlasts the screen.
@@ -37,7 +41,42 @@ class PlaybackService : MediaSessionService() {
             )
             .setHandleAudioBecomingNoisy(true)
             .build()
-        session = MediaSession.Builder(this, player).build()
+        session = MediaSession.Builder(this, player)
+            .setCallback(RestoringCallback())
+            .build()
+    }
+
+    /**
+     * Puts back what the controller drops in transit -- the uri, from the
+     * request metadata, and the subtitle files, from the metadata extras -- so
+     * the service's player receives a whole MediaItem rather than a hollow one.
+     */
+    @UnstableApi
+    private class RestoringCallback : MediaSession.Callback {
+        override fun onAddMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: MutableList<MediaItem>,
+        ): ListenableFuture<MutableList<MediaItem>> {
+            val restored = mediaItems.map { item ->
+                if (item.localConfiguration != null) {
+                    item
+                } else {
+                    val uri = item.requestMetadata.mediaUri
+                    if (uri == null) {
+                        item
+                    } else {
+                        item.buildUpon()
+                            .setUri(uri)
+                            .setSubtitleConfigurations(
+                                SubtitleBundle.decode(item.mediaMetadata.extras),
+                            )
+                            .build()
+                    }
+                }
+            }.toMutableList()
+            return Futures.immediateFuture(restored)
+        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session

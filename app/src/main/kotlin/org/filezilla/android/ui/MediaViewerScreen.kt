@@ -3,6 +3,7 @@ package org.filezilla.android.ui
 import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.view.GestureDetector
@@ -15,6 +16,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,10 +33,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -41,6 +47,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -50,6 +57,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -68,6 +76,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
@@ -79,9 +88,11 @@ import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import java.io.File
 import java.util.Locale
+import kotlin.math.roundToInt
 import org.filezilla.android.R
 import org.filezilla.android.data.AppPreferences
 import org.filezilla.android.playback.PlaybackService
+import org.filezilla.android.playback.SubtitleBundle
 
 /**
  * The app's own player for a video or a sound.
@@ -266,7 +277,11 @@ private fun MediaPlayer(
         }
         if (haveUris != wantUris) {
             val start = model.mediaPosition(viewer.items[viewer.index])
-            player.setMediaItems(viewer.items.map { mediaItemFor(it) }, viewer.index, start)
+            player.setMediaItems(
+                viewer.items.map { mediaItemFor(it, context.cacheDir) },
+                viewer.index,
+                start,
+            )
             player.prepare()
             player.playWhenReady = true
         } else {
@@ -282,7 +297,61 @@ private fun MediaPlayer(
     var orientation by rememberSaveable { mutableIntStateOf(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) }
     LaunchedEffect(orientation) { activity?.requestedOrientation = orientation }
     DisposableEffect(Unit) {
-        onDispose { activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
+        onDispose {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            // Hand the screen's brightness back to the system on the way out;
+            // the left-edge drag may have pinned it.
+            activity?.window?.let { window ->
+                window.attributes = window.attributes.also {
+                    it.screenBrightness =
+                        android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                }
+            }
+        }
+    }
+
+    // The left of the picture is a brightness dial, the right a volume dial:
+    // slide up or down on either. Brightness is the window's own, handed back to
+    // the system on the way out; volume is the media stream's. Each shows a
+    // read-out while the finger is down. Brightness starts from wherever the
+    // system had it, volume from where the stream is.
+    val audio = remember {
+        context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+    }
+    var brightness by remember { mutableFloatStateOf(-1f) }
+    var volume by remember { mutableFloatStateOf(-1f) }
+    var brightnessHud by remember { mutableFloatStateOf(-1f) }
+    var volumeHud by remember { mutableFloatStateOf(-1f) }
+    val onBrightnessDelta: (Float) -> Unit = { fraction ->
+        val start = if (brightness in 0f..1f) brightness else systemBrightness(context)
+        val next = (start + fraction).coerceIn(0.01f, 1f)
+        brightness = next
+        activity?.window?.let { window ->
+            window.attributes = window.attributes.also { it.screenBrightness = next }
+        }
+        brightnessHud = next
+        volumeHud = -1f
+    }
+    val onVolumeDelta: (Float) -> Unit = { fraction ->
+        val max = audio.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+        val start = if (volume in 0f..1f) {
+            volume
+        } else {
+            audio.getStreamVolume(android.media.AudioManager.STREAM_MUSIC).toFloat() / max
+        }
+        val next = (start + fraction).coerceIn(0f, 1f)
+        volume = next
+        audio.setStreamVolume(
+            android.media.AudioManager.STREAM_MUSIC,
+            (next * max).roundToInt(),
+            0,
+        )
+        volumeHud = next
+        brightnessHud = -1f
+    }
+    val onGestureEnd: () -> Unit = {
+        brightnessHud = -1f
+        volumeHud = -1f
     }
 
     // The top bar sits below a camera notch, not under it. The status bar's
@@ -312,7 +381,8 @@ private fun MediaPlayer(
     // The top bar -- filename, rotate, and subtitle buttons -- rides with the
     // player's own controls: it shows when they show and hides when they hide,
     // so a video plays under a clear screen and the chrome is one tap away.
-    var controlsVisible by remember { mutableStateOf(true) }
+    // Starts hidden, since the controls do too -- they come up on a tap.
+    var controlsVisible by remember { mutableStateOf(false) }
     var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
     var showSubtitleSheet by remember { mutableStateOf(false) }
 
@@ -346,6 +416,9 @@ private fun MediaPlayer(
                     val playerView = PlayerView(ctx)
                     playerView.player = player
                     playerView.useController = true
+                    // The controls come up on a tap, not on their own, so the
+                    // picture is clear until asked.
+                    playerView.controllerAutoShow = false
                     playerView.controllerShowTimeoutMs = 3_000
                     playerView.setShowNextButton(viewer.items.size > 1)
                     playerView.setShowPreviousButton(viewer.items.size > 1)
@@ -358,11 +431,12 @@ private fun MediaPlayer(
                     )
                     playerViewRef = playerView
 
-                    // Sideways-drag scrubbing, watched but never consumed: the
-                    // listener always returns false, so a tap still reaches the
-                    // view's own controls and a press still reaches a control's
-                    // button. Only a horizontal drag drives the seek, and it is
-                    // committed when the finger lifts.
+                    // Drag gestures, watched but never consumed: the listener
+                    // always returns false, so a tap still reaches the view's
+                    // own controls and a press still reaches a control's button.
+                    // A sideways drag scrubs; an up-or-down drag is a brightness
+                    // dial on the left of the picture and a volume dial on the
+                    // right. The seek is committed when the finger lifts.
                     var seeking = false
                     var base = 0L
                     val detector = GestureDetector(
@@ -379,15 +453,28 @@ private fun MediaPlayer(
                                 if (e1 == null) return false
                                 val movedX = e2.x - e1.x
                                 val movedY = e2.y - e1.y
-                                if (kotlin.math.abs(movedX) <= kotlin.math.abs(movedY)) return false
-                                val width = playerView.width.takeIf { it > 0 } ?: return false
-                                val duration = player.duration.takeIf { it > 0 } ?: return false
-                                if (!seeking) {
-                                    seeking = true
-                                    base = player.currentPosition
+                                if (kotlin.math.abs(movedX) > kotlin.math.abs(movedY)) {
+                                    // Sideways: scrub.
+                                    val width = playerView.width.takeIf { it > 0 } ?: return false
+                                    val duration = player.duration.takeIf { it > 0 } ?: return false
+                                    if (!seeking) {
+                                        seeking = true
+                                        base = player.currentPosition
+                                    }
+                                    val delta = (movedX / width * 120_000f).toLong()
+                                    onSeekPreview((base + delta).coerceIn(0L, duration))
+                                } else {
+                                    // Up or down: brightness on the left half,
+                                    // volume on the right. distanceY is positive
+                                    // moving up, so up brightens and raises.
+                                    val height = playerView.height.takeIf { it > 0 } ?: return false
+                                    val fraction = distanceY / height
+                                    if (e1.x < playerView.width / 2f) {
+                                        onBrightnessDelta(fraction)
+                                    } else {
+                                        onVolumeDelta(fraction)
+                                    }
                                 }
-                                val delta = (movedX / width * 120_000f).toLong()
-                                onSeekPreview((base + delta).coerceIn(0L, duration))
                                 return true
                             }
                         },
@@ -401,6 +488,7 @@ private fun MediaPlayer(
                                 onSeekCommit()
                                 seeking = false
                             }
+                            onGestureEnd()
                         }
                         false
                     }
@@ -487,7 +575,44 @@ private fun MediaPlayer(
                     )
                 }
             }
+            // The brightness or volume read-out, centred, shown only while that
+            // dial is in hand.
+            if (brightnessHud >= 0 || volumeHud >= 0) {
+                val isBrightness = brightnessHud >= 0
+                val level = if (isBrightness) brightnessHud else volumeHud
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Row(
+                        Modifier
+                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            if (isBrightness) Icons.Filled.LightMode else Icons.AutoMirrored.Filled.VolumeUp,
+                            contentDescription = null,
+                            tint = Color.White,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "${(level * 100).roundToInt()}%",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White,
+                        )
+                    }
+                }
+            }
         }
+    }
+
+    // Picking a subtitle file by hand: any file, since providers seldom report
+    // a subtitle's own type. What comes back is loaded onto the current film.
+    val subtitlePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { picked ->
+        if (picked != null) {
+            loadPickedSubtitle(context, player, viewer.items, index, picked)
+        }
+        showSubtitleSheet = false
     }
 
     if (showSubtitleSheet) {
@@ -498,6 +623,7 @@ private fun MediaPlayer(
             color = subColor,
             onScale = { subScale = it },
             onColor = { subColor = it },
+            onPickSubtitle = { subtitlePicker.launch(arrayOf("*/*")) },
             onDismiss = { showSubtitleSheet = false },
         )
     }
@@ -521,13 +647,17 @@ private fun SubtitleSheet(
     color: Int,
     onScale: (Float) -> Unit,
     onColor: (Int) -> Unit,
+    onPickSubtitle: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState()
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        // Scrolls, so nothing is lost off the bottom when the sheet is short --
+        // as it is in landscape, where the film left it cut off.
         Column(
             Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 16.dp),
@@ -570,6 +700,11 @@ private fun SubtitleSheet(
                             .build()
                     }
                 }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = onPickSubtitle, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.action_load_subtitle))
             }
 
             Spacer(Modifier.height(16.dp))
@@ -646,6 +781,18 @@ private val SUBTITLE_COLORS = listOf(
     0xFFFF5252.toInt(),
 )
 
+/**
+ * The system's current screen brightness as a 0..1 fraction, the starting
+ * point for the brightness dial before it has moved the window's own. Falls
+ * back to the middle if the setting cannot be read.
+ */
+private fun systemBrightness(context: Context): Float = runCatching {
+    android.provider.Settings.System.getInt(
+        context.contentResolver,
+        android.provider.Settings.System.SCREEN_BRIGHTNESS,
+    ) / 255f
+}.getOrDefault(0.5f).coerceIn(0.01f, 1f)
+
 /** A readable name for a subtitle track's language code, for the picker. */
 private fun trackLanguageName(language: String?): String? = when (language?.lowercase()) {
     null -> null
@@ -675,21 +822,38 @@ private fun clock(ms: Long): String {
  * A film often ships its subtitles as a separate file in the same folder,
  * named for the film with a language tag on the end -- "movie.mp4" beside
  * "movie.ko.srt" and "movie.en.srt". Those are gathered and offered as
- * selectable tracks, the first (or a Korean one) shown by default.
+ * selectable tracks, the first (or a Korean one) shown by default. A SAMI
+ * (.smi) among them is turned into WebVTT in [cacheDir] first, since the player
+ * has no SAMI reader of its own.
  */
 @androidx.annotation.OptIn(UnstableApi::class)
-private fun mediaItemFor(file: File): MediaItem {
-    val subs = sidecarSubtitles(file)
-    if (subs.isEmpty()) return MediaItem.fromUri(Uri.fromFile(file))
-    return MediaItem.Builder()
-        .setUri(Uri.fromFile(file))
-        .setSubtitleConfigurations(subs)
-        .build()
-}
+private fun mediaItemFor(file: File, cacheDir: File): MediaItem =
+    buildMediaItem(Uri.fromFile(file), sidecarSubtitles(file, cacheDir))
 
-// The subtitle formats media3 can read on its own. SAMI (.smi), still common
-// in Korea, has no built-in parser, so it is left out rather than attached and
-// shown blank.
+/**
+ * A MediaItem for [uri] with [subtitles], built to survive the trip to the
+ * playback service. A controller keeps only a MediaItem's id and metadata
+ * across that boundary, so the uri is put in the request metadata and the
+ * subtitles in the metadata extras, and the service restores both (see
+ * SubtitleBundle). Without this the service's player would get a film with no
+ * sound file and no external subtitles.
+ */
+@androidx.annotation.OptIn(UnstableApi::class)
+private fun buildMediaItem(
+    uri: Uri,
+    subtitles: List<MediaItem.SubtitleConfiguration>,
+): MediaItem = MediaItem.Builder()
+    .setUri(uri)
+    .setMediaId(uri.toString())
+    .setMediaMetadata(
+        MediaMetadata.Builder().setExtras(SubtitleBundle.encode(subtitles)).build(),
+    )
+    .setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(uri).build())
+    .setSubtitleConfigurations(subtitles)
+    .build()
+
+// The subtitle formats media3 reads on its own, by extension. SAMI (.smi,
+// .sami) it cannot, and is converted to WebVTT before it reaches here.
 private val SUBTITLE_MIME = mapOf(
     "srt" to MimeTypes.APPLICATION_SUBRIP,
     "vtt" to MimeTypes.TEXT_VTT,
@@ -700,15 +864,17 @@ private val SUBTITLE_MIME = mapOf(
     "dfxp" to MimeTypes.APPLICATION_TTML,
 )
 
+private val SUBTITLE_EXTENSIONS = SUBTITLE_MIME.keys + setOf("smi", "sami")
+
 @androidx.annotation.OptIn(UnstableApi::class)
-private fun sidecarSubtitles(video: File): List<MediaItem.SubtitleConfiguration> {
+private fun sidecarSubtitles(video: File, cacheDir: File): List<MediaItem.SubtitleConfiguration> {
     val dir = video.parentFile ?: return emptyList()
     val base = video.nameWithoutExtension.lowercase()
     val candidates = dir.listFiles()?.filter { it.isFile } ?: return emptyList()
 
     val found = candidates.mapNotNull { file ->
         val ext = file.extension.lowercase()
-        val mime = SUBTITLE_MIME[ext] ?: return@mapNotNull null
+        if (ext !in SUBTITLE_EXTENSIONS) return@mapNotNull null
         val stem = file.nameWithoutExtension.lowercase()
         // The subtitle belongs to this film if its name is the film's, or the
         // film's followed by a tag ("movie", "movie.ko", "movie_en").
@@ -717,23 +883,94 @@ private fun sidecarSubtitles(video: File): List<MediaItem.SubtitleConfiguration>
         ) {
             return@mapNotNull null
         }
+        // SAMI is rewritten to a .vtt the player can read; the rest are used as
+        // they are. A .smi that will not convert is dropped rather than shown
+        // blank.
+        val (uri, mime) = if (ext == "smi" || ext == "sami") {
+            val vtt = SamiSubtitles.toVttFile(cacheDir, file) ?: return@mapNotNull null
+            Uri.fromFile(vtt) to MimeTypes.TEXT_VTT
+        } else {
+            Uri.fromFile(file) to (SUBTITLE_MIME[ext] ?: return@mapNotNull null)
+        }
         val tag = stem.removePrefix(base).trimStart('.', '_', '-', ' ')
-        file to (mime to languageOf(tag))
+        Triple(uri, mime, languageOf(tag))
     }
 
     // Show one by default: a Korean track if there is one, else the first.
-    val defaultIdx = found.indexOfFirst { it.second.second == "ko" }.let {
+    val defaultIdx = found.indexOfFirst { it.third == "ko" }.let {
         if (it >= 0) it else if (found.isNotEmpty()) 0 else -1
     }
-    return found.mapIndexed { i, (file, meta) ->
-        val (mime, language) = meta
-        MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(file))
+    return found.mapIndexed { i, (uri, mime, language) ->
+        MediaItem.SubtitleConfiguration.Builder(uri)
             .setMimeType(mime)
             .setLanguage(language)
             .setSelectionFlags(if (i == defaultIdx) C.SELECTION_FLAG_DEFAULT else 0)
             .build()
     }
 }
+
+/**
+ * Loads a subtitle the reader picked by hand and shows it, whatever its name or
+ * wherever it sits. The film now playing is rebuilt with its own sidecars
+ * (their default turned off so the picked one wins) plus the chosen file, the
+ * rest of the playlist is left as it was, and playback resumes where it was
+ * left. A picked .smi is converted to WebVTT first, like a sidecar one. The
+ * whole playlist is set again rather than the one item replaced, so it goes
+ * back through the service's restoring callback and the picked file survives
+ * the trip.
+ */
+@androidx.annotation.OptIn(UnstableApi::class)
+private fun loadPickedSubtitle(
+    context: Context,
+    player: Player,
+    items: List<File>,
+    index: Int,
+    picked: Uri,
+) {
+    val at = player.currentMediaItemIndex.takeIf { it in items.indices } ?: index
+    val video = items.getOrNull(at) ?: return
+    runCatching {
+        context.contentResolver.takePersistableUriPermission(
+            picked,
+            Intent.FLAG_GRANT_READ_URI_PERMISSION,
+        )
+    }
+    val name = pickedName(context, picked) ?: picked.lastPathSegment ?: "subtitle"
+    val ext = name.substringAfterLast('.', "").lowercase()
+    val extra = if (ext == "smi" || ext == "sami") {
+        val bytes = context.contentResolver.openInputStream(picked)?.use { it.readBytes() } ?: return
+        val vtt = SamiSubtitles.toVttFile(context.cacheDir, name, bytes) ?: return
+        MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(vtt))
+            .setMimeType(MimeTypes.TEXT_VTT)
+            .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+            .build()
+    } else {
+        MediaItem.SubtitleConfiguration.Builder(picked)
+            .setMimeType(SUBTITLE_MIME[ext] ?: MimeTypes.APPLICATION_SUBRIP)
+            .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+            .build()
+    }
+    val base = sidecarSubtitles(video, context.cacheDir)
+        .map { it.buildUpon().setSelectionFlags(0).build() }
+    val position = player.currentPosition
+    val rebuilt = items.mapIndexed { i, file ->
+        if (i == at) buildMediaItem(Uri.fromFile(video), base + extra) else mediaItemFor(file, context.cacheDir)
+    }
+    player.setMediaItems(rebuilt, at, position)
+    player.prepare()
+    player.playWhenReady = true
+}
+
+/** The display name of a picked document, for guessing its subtitle format. */
+private fun pickedName(context: Context, uri: Uri): String? = runCatching {
+    context.contentResolver.query(
+        uri,
+        arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+        null,
+        null,
+        null,
+    )?.use { if (it.moveToFirst()) it.getString(0) else null }
+}.getOrNull()
 
 /** A rough language from a filename tag, for the track picker's label. */
 private fun languageOf(tag: String): String? = when {
