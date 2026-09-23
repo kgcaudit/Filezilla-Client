@@ -237,6 +237,9 @@ private fun MediaPlayer(
     // subtitle sheet's list rebuilds.
     var index by remember { mutableIntStateOf(viewer.index) }
     var tracksVersion by remember { mutableIntStateOf(0) }
+    // The player is the service's, so a speed set on one screen shows on the
+    // next; kept in step through the listener below.
+    var playbackSpeed by remember { mutableFloatStateOf(player.playbackParameters.speed) }
 
     // Keep the place. A file the player moves on from, or plays to the end, is
     // put back to the start; one left partway keeps its position, unless it is
@@ -264,6 +267,12 @@ private fun MediaPlayer(
 
             override fun onTracksChanged(tracks: Tracks) {
                 tracksVersion++
+            }
+
+            override fun onPlaybackParametersChanged(
+                parameters: androidx.media3.common.PlaybackParameters,
+            ) {
+                playbackSpeed = parameters.speed
             }
         }
         player.addListener(listener)
@@ -494,6 +503,37 @@ private fun MediaPlayer(
             disableTextTracks(player)
             currentFile?.let { model.setSubtitleChoice(it, SUBTITLE_OFF_TOKEN) }
         }
+    }
+
+    // The audio tracks the film carries, for choosing between them when it has
+    // more than one. Rebuilt with the tracks, the way the subtitles are.
+    val audioTracks = remember(tracksVersion, player, undLabel) {
+        buildList {
+            var number = 0
+            for (group in player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }) {
+                for (i in 0 until group.length) {
+                    if (!group.isTrackSupported(i)) continue
+                    val format = group.getTrackFormat(i)
+                    number++
+                    val language = format.language?.takeIf { it.isNotBlank() }
+                    add(
+                        AudioTrack(
+                            group = group,
+                            trackIndex = i,
+                            number = number,
+                            language = trackLanguageName(language) ?: language ?: undLabel,
+                            detail = audioDetail(format),
+                            selected = group.isTrackSelected(i),
+                        ),
+                    )
+                }
+            }
+        }
+    }
+    val onSelectAudio: (AudioTrack) -> Unit = { track -> applyAudioTrack(player, track) }
+    val onSpeed: (Float) -> Unit = { speed ->
+        player.setPlaybackSpeed(speed)
+        playbackSpeed = speed
     }
 
     // On opening a file, put back the subtitle it was last watched with -- once,
@@ -807,11 +847,15 @@ private fun MediaPlayer(
     }
 
     if (showSubtitleSheet) {
-        SubtitleSheet(
+        PlayerSettingsSheet(
             subtitleOn = subtitleOn,
             tracks = textTracks,
             onToggle = onSubtitleToggle,
             onSelectTrack = onSelectTrack,
+            audioTracks = audioTracks,
+            onSelectAudio = onSelectAudio,
+            speed = playbackSpeed,
+            onSpeed = onSpeed,
             scale = subScale,
             color = subColor,
             onScale = { subScale = it },
@@ -822,21 +866,27 @@ private fun MediaPlayer(
 }
 
 /**
- * The subtitle settings, in a sheet up from the bottom.
+ * The player's settings, in a sheet up from the bottom: subtitles, the audio
+ * track, playback speed, and the subtitle look.
  *
- * A switch turns subtitles on or off; under it the tracks, each named by its
- * number, by whether it comes from a file beside the film or from inside it,
- * and by its format and language, the shown one marked. Below that, the other
- * subtitle files in the folder, and the size and colour that hold for every
- * film.
+ * Subtitles have a switch and, under it, the tracks -- each named by its number,
+ * by whether it sits beside the film or inside it, and by its format and
+ * language, the shown one marked. Audio lists the film's sound tracks, but only
+ * for a film that carries more than one -- the double-audio case. Speed runs from
+ * half to double. Size and colour hold for every film. The lists keep to media3's
+ * own template: a heading, then radio rows.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SubtitleSheet(
+private fun PlayerSettingsSheet(
     subtitleOn: Boolean,
     tracks: List<TextTrack>,
     onToggle: (Boolean) -> Unit,
     onSelectTrack: (TextTrack) -> Unit,
+    audioTracks: List<AudioTrack>,
+    onSelectAudio: (AudioTrack) -> Unit,
+    speed: Float,
+    onSpeed: (Float) -> Unit,
     scale: Float,
     color: Int,
     onScale: (Float) -> Unit,
@@ -855,57 +905,86 @@ private fun SubtitleSheet(
                 .padding(horizontal = 16.dp)
                 .padding(top = 2.dp, bottom = 8.dp),
         ) {
+            // Subtitles: the heading carries the on/off switch, then the tracks.
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    stringResource(R.string.subtitle_show),
+                    stringResource(R.string.section_subtitle),
                     style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
                 )
                 Switch(checked = subtitleOn, onCheckedChange = onToggle)
             }
-
             tracks.forEach { track ->
                 val source = stringResource(
                     if (track.external) R.string.subtitle_external else R.string.subtitle_internal,
                 )
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable { onSelectTrack(track) }
-                        .padding(vertical = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    RadioButton(
+                TrackRow(
+                    selected = track.selected,
+                    onClick = { onSelectTrack(track) },
+                    title = stringResource(R.string.subtitle_track_label, source, track.number),
+                    detail = "${track.format} · ${track.language}",
+                )
+            }
+
+            // Audio: only for a film with more than one track; a single one is
+            // nothing to choose between.
+            if (audioTracks.size > 1) {
+                SettingsHeading(stringResource(R.string.section_audio))
+                audioTracks.forEach { track ->
+                    TrackRow(
                         selected = track.selected,
-                        onClick = { onSelectTrack(track) },
-                        modifier = Modifier.size(22.dp),
+                        onClick = { onSelectAudio(track) },
+                        title = stringResource(R.string.audio_track_label, track.number),
+                        detail = "${track.detail} · ${track.language}",
                     )
-                    Column(
+                }
+            }
+
+            // Speed: pills from half to double, the playing one filled.
+            SettingsHeading(stringResource(R.string.section_speed))
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                for (option in PLAYBACK_SPEEDS) {
+                    val chosen = kotlin.math.abs(option - speed) < 0.01f
+                    val whole = option == option.toLong().toFloat()
+                    val label = (if (whole) option.toLong().toString() else option.toString()) + "x"
+                    Box(
                         Modifier
                             .weight(1f)
-                            .padding(start = 12.dp),
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (chosen) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                },
+                            )
+                            .clickable { onSpeed(option) }
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            stringResource(R.string.subtitle_track_label, source, track.number),
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            "${track.format} · TEXT · ${track.language}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                            label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (chosen) {
+                                MaterialTheme.colorScheme.onPrimary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
                         )
                     }
                 }
             }
 
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
             // Size and colour share a row: the slider takes the width it can and
             // the swatches sit at the end, so the look controls cost one line,
             // not three.
@@ -954,6 +1033,55 @@ private fun SubtitleSheet(
                     )
                 }
             }
+        }
+    }
+}
+
+/** A heading over a group in the settings sheet, in the manner of media3's own. */
+@Composable
+private fun SettingsHeading(text: String) {
+    Spacer(Modifier.height(8.dp))
+    Text(
+        text,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(bottom = 2.dp),
+    )
+}
+
+/** One track in a list: a radio, a title, and a quieter detail line under it. */
+@Composable
+private fun TrackRow(selected: Boolean, onClick: () -> Unit, title: String, detail: String) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(
+            selected = selected,
+            onClick = onClick,
+            modifier = Modifier.size(22.dp),
+        )
+        Column(
+            Modifier
+                .weight(1f)
+                .padding(start = 12.dp),
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -1074,6 +1202,60 @@ private fun subtitleFormat(external: Boolean, format: androidx.media3.common.For
         else -> mime.substringAfterLast('/').uppercase()
     }
 }
+
+/**
+ * An audio track as the picker shows it: its place in the list, its language and
+ * a short codec-and-channels detail, and whether it is the one playing. There to
+ * choose between the audio tracks of a film that carries more than one.
+ */
+private data class AudioTrack(
+    val group: Tracks.Group,
+    val trackIndex: Int,
+    val number: Int,
+    val language: String,
+    val detail: String,
+    val selected: Boolean,
+)
+
+/** Selects [track]'s audio. */
+@androidx.annotation.OptIn(UnstableApi::class)
+private fun applyAudioTrack(player: Player, track: AudioTrack) {
+    player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+        .setOverrideForType(TrackSelectionOverride(track.group.mediaTrackGroup, track.trackIndex))
+        .build()
+}
+
+/**
+ * A short "codec · channels" line for an audio track -- AAC · STEREO, AC3 · 5.1
+ * -- in the manner of media3's own track names, for telling two tracks apart.
+ */
+@androidx.annotation.OptIn(UnstableApi::class)
+private fun audioDetail(format: androidx.media3.common.Format): String {
+    val codec = when (val mime = format.sampleMimeType) {
+        MimeTypes.AUDIO_AAC -> "AAC"
+        MimeTypes.AUDIO_AC3 -> "AC3"
+        MimeTypes.AUDIO_E_AC3 -> "EAC3"
+        MimeTypes.AUDIO_DTS -> "DTS"
+        MimeTypes.AUDIO_MPEG -> "MP3"
+        MimeTypes.AUDIO_OPUS -> "OPUS"
+        MimeTypes.AUDIO_VORBIS -> "VORBIS"
+        MimeTypes.AUDIO_FLAC -> "FLAC"
+        null -> null
+        else -> mime.substringAfterLast('/').uppercase()
+    }
+    val channels = when (format.channelCount) {
+        1 -> "MONO"
+        2 -> "STEREO"
+        6 -> "5.1"
+        8 -> "7.1"
+        androidx.media3.common.Format.NO_VALUE, 0 -> null
+        else -> "${format.channelCount}ch"
+    }
+    return listOfNotNull(codec, channels).joinToString(" · ").ifEmpty { "AUDIO" }
+}
+
+// The speeds a film can play at, normal in the middle.
+private val PLAYBACK_SPEEDS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
 
 /** A stable key for a track, for remembering which one a file was watched with. */
 @androidx.annotation.OptIn(UnstableApi::class)
