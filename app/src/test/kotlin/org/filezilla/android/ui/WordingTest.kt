@@ -137,6 +137,9 @@ class WordingTest {
             // picked archive and the overflow's item inside an open one.
             // One act, one word, said in the two places it is offered.
             "archive_extract_all",
+            // "Compress": the selection bar's button, and the button that
+            // confirms the compress dialog once its options are chosen.
+            "archive_compress",
             // The three conflict choices and their explanations, shared by
             // the download dialog and the unpack-into-an-existing-folder
             // one: the same three answers to the same kind of question.

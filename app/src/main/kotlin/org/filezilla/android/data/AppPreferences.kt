@@ -235,6 +235,16 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_READER_WEBTOON_NARROW, false)
         set(value) = prefs.edit().putBoolean(KEY_READER_WEBTOON_NARROW, value).apply()
 
+    /** Whether the last compress made one archive per item rather than one for all. */
+    var compressSeparate: Boolean
+        get() = prefs.getBoolean(KEY_COMPRESS_SEPARATE, false)
+        set(value) = prefs.edit().putBoolean(KEY_COMPRESS_SEPARATE, value).apply()
+
+    /** Whether the last compress dropped the wrapping folder, contents at the root. */
+    var compressFlat: Boolean
+        get() = prefs.getBoolean(KEY_COMPRESS_FLAT, false)
+        set(value) = prefs.edit().putBoolean(KEY_COMPRESS_FLAT, value).apply()
+
     /**
      * The narrow column's width as a percent of the screen, so a webtoon whose
      * lettering is small can be widened and one whose lettering is large pulled
@@ -343,6 +353,8 @@ class AppPreferences(context: Context) {
         const val KEY_READER_TWO_PAGE = "reader_two_page"
         const val KEY_READER_WEBTOON_NARROW = "reader_webtoon_narrow"
         const val KEY_READER_WEBTOON_WIDTH = "reader_webtoon_width"
+        const val KEY_COMPRESS_SEPARATE = "compress_separate"
+        const val KEY_COMPRESS_FLAT = "compress_flat"
 
         const val MIN_WEBTOON_WIDTH = 40
         const val MAX_WEBTOON_WIDTH = 100

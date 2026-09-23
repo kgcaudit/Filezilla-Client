@@ -251,6 +251,40 @@ class ArchiveWorkTest {
     }
 
     @Test
+    fun `flattening a folder puts its contents at the archive root`() {
+        val folder = temporary.newFolder("12권")
+        File(folder, "001.jpg").writeText("a")
+        File(folder, "002.jpg").writeText("b")
+        File(folder, "sub").mkdirs()
+        File(folder, "sub/x.jpg").writeText("c")
+
+        val zip = File(temporary.root, "made.zip")
+        ArchiveWriter.zip(listOf(folder), zip, flatten = true)
+        ZipArchive.open(zip).use { archive ->
+            // No "12권/" wrapper: the pages sit at the root, inner folders kept.
+            assertEquals(
+                listOf("001.jpg", "002.jpg", "sub/x.jpg"),
+                archive.entries.filterNot { it.isDirectory }.map { it.path }.sorted(),
+            )
+        }
+    }
+
+    @Test
+    fun `wrapping puts loose files under a folder of the given name`() {
+        val a = File(temporary.root, "a.jpg").apply { writeText("a") }
+        val b = File(temporary.root, "b.jpg").apply { writeText("b") }
+
+        val zip = File(temporary.root, "made.zip")
+        ArchiveWriter.zip(listOf(a, b), zip, wrap = "book")
+        ZipArchive.open(zip).use { archive ->
+            assertEquals(
+                listOf("book/a.jpg", "book/b.jpg"),
+                archive.entries.filterNot { it.isDirectory }.map { it.path }.sorted(),
+            )
+        }
+    }
+
+    @Test
     fun `an empty folder is kept`() {
         val folder = temporary.newFolder("papers")
         File(folder, "empty").mkdirs()

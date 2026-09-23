@@ -1933,12 +1933,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** The image entries directly inside [at] of [session], in reading order. */
-    private fun pagesUnder(session: ArchiveSession, at: String): List<ImageRef> =
-        session.entries
-            .filter { !it.isDirectory && it.parent == at && ImageFiles.looksImage(it.name) }
+    /**
+     * The image entries of a comic under [at] of [session], in reading order.
+     *
+     * Everything under [at], not only its direct children -- a comic archive
+     * often wraps its pages in a folder of the book's name, or splits them into
+     * chapter folders, and a reader that only looked at the top level found no
+     * pages and would not open. All the images sort together by their full
+     * path, so a wrapper folder or a run of chapters still reads straight
+     * through. [at] empty is the whole archive.
+     */
+    private fun pagesUnder(session: ArchiveSession, at: String): List<ImageRef> {
+        val prefix = if (at.isEmpty()) "" else "$at/"
+        return session.entries
+            .filter {
+                !it.isDirectory && ImageFiles.looksImage(it.name) &&
+                    (at.isEmpty() || it.path.startsWith(prefix))
+            }
             .sortedWith(org.filezilla.android.files.NaturalOrder.by { it.path })
             .map { ImageRef.InArchive(session, it) }
+    }
 
     /**
      * Opens a comic archive straight into the reader, at its first page or
@@ -2960,45 +2974,62 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var compressRequest by mutableStateOf<CompressRequest?>(null)
         private set
 
+    /** The bundling and structure the last compress used, to open the dialog on. */
+    val compressSeparateDefault: Boolean get() = graph.preferences.compressSeparate
+    val compressFlatDefault: Boolean get() = graph.preferences.compressFlat
+
     /**
      * Starts a compress, asking first when there is a choice to make.
      *
-     * One item has only one sensible answer, so it is zipped straight away.
-     * Several can go into one archive or into one apiece -- a folder of
-     * chapters bundled together, or each chapter kept as its own book -- and
-     * that is a question, so it is put rather than guessed.
+     * A lone file has only one sensible answer -- itself, at the archive's root
+     * -- so it is zipped straight away. Anything with a folder in it, or more
+     * than one item, can be bundled into one archive or one apiece and laid
+     * flat or under a folder, and those are questions, so they are put.
      */
     fun askCompress(id: PaneId, picks: List<String>) {
         if (picks.isEmpty()) return
-        if (picks.size <= 1) compress(id, picks) else compressRequest = CompressRequest(id, picks)
+        val hasFolder = pane(id).entries.any { it.name in picks && it.isDirectory }
+        if (picks.size <= 1 && !hasFolder) compress(id, picks, flat = true)
+        else compressRequest = CompressRequest(id, picks)
     }
 
     fun dismissCompress() {
         compressRequest = null
     }
 
-    /** Carries out the pending compress, [separate] for one archive per item. */
-    fun runCompress(separate: Boolean) {
+    /**
+     * Carries out the pending compress, and remembers how for next time.
+     *
+     * [separate] makes one archive per item; [flat] drops the wrapping folder
+     * so the contents sit at the archive's root.
+     */
+    fun runCompress(separate: Boolean, flat: Boolean) {
         val request = compressRequest ?: return
         compressRequest = null
-        if (separate) compressEach(request.id, request.picks) else compress(request.id, request.picks)
+        graph.preferences.compressSeparate = separate
+        graph.preferences.compressFlat = flat
+        if (separate) compressEach(request.id, request.picks, flat) else compress(request.id, request.picks, flat)
     }
 
     /**
      * Makes a zip of [picks] in [folder], and puts it there.
      *
-     * Always a zip; see [ArchiveWriter] for why there is no choice to
-     * make. The name is the folder's own when one folder was chosen and
-     * the containing folder's otherwise, which is what a person would
-     * have typed.
+     * Always a zip; see [ArchiveWriter] for why there is no choice to make. The
+     * name is the folder's own when one folder was chosen and the containing
+     * folder's otherwise, which is what a person would have typed. [flat] lays
+     * a folder's contents at the archive root; otherwise a folder keeps its
+     * name, and a plain handful of files is given a folder of the archive's.
      */
-    fun compress(id: PaneId, picks: List<String>) {
+    fun compress(id: PaneId, picks: List<String>, flat: Boolean = false) {
         if (picks.isEmpty()) return
         val folder = pane(id).path.takeIf { it.isNotEmpty() && pane(id).isLocal } ?: return
         val sources = picks.map { java.io.File(folder, it) }
         val stem = if (sources.size == 1) Archives.folderNameFor(sources.first().name)
         else java.io.File(folder).name.ifEmpty { "archive" }
         val target = java.io.File(folder, freeNameIn(folder, "$stem.zip"))
+        // Foldered: a folder keeps its own name already, so only a selection
+        // that is all files needs a folder made for it.
+        val wrap = if (!flat && sources.all { it.isFile }) stem else null
 
         val stop = java.util.concurrent.atomic.AtomicBoolean(false)
         val compressing = getApplication<android.app.Application>()
@@ -3008,7 +3039,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    ArchiveWriter.zip(sources, target, cancelled = { stop.get() }) { done, total, name ->
+                    ArchiveWriter.zip(sources, target, flatten = flat, wrap = wrap, cancelled = { stop.get() }) { done, total, name ->
                         archiveBusy = archiveBusy?.copy(done = done, total = total, path = name)
                     }
                 }
@@ -3046,7 +3077,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * something, and stoppable partway -- what was made stays, the one being
      * written when stopped is thrown away rather than left half done.
      */
-    private fun compressEach(id: PaneId, picks: List<String>) {
+    private fun compressEach(id: PaneId, picks: List<String>, flat: Boolean = false) {
         if (picks.isEmpty()) return
         val folder = pane(id).path.takeIf { it.isNotEmpty() && pane(id).isLocal } ?: return
         val sources = picks.map { java.io.File(folder, it) }
@@ -3062,8 +3093,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     if (stop.get()) break
                     val stem = Archives.folderNameFor(source.name)
                     val target = java.io.File(folder, freeNameIn(folder, "$stem.zip"))
+                    // A folder keeps its own name unless flattened; a lone file
+                    // under "folder made" gets one of the archive's name.
+                    val wrap = if (!flat && source.isFile) stem else null
                     val result = runCatching {
-                        ArchiveWriter.zip(listOf(source), target, cancelled = { stop.get() }) { done, total, name ->
+                        ArchiveWriter.zip(listOf(source), target, flatten = flat, wrap = wrap, cancelled = { stop.get() }) { done, total, name ->
                             archiveBusy = archiveBusy?.copy(done = done, total = total, path = name)
                         }
                     }.getOrNull()

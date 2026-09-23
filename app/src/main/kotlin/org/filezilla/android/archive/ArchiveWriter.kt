@@ -46,18 +46,33 @@ object ArchiveWriter {
     /**
      * Writes [sources] into a new zip at [into].
      *
-     * Names are relative to each source's own parent, so zipping two
-     * files and a folder gives `one.txt`, `two.txt`, `folder/...` rather
-     * than the whole path from the root of the phone.
+     * Names are relative to each source's own parent, so zipping two files and
+     * a folder gives `one.txt`, `two.txt`, `folder/...` rather than the whole
+     * path from the root of the phone.
+     *
+     * [flatten] drops that outer folder: a folder's contents go to the archive
+     * root instead of under the folder's own name -- the difference between an
+     * archive that opens straight onto its pages and one that opens onto a
+     * single folder. [wrap], when set, does the opposite, putting everything
+     * under one folder of that name; it is how a loose handful of files is
+     * given a folder of their own. The two are not combined.
      */
     fun zip(
         sources: List<File>,
         into: File,
+        flatten: Boolean = false,
+        wrap: String? = null,
         cancelled: () -> Boolean = { false },
         onProgress: Progress = Progress { _, _, _ -> },
     ): WriteResult {
         val target = into.canonicalFile
-        val planned = sources.flatMap { source -> walk(source, target) }
+        val planned = sources.flatMap { source -> walk(source, target, flatten) }
+            // A flattened source that is itself the empty folder names nothing;
+            // there is no entry to write for it, so it is dropped.
+            .filter { (_, name) -> name.isNotEmpty() }
+            .let { entries ->
+                if (wrap.isNullOrEmpty()) entries else entries.map { (file, name) -> file to "$wrap/$name" }
+            }
         val skipped = mutableListOf<String>()
         val totalBytes = planned.sumOf { (file, _) -> if (file.isDirectory) 0L else file.length().coerceAtLeast(0) }
         var done = 0
@@ -105,8 +120,11 @@ object ArchiveWriter {
      * file in the tree being walked, so it is read while it is written,
      * and the result is as large as the disk allows.
      */
-    private fun walk(source: File, exclude: File): List<Pair<File, String>> {
-        val root = source.parentFile
+    private fun walk(source: File, exclude: File, flatten: Boolean = false): List<Pair<File, String>> {
+        // Relative to the parent, the folder keeps its own name in the archive;
+        // relative to the folder itself, its contents land at the root. A file
+        // is always just its own name -- there is no folder of its to drop.
+        val root = if (flatten && source.isDirectory) source else source.parentFile
         fun nameOf(file: File): String =
             if (root == null) file.name
             else file.canonicalPath.removePrefix(root.canonicalPath).trimStart(File.separatorChar)

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -15,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -199,37 +201,77 @@ fun ArchiveConflictDialog(
 }
 
 /**
- * How to compress several picked items: one archive, or one apiece.
+ * How to compress several picked items: how they are bundled, and their shape.
  *
- * Only asked when there is more than one, since one item has one answer. Each
- * apiece names every archive after the item it holds, so a run of chapter
- * folders becomes a run of books.
+ * Bundling is one archive for all or one apiece -- a folder of chapters kept
+ * together, or each chapter made its own book. Structure is whether a folder's
+ * contents sit at the archive's root (so a comic opens straight onto its pages)
+ * or stay under a folder. Both start on whatever was chosen last.
  */
 @Composable
-fun CompressChoiceDialog(count: Int, onChoose: (separate: Boolean) -> Unit, onDismiss: () -> Unit) {
+fun CompressChoiceDialog(
+    count: Int,
+    separateDefault: Boolean,
+    flatDefault: Boolean,
+    onCompress: (separate: Boolean, flat: Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var separate by remember { mutableStateOf(separateDefault) }
+    var flat by remember { mutableStateOf(flatDefault) }
     OloDialog(
         title = stringResource(R.string.archive_compress_title, count),
         onDismiss = onDismiss,
         content = {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                CompressRow(R.string.archive_compress_one) { onChoose(false) }
-                CompressRow(R.string.archive_compress_each) { onChoose(true) }
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                CompressGroup(
+                    label = R.string.archive_compress_bundle,
+                    firstLabel = R.string.archive_compress_one, firstChosen = !separate, onFirst = { separate = false },
+                    secondLabel = R.string.archive_compress_each, secondChosen = separate, onSecond = { separate = true },
+                )
+                CompressGroup(
+                    label = R.string.archive_compress_structure,
+                    firstLabel = R.string.archive_compress_flat, firstChosen = flat, onFirst = { flat = true },
+                    secondLabel = R.string.archive_compress_folder, secondChosen = !flat, onSecond = { flat = false },
+                )
             }
         },
-        action = {},
+        action = {
+            TextButton(onClick = { onCompress(separate, flat) }) {
+                Text(stringResource(R.string.archive_compress))
+            }
+        },
     )
 }
 
 @Composable
-private fun CompressRow(title: Int, onClick: () -> Unit) {
-    Text(
-        stringResource(title),
-        style = MaterialTheme.typography.bodyLarge,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
-    )
+private fun CompressGroup(
+    label: Int,
+    firstLabel: Int,
+    firstChosen: Boolean,
+    onFirst: () -> Unit,
+    secondLabel: Int,
+    secondChosen: Boolean,
+    onSecond: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            stringResource(label),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = firstChosen,
+                onClick = onFirst,
+                label = { Text(stringResource(firstLabel)) },
+            )
+            FilterChip(
+                selected = secondChosen,
+                onClick = onSecond,
+                label = { Text(stringResource(secondLabel)) },
+            )
+        }
+    }
 }
 
 @Composable
