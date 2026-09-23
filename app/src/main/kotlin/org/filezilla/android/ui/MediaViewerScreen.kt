@@ -15,6 +15,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -28,12 +29,13 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -43,17 +45,15 @@ import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.ScreenLockRotation
 import androidx.compose.material.icons.filled.ScreenRotation
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -71,6 +71,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -868,9 +869,11 @@ private fun MediaPlayer(
 }
 
 /**
- * The player's settings, in a sheet up from the bottom: subtitles, the audio
- * track, playback speed, and the subtitle look.
+ * The player's settings, in a small translucent panel in the middle of the
+ * picture: subtitles, the audio track, playback speed, and the subtitle look.
  *
+ * A panel about half the width, not a sheet across the bottom, so the film stays
+ * visible around it rather than being covered; a tap outside puts it away.
  * Subtitles have a switch and, under it, the tracks -- each named by its number,
  * by whether it sits beside the film or inside it, and by its format and
  * language, the shown one marked. Audio lists the film's sound tracks, but only
@@ -878,7 +881,6 @@ private fun MediaPlayer(
  * half to double. Size and colour hold for every film. The lists keep to media3's
  * own template: a heading, then radio rows.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PlayerSettingsSheet(
     subtitleOn: Boolean,
@@ -895,18 +897,34 @@ private fun PlayerSettingsSheet(
     onColor: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState()
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        // Scrolls, so nothing is lost off the bottom when the sheet is short --
-        // as it is in landscape, where the film left it cut off.
-        Column(
+    // The picture is dark, so the panel is dark whatever the system theme, its
+    // components readable on it; it is kept short of the screen and scrolls.
+    val maxPanelHeight = (LocalConfiguration.current.screenHeightDp * 0.9f).dp
+    val backdrop = remember { MutableInteractionSource() }
+    val panel = remember { MutableInteractionSource() }
+    MaterialTheme(colorScheme = darkColorScheme()) {
+        // The backdrop dims nothing of its own -- it is only a way to tap outside
+        // and put the panel away -- so nothing but the panel is laid over the film.
+        Box(
             Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .navigationBarsPadding()
-                .padding(horizontal = 16.dp)
-                .padding(top = 2.dp, bottom = 8.dp),
+                .fillMaxSize()
+                .clickable(interactionSource = backdrop, indication = null, onClick = onDismiss),
+            contentAlignment = Alignment.Center,
         ) {
+            Column(
+                Modifier
+                    .fillMaxWidth(0.5f)
+                    .widthIn(min = 300.dp, max = 560.dp)
+                    .heightIn(max = maxPanelHeight)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f))
+                    // Taps on the panel do their own work and never reach the
+                    // backdrop, so touching it does not put it away.
+                    .clickable(interactionSource = panel, indication = null, onClick = {})
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 10.dp, bottom = 14.dp),
+            ) {
             // Subtitles: the heading carries the on/off switch, then the tracks.
             Row(
                 Modifier.fillMaxWidth(),
@@ -1036,6 +1054,7 @@ private fun PlayerSettingsSheet(
                 }
             }
         }
+    }
     }
 }
 
