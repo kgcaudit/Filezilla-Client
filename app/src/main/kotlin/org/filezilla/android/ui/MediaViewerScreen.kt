@@ -572,7 +572,12 @@ private fun MediaPlayer(
                         object : GestureDetector.SimpleOnGestureListener() {
                             override fun onDown(e: MotionEvent) = true
 
-                            override fun onSingleTapUp(e: MotionEvent): Boolean {
+                            // A confirmed single tap (one that is not the start of
+                            // a double tap) works the controls; a double tap plays
+                            // or pauses. Single is confirmed rather than taken on
+                            // the way up so the first tap of a double tap does not
+                            // also flash the menu.
+                            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                                 if (playerView.isControllerFullyVisible) {
                                     playerView.hideController()
                                 } else {
@@ -584,6 +589,11 @@ private fun MediaPlayer(
                                 return true
                             }
 
+                            override fun onDoubleTap(e: MotionEvent): Boolean {
+                                if (player.isPlaying) player.pause() else player.play()
+                                return true
+                            }
+
                             override fun onScroll(
                                 e1: MotionEvent?,
                                 e2: MotionEvent,
@@ -592,29 +602,34 @@ private fun MediaPlayer(
                             ): Boolean {
                                 if (e1 == null) return false
                                 val width = playerView.width.takeIf { it > 0 } ?: return false
-                                val movedX = e2.x - e1.x
-                                val movedY = e2.y - e1.y
-                                if (kotlin.math.abs(movedX) > kotlin.math.abs(movedY)) {
-                                    // Sideways: scrub, wherever it starts.
-                                    val duration = player.duration.takeIf { it > 0 } ?: return false
-                                    if (!seeking) {
-                                        seeking = true
-                                        base = player.currentPosition
-                                    }
-                                    val delta = (movedX / width * 120_000f).toLong()
-                                    onSeekPreview((base + delta).coerceIn(0L, duration))
-                                } else {
-                                    // Up or down, but only near an edge: the left
-                                    // quarter is brightness, the right quarter is
-                                    // volume, and the middle is left alone.
-                                    // distanceY is positive moving up, so up
-                                    // brightens and raises.
-                                    val height = playerView.height.takeIf { it > 0 } ?: return false
-                                    val fraction = distanceY / height
-                                    when {
-                                        e1.x < width * 0.25f -> onBrightnessDelta(fraction)
-                                        e1.x > width * 0.75f -> onVolumeDelta(fraction)
-                                        else -> return false
+                                val height = playerView.height.takeIf { it > 0 } ?: return false
+                                // Which dial a drag is depends only on where it
+                                // started, held for the whole drag: a drag begun
+                                // in the left quarter is brightness, in the right
+                                // quarter volume, and only one begun in the middle
+                                // scrubs. So a brightness or volume drag that
+                                // wanders a little sideways no longer jumps the
+                                // playback position. distanceY is positive moving
+                                // up, so up brightens and raises.
+                                when {
+                                    e1.x < width * 0.25f -> onBrightnessDelta(distanceY / height)
+                                    e1.x > width * 0.75f -> onVolumeDelta(distanceY / height)
+                                    else -> {
+                                        // Middle: scrub, but only on a clearly
+                                        // sideways drag, so an up-or-down one here
+                                        // does nothing.
+                                        val movedX = e2.x - e1.x
+                                        val movedY = e2.y - e1.y
+                                        if (kotlin.math.abs(movedX) <= kotlin.math.abs(movedY)) {
+                                            return false
+                                        }
+                                        val duration = player.duration.takeIf { it > 0 } ?: return false
+                                        if (!seeking) {
+                                            seeking = true
+                                            base = player.currentPosition
+                                        }
+                                        val delta = (movedX / width * 120_000f).toLong()
+                                        onSeekPreview((base + delta).coerceIn(0L, duration))
                                     }
                                 }
                                 return true
