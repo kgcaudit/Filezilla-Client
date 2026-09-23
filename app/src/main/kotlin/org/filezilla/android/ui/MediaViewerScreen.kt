@@ -588,7 +588,10 @@ private fun MediaPlayer(
                                     playerView.hideController()
                                 } else {
                                     val width = playerView.width
-                                    if (width > 0 && e.x > width * 0.25f && e.x < width * 0.75f) {
+                                    if (width > 0 &&
+                                        e.x > width * DIAL_EDGE_FRACTION &&
+                                        e.x < width * (1f - DIAL_EDGE_FRACTION)
+                                    ) {
                                         playerView.showController()
                                     }
                                 }
@@ -611,15 +614,15 @@ private fun MediaPlayer(
                                 val height = playerView.height.takeIf { it > 0 } ?: return false
                                 // Which dial a drag is depends only on where it
                                 // started, held for the whole drag: a drag begun
-                                // in the left quarter is brightness, in the right
-                                // quarter volume, and only one begun in the middle
-                                // scrubs. So a brightness or volume drag that
-                                // wanders a little sideways no longer jumps the
-                                // playback position. distanceY is positive moving
-                                // up, so up brightens and raises.
+                                // in the left seventh is brightness, in the right
+                                // seventh volume, and only one begun in the middle
+                                // five-sevenths scrubs. So a brightness or volume
+                                // drag that wanders a little sideways no longer
+                                // jumps the playback position. distanceY is
+                                // positive moving up, so up brightens and raises.
                                 when {
-                                    e1.x < width * 0.25f -> onBrightnessDelta(distanceY / height)
-                                    e1.x > width * 0.75f -> onVolumeDelta(distanceY / height)
+                                    e1.x < width * DIAL_EDGE_FRACTION -> onBrightnessDelta(distanceY / height)
+                                    e1.x > width * (1f - DIAL_EDGE_FRACTION) -> onVolumeDelta(distanceY / height)
                                     else -> {
                                         // Middle: scrub, but only on a clearly
                                         // sideways drag, so an up-or-down one here
@@ -1110,6 +1113,11 @@ private fun trackLanguageName(language: String?): String? = when (language?.lowe
     "zh", "chi", "zho" -> "中文"
     else -> language.uppercase(Locale.ROOT)
 }
+
+// How wide the brightness and volume edges are, as a fraction of the width: a
+// seventh each, so the picture divides 1:5:1 -- brightness, the tap-and-scrub
+// middle, volume.
+private const val DIAL_EDGE_FRACTION = 1f / 7f
 
 // The playback rates the speed button steps through, slow to fast.
 private val SPEEDS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
