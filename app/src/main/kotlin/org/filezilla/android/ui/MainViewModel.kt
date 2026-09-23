@@ -1717,6 +1717,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var readerTwoPage by mutableStateOf(graph.preferences.readerTwoPage)
         private set
 
+    /** A webtoon read in a narrow centred column rather than the full width. */
+    var readerWebtoonNarrow by mutableStateOf(graph.preferences.readerWebtoonNarrow)
+        private set
+
     fun applyReaderRtl(value: Boolean) {
         readerRtl = value
         graph.preferences.readerRtl = value
@@ -1725,6 +1729,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun applyReaderTwoPage(value: Boolean) {
         readerTwoPage = value
         graph.preferences.readerTwoPage = value
+    }
+
+    fun applyReaderWebtoonNarrow(value: Boolean) {
+        readerWebtoonNarrow = value
+        graph.preferences.readerWebtoonNarrow = value
     }
 
     fun openTextViewer(file: java.io.File, editable: Boolean) {

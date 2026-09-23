@@ -415,6 +415,7 @@
     <string name="reader_direction_rtl">Turn pages leftward (manga)</string>
     <string name="reader_two_page">Two pages (landscape)</string>
     <string name="reader_webtoon">Webtoon (scroll down)</string>
+    <string name="reader_webtoon_narrow">Narrow column</string>
     <string name="reader_next_volume">Next volume</string>
     <string name="reader_continue">Continue</string>
     <string name="reader_series_end">That was the last volume.</string>

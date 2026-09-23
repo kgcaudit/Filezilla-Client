@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -68,6 +69,9 @@ import kotlinx.coroutines.launch
 import org.filezilla.android.R
 import org.filezilla.android.viewer.Spreads
 import org.filezilla.android.viewer.Webtoon
+
+/** The share of the screen a narrow webtoon column takes, centred, when chosen. */
+private const val NARROW_COLUMN = 0.68f
 
 /**
  * A comic reader over a set of images, in one of two shapes.
@@ -143,6 +147,8 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
                     chrome = chrome,
                     onToggleChrome = { chrome = !chrome },
                     onWebtoon = { webtoonOverride = it },
+                    narrow = model.readerWebtoonNarrow,
+                    onNarrow = model::applyReaderWebtoonNarrow,
                 )
             } else {
                 PagedReader(
@@ -257,9 +263,11 @@ private fun PagedReader(
                 webtoon = false,
                 rtl = rtl,
                 twoPage = model.readerTwoPage,
+                narrow = false,
                 onWebtoon = onWebtoon,
                 onRtl = model::applyReaderRtl,
                 onTwoPage = model::applyReaderTwoPage,
+                onNarrow = {},
                 onClose = model::closeImageViewer,
             )
         }
@@ -297,6 +305,8 @@ private fun WebtoonReader(
     chrome: Boolean,
     onToggleChrome: () -> Unit,
     onWebtoon: (Boolean) -> Unit,
+    narrow: Boolean,
+    onNarrow: (Boolean) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val images = viewer.images
@@ -313,7 +323,12 @@ private fun WebtoonReader(
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val viewportWidth = constraints.maxWidth
+        // The strip runs the whole screen width, or a narrow centred column of
+        // it -- narrower panels put more of the strip on screen at once, which
+        // reads more like a webtoon than one screen-filling panel at a time.
+        val screenWidth = constraints.maxWidth
+        val columnWidth = if (narrow) (screenWidth * NARROW_COLUMN).toInt().coerceAtLeast(1) else screenWidth
+        val columnWidthDp = with(LocalDensity.current) { columnWidth.toDp() }
 
         // Only the pages known so far, from the top without a gap: the strip is
         // read downward, so the bands appear as their sizes arrive and the rest
@@ -324,7 +339,7 @@ private fun WebtoonReader(
             prefix.add(size.width to size.height)
         }
         val allKnown = prefix.size == images.size
-        val bands = remember(prefix.toList(), viewportWidth) { Webtoon.plan(prefix, viewportWidth) }
+        val bands = remember(prefix.toList(), columnWidth) { Webtoon.plan(prefix, columnWidth) }
 
         val listState = rememberLazyListState()
 
@@ -349,6 +364,7 @@ private fun WebtoonReader(
 
         LazyColumn(
             state = listState,
+            horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(top = reservedTopDp)
@@ -358,7 +374,13 @@ private fun WebtoonReader(
         ) {
             items(bands.size, key = { "${bands[it].page}:${bands[it].srcTop}" }) { i ->
                 val band = bands[i]
-                BandImage(band = band, ref = images[band.page], viewportWidthPx = viewportWidth, model = model)
+                BandImage(
+                    band = band,
+                    ref = images[band.page],
+                    columnWidthPx = columnWidth,
+                    columnWidthDp = columnWidthDp,
+                    model = model,
+                )
             }
             when {
                 !allKnown -> item(key = "loading") {
@@ -384,9 +406,11 @@ private fun WebtoonReader(
                 webtoon = true,
                 rtl = false,
                 twoPage = model.readerTwoPage,
+                narrow = narrow,
                 onWebtoon = onWebtoon,
                 onRtl = model::applyReaderRtl,
                 onTwoPage = model::applyReaderTwoPage,
+                onNarrow = onNarrow,
                 onClose = model::closeImageViewer,
             )
         }
@@ -415,7 +439,8 @@ private fun WebtoonReader(
 private fun BandImage(
     band: Webtoon.Band,
     ref: MainViewModel.ImageRef,
-    viewportWidthPx: Int,
+    columnWidthPx: Int,
+    columnWidthDp: Dp,
     model: MainViewModel,
 ) {
     // The band's height on screen is its source rows scaled to the width it
@@ -423,13 +448,13 @@ private fun BandImage(
     // the scroll does not jump as bands decode.
     val heightDp = with(LocalDensity.current) {
         if (band.imageWidth <= 0) 0.dp
-        else ((band.srcBottom - band.srcTop).toFloat() * viewportWidthPx / band.imageWidth).toDp()
+        else ((band.srcBottom - band.srcTop).toFloat() * columnWidthPx / band.imageWidth).toDp()
     }
     var bitmap by remember(band) { mutableStateOf<Bitmap?>(null) }
     LaunchedEffect(band) {
         bitmap = model.loadBand(ref, band.srcTop, band.srcBottom, band.sample)
     }
-    Box(Modifier.fillMaxWidth().height(heightDp), contentAlignment = Alignment.Center) {
+    Box(Modifier.width(columnWidthDp).height(heightDp), contentAlignment = Alignment.Center) {
         bitmap?.let {
             androidx.compose.foundation.Image(
                 bitmap = it.asImageBitmap(),
@@ -449,9 +474,11 @@ private fun ReaderTopBar(
     webtoon: Boolean,
     rtl: Boolean,
     twoPage: Boolean,
+    narrow: Boolean,
     onWebtoon: (Boolean) -> Unit,
     onRtl: (Boolean) -> Unit,
     onTwoPage: (Boolean) -> Unit,
+    onNarrow: (Boolean) -> Unit,
     onClose: () -> Unit,
 ) {
     Row(
@@ -484,8 +511,16 @@ private fun ReaderTopBar(
                     trailingIcon = { Switch(checked = webtoon, onCheckedChange = { onWebtoon(it) }) },
                     onClick = { onWebtoon(!webtoon) },
                 )
-                // Paging direction and two-up only make sense page by page, so
-                // they are put away while the strip reader is on.
+                // The strip reader reads down a column, so its one setting is
+                // how wide that column is; the paging direction and two-up
+                // settings belong to the page reader and only show there.
+                if (webtoon) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.reader_webtoon_narrow)) },
+                        trailingIcon = { Switch(checked = narrow, onCheckedChange = { onNarrow(it) }) },
+                        onClick = { onNarrow(!narrow) },
+                    )
+                }
                 if (!webtoon) {
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.reader_direction_rtl)) },

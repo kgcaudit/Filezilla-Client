@@ -230,6 +230,11 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_READER_TWO_PAGE, true)
         set(value) = prefs.edit().putBoolean(KEY_READER_TWO_PAGE, value).apply()
 
+    /** Whether a webtoon is read in a narrow centred column rather than full width. */
+    var readerWebtoonNarrow: Boolean
+        get() = prefs.getBoolean(KEY_READER_WEBTOON_NARROW, false)
+        set(value) = prefs.edit().putBoolean(KEY_READER_WEBTOON_NARROW, value).apply()
+
     /**
      * The page a comic was last left on, so it reopens where it was put down.
      *
@@ -286,6 +291,7 @@ class AppPreferences(context: Context) {
         const val KEY_FOLDER_OPTION_KEYS = "folder_options_keys"
         const val KEY_READER_RTL = "reader_rtl"
         const val KEY_READER_TWO_PAGE = "reader_two_page"
+        const val KEY_READER_WEBTOON_NARROW = "reader_webtoon_narrow"
         const val KEY_COMIC_PAGE = "comic_page_"
         const val KEY_COMIC_KEYS = "comic_page_keys"
 
