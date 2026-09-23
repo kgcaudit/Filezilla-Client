@@ -261,13 +261,23 @@ class AppPreferences(context: Context) {
 
     fun setComicPage(key: String, page: Int) {
         val edit = prefs.edit()
-        val keys = (comicKeys() - key).toMutableList()
-        keys += key
-        while (keys.size > MAX_REMEMBERED_COMICS) {
-            edit.remove(comicPageKey(keys.removeAt(0)))
-        }
+        rememberComic(edit, key)
         edit.putInt(comicPageKey(key), page)
-        edit.putString(KEY_COMIC_KEYS, keys.joinToString(KEY_SEPARATOR))
+        edit.apply()
+    }
+
+    /**
+     * How a comic was read -- one long strip, or a page at a time -- so it, and
+     * every volume of its series, opens the way it was left rather than being
+     * set again each time. Null until a book has been read one way on purpose.
+     */
+    fun comicWebtoon(key: String): Boolean? =
+        if (prefs.contains(comicWebtoonKey(key))) prefs.getBoolean(comicWebtoonKey(key), false) else null
+
+    fun setComicWebtoon(key: String, webtoon: Boolean) {
+        val edit = prefs.edit()
+        rememberComic(edit, key)
+        edit.putBoolean(comicWebtoonKey(key), webtoon)
         edit.apply()
     }
 
@@ -277,17 +287,36 @@ class AppPreferences(context: Context) {
             ?.filter { it.isNotEmpty() }
             .orEmpty()
 
+    /**
+     * Moves [key] to the front of the remembered-books list and drops the
+     * oldest past the cap, forgetting everything kept about a dropped book. One
+     * list for both what page a book was on and how it was read, so the two
+     * never fall out of step over which books are still remembered.
+     */
+    private fun rememberComic(edit: android.content.SharedPreferences.Editor, key: String) {
+        val keys = (comicKeys() - key).toMutableList()
+        keys += key
+        while (keys.size > MAX_REMEMBERED_COMICS) {
+            val dropped = keys.removeAt(0)
+            edit.remove(comicPageKey(dropped))
+            edit.remove(comicWebtoonKey(dropped))
+        }
+        edit.putString(KEY_COMIC_KEYS, keys.joinToString(KEY_SEPARATOR))
+    }
+
     // Digested so a long file path does not become an unbounded preferences
     // key, and so a path with any character in it is still a valid key. A
     // 32-bit hashCode was tried and is a hazard: two books whose hashes collide
     // would share -- and overwrite -- each other's saved page, and the eviction
     // list would fall out of step with the stored values. A SHA-256 prefix does
     // not collide in any collection a phone will ever hold.
-    private fun comicPageKey(key: String): String {
-        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(key.toByteArray())
-        val hex = digest.take(16).joinToString("") { "%02x".format(it) }
-        return "$KEY_COMIC_PAGE$hex"
-    }
+    private fun comicHash(key: String): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest(key.toByteArray())
+            .take(16).joinToString("") { "%02x".format(it) }
+
+    private fun comicPageKey(key: String) = "$KEY_COMIC_PAGE${comicHash(key)}"
+
+    private fun comicWebtoonKey(key: String) = "$KEY_COMIC_WEBTOON${comicHash(key)}"
 
     /** A stored name that no longer exists falls back rather than throwing. */
     private fun panePathKey(pane: String, source: String) = "$KEY_PANE_PATH$pane/$source"
@@ -319,6 +348,7 @@ class AppPreferences(context: Context) {
         const val MAX_WEBTOON_WIDTH = 100
         const val DEFAULT_WEBTOON_WIDTH = 68
         const val KEY_COMIC_PAGE = "comic_page_"
+        const val KEY_COMIC_WEBTOON = "comic_webtoon_"
         const val KEY_COMIC_KEYS = "comic_page_keys"
 
         /** A newline, which no path and no site id contains. */

@@ -90,8 +90,22 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
         viewer.images.firstOrNull()?.let { model.imageSize(it) }
             ?.let { autoWebtoon = Webtoon.isWebtoon(it.width, it.height) }
     }
-    var webtoonOverride by rememberSaveable(viewer.comicKey) { mutableStateOf<Boolean?>(null) }
+    // How this book opens: what was saved for it wins; else what the volume
+    // just read was carried in as; else a guess from the first page. A saved or
+    // carried-in choice is "chosen", so it is written back and kept, while a
+    // mere guess is not, and the next volume keeps whichever this settles on.
+    val savedWebtoon = remember(viewer.comicKey) { model.comicWebtoon(viewer.comicKey) }
+    var webtoonOverride by rememberSaveable(viewer.comicKey) {
+        mutableStateOf(savedWebtoon ?: viewer.initialWebtoon)
+    }
+    var webtoonChosen by rememberSaveable(viewer.comicKey) {
+        mutableStateOf(savedWebtoon != null || (viewer.initialWebtoon != null && viewer.initialWebtoonExplicit))
+    }
     val webtoon = webtoonOverride ?: autoWebtoon
+    LaunchedEffect(webtoon, webtoonChosen, viewer.comicKey) {
+        model.rememberReaderWebtoon(viewer.comicKey, webtoon, webtoonChosen)
+    }
+    val onWebtoon: (Boolean) -> Unit = { on -> webtoonOverride = on; webtoonChosen = true }
 
     // While reading, the phone's own bars go away so the page has the whole
     // screen; bringing the menu up brings them back, and leaving the reader
@@ -142,7 +156,7 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
                     reservedTopDp = reservedTopDp,
                     chrome = chrome,
                     onToggleChrome = { chrome = !chrome },
-                    onWebtoon = { webtoonOverride = it },
+                    onWebtoon = onWebtoon,
                     narrow = model.readerWebtoonNarrow,
                     onNarrow = model::applyReaderWebtoonNarrow,
                     widthPercent = model.readerWebtoonWidthPercent,
@@ -155,7 +169,7 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
                     reservedTopDp = reservedTopDp,
                     chrome = chrome,
                     onToggleChrome = { chrome = !chrome },
-                    onWebtoon = { webtoonOverride = it },
+                    onWebtoon = onWebtoon,
                 )
             }
         }

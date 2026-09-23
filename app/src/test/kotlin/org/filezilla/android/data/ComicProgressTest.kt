@@ -62,4 +62,30 @@ class ComicProgressTest {
         preferences.readerRtl = true
         assertTrue(preferences.readerRtl)
     }
+
+    @Test
+    fun `a comic not read on purpose has no remembered reading mode`() {
+        assertNull(preferences.comicWebtoon("arc:/manga.cbz"))
+    }
+
+    @Test
+    fun `how a comic was read comes back, on or off`() {
+        preferences.setComicWebtoon("arc:/webtoon.cbz", true)
+        preferences.setComicWebtoon("arc:/manga.cbz", false)
+        assertEquals(true, preferences.comicWebtoon("arc:/webtoon.cbz"))
+        assertEquals(false, preferences.comicWebtoon("arc:/manga.cbz"))
+    }
+
+    @Test
+    fun `forgetting the oldest comic drops its page and its reading mode together`() {
+        val cap = AppPreferences.MAX_REMEMBERED_COMICS
+        preferences.setComicPage("first", 10)
+        preferences.setComicWebtoon("first", true)
+        // Push "first" out past the cap; page and mode share the one list, so
+        // both go, and neither is left orphaned in the preferences file.
+        for (i in 0 until cap) preferences.setComicPage("book$i", i)
+
+        assertNull(preferences.comicPage("first"))
+        assertNull(preferences.comicWebtoon("first"))
+    }
 }

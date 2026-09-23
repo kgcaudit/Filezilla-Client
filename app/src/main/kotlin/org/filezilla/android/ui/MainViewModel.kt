@@ -1733,6 +1733,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val comicKey: String?,
         val book: Boolean = false,
         val nextVolume: NextVolume? = null,
+        /**
+         * The reading mode to open in when nothing is saved for this book:
+         * carried from the volume just read so a series keeps its shape on
+         * "continue". Null means fall back to what the first page looks like.
+         * [initialWebtoonExplicit] says whether that carried mode was a choice
+         * rather than a guess, so a guess is not written down as one.
+         */
+        val initialWebtoon: Boolean? = null,
+        val initialWebtoonExplicit: Boolean = false,
     )
 
     var imageViewer by mutableStateOf<ImageViewer?>(null)
@@ -1778,6 +1787,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         graph.preferences.readerWebtoonWidthPercent = clamped
     }
 
+    // The reading mode of the comic on screen, carried to the next volume so a
+    // series keeps its shape without being set again on every book. Read only
+    // when opening the next volume, so a fresh, unrelated comic does not inherit.
+    private var inheritWebtoon: Boolean? = null
+    private var inheritWebtoonExplicit = false
+
+    /** How this book was last read on purpose, or null to judge by its first page. */
+    fun comicWebtoon(key: String?): Boolean? = key?.let { graph.preferences.comicWebtoon(it) }
+
+    /**
+     * The reader's word on how the book on screen is being read.
+     *
+     * Kept so the next volume opens the same way, and -- when the mode was
+     * chosen rather than guessed -- written down for this book so it, too,
+     * reopens the way it was left.
+     */
+    fun rememberReaderWebtoon(key: String?, webtoon: Boolean, explicit: Boolean) {
+        inheritWebtoon = webtoon
+        inheritWebtoonExplicit = explicit
+        if (explicit && key != null) graph.preferences.setComicWebtoon(key, webtoon)
+    }
+
     fun openTextViewer(file: java.io.File, editable: Boolean) {
         textViewer = TextViewer(file, file.name, editable)
     }
@@ -1796,10 +1827,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         comicKey: String?,
         book: Boolean = false,
         nextVolume: NextVolume? = null,
+        initialWebtoon: Boolean? = null,
+        initialWebtoonExplicit: Boolean = false,
     ) {
         if (images.isEmpty()) return
         val start = comicKey?.let { graph.preferences.comicPage(it) } ?: index
-        imageViewer = ImageViewer(images, start.coerceIn(0, images.size - 1), comicKey, book, nextVolume)
+        imageViewer = ImageViewer(
+            images = images,
+            index = start.coerceIn(0, images.size - 1),
+            comicKey = comicKey,
+            book = book,
+            nextVolume = nextVolume,
+            initialWebtoon = initialWebtoon,
+            initialWebtoonExplicit = initialWebtoonExplicit,
+        )
     }
 
     /**
@@ -1927,6 +1968,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 comicKey = "arc\u0000${file.path}\u0000",
                 book = true,
                 nextVolume = next,
+                initialWebtoon = inheritWebtoon,
+                initialWebtoonExplicit = inheritWebtoonExplicit,
             )
         }
     }
@@ -1945,6 +1988,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             comicKey = "arc\u0000${session.file.path}\u0000$at",
             book = true,
             nextVolume = next,
+            initialWebtoon = inheritWebtoon,
+            initialWebtoonExplicit = inheritWebtoonExplicit,
         )
     }
 
@@ -1987,6 +2032,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 comicKey = "arc\u0000${held.path}\u0000",
                 book = true,
                 nextVolume = next,
+                initialWebtoon = inheritWebtoon,
+                initialWebtoonExplicit = inheritWebtoonExplicit,
             )
         }
     }
