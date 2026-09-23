@@ -432,8 +432,12 @@ private fun MediaPlayer(
                     playerView.player = player
                     playerView.useController = true
                     // The controls come up on a tap, not on their own, so the
-                    // picture is clear until asked.
+                    // picture is clear until asked. Showing and hiding is driven
+                    // by the gesture listener below rather than by the view, so
+                    // only a tap in the middle brings them up and a stray tap on
+                    // an edge does not.
                     playerView.controllerAutoShow = false
+                    playerView.controllerHideOnTouch = false
                     playerView.controllerShowTimeoutMs = 3_000
                     // The centre is play, flanked by a ten-second rewind and
                     // fast-forward rather than the previous and next file: the
@@ -451,18 +455,33 @@ private fun MediaPlayer(
                     )
                     playerViewRef = playerView
 
-                    // Drag gestures, watched but never consumed: the listener
-                    // always returns false, so a tap still reaches the view's
-                    // own controls and a press still reaches a control's button.
-                    // A sideways drag scrubs; an up-or-down drag is a brightness
-                    // dial on the left of the picture and a volume dial on the
-                    // right. The seek is committed when the finger lifts.
+                    // All touches on the picture are ours, so the controls show
+                    // and hide only as told. A tap in the middle half brings the
+                    // controls up (or, if they are up, a tap anywhere puts them
+                    // down); a tap on an edge does nothing, so resting a thumb
+                    // there does not keep flashing the menu. A sideways drag
+                    // scrubs. An up-or-down drag is a brightness dial on the left
+                    // quarter and a volume dial on the right quarter -- the
+                    // middle is left to the tap. The control buttons are child
+                    // views and take their own presses before this runs.
                     var seeking = false
                     var base = 0L
                     val detector = GestureDetector(
                         ctx,
                         object : GestureDetector.SimpleOnGestureListener() {
                             override fun onDown(e: MotionEvent) = true
+
+                            override fun onSingleTapUp(e: MotionEvent): Boolean {
+                                if (playerView.isControllerFullyVisible) {
+                                    playerView.hideController()
+                                } else {
+                                    val width = playerView.width
+                                    if (width > 0 && e.x > width * 0.25f && e.x < width * 0.75f) {
+                                        playerView.showController()
+                                    }
+                                }
+                                return true
+                            }
 
                             override fun onScroll(
                                 e1: MotionEvent?,
@@ -471,11 +490,11 @@ private fun MediaPlayer(
                                 distanceY: Float,
                             ): Boolean {
                                 if (e1 == null) return false
+                                val width = playerView.width.takeIf { it > 0 } ?: return false
                                 val movedX = e2.x - e1.x
                                 val movedY = e2.y - e1.y
                                 if (kotlin.math.abs(movedX) > kotlin.math.abs(movedY)) {
-                                    // Sideways: scrub.
-                                    val width = playerView.width.takeIf { it > 0 } ?: return false
+                                    // Sideways: scrub, wherever it starts.
                                     val duration = player.duration.takeIf { it > 0 } ?: return false
                                     if (!seeking) {
                                         seeking = true
@@ -484,15 +503,17 @@ private fun MediaPlayer(
                                     val delta = (movedX / width * 120_000f).toLong()
                                     onSeekPreview((base + delta).coerceIn(0L, duration))
                                 } else {
-                                    // Up or down: brightness on the left half,
-                                    // volume on the right. distanceY is positive
-                                    // moving up, so up brightens and raises.
+                                    // Up or down, but only near an edge: the left
+                                    // quarter is brightness, the right quarter is
+                                    // volume, and the middle is left alone.
+                                    // distanceY is positive moving up, so up
+                                    // brightens and raises.
                                     val height = playerView.height.takeIf { it > 0 } ?: return false
                                     val fraction = distanceY / height
-                                    if (e1.x < playerView.width / 2f) {
-                                        onBrightnessDelta(fraction)
-                                    } else {
-                                        onVolumeDelta(fraction)
+                                    when {
+                                        e1.x < width * 0.25f -> onBrightnessDelta(fraction)
+                                        e1.x > width * 0.75f -> onVolumeDelta(fraction)
+                                        else -> return false
                                     }
                                 }
                                 return true
@@ -510,7 +531,7 @@ private fun MediaPlayer(
                             }
                             onGestureEnd()
                         }
-                        false
+                        true
                     }
                     playerView
                 },
@@ -705,18 +726,12 @@ private fun SubtitleSheet(
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 16.dp),
+                .padding(horizontal = 16.dp)
+                .padding(top = 2.dp, bottom = 8.dp),
         ) {
             Text(
-                stringResource(R.string.action_subtitles),
-                style = MaterialTheme.typography.titleLarge,
-            )
-            Spacer(Modifier.height(12.dp))
-
-            Text(
                 stringResource(R.string.subtitle_track),
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
             )
             val textGroups = remember(tracksVersion, player) {
@@ -733,12 +748,18 @@ private fun SubtitleSheet(
                     .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
                     .build()
             }
+            // A track shows its own name, or its language; one that carries
+            // neither -- an embedded track with nothing filled in -- is numbered,
+            // so two nameless tracks never read as the same "subtitle".
             val fallback = stringResource(R.string.subtitle_default_name)
+            var unnamed = 0
             textGroups.forEach { group ->
                 for (i in 0 until group.length) {
                     if (!group.isTrackSupported(i)) continue
                     val format = group.getTrackFormat(i)
-                    val label = format.label ?: trackLanguageName(format.language) ?: fallback
+                    val label = format.label
+                        ?: trackLanguageName(format.language)
+                        ?: "$fallback ${++unnamed}"
                     SubtitleChoice(label = label, selected = group.isTrackSelected(i)) {
                         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
                             .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, i))
@@ -749,51 +770,60 @@ private fun SubtitleSheet(
             }
 
             if (folderSubtitles.isNotEmpty()) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(8.dp))
                 Text(
                     stringResource(R.string.subtitle_from_folder),
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
                 folderSubtitles.forEach { file ->
                     Text(
                         file.name,
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onPickFolderSubtitle(file) }
-                            .padding(vertical = 8.dp),
+                            .padding(vertical = 6.dp),
                     )
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
-            Text(
-                stringResource(R.string.subtitle_size),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Slider(
-                value = scale,
-                onValueChange = onScale,
-                valueRange = AppPreferences.MIN_SUBTITLE_SCALE..AppPreferences.MAX_SUBTITLE_SCALE,
-            )
-
-            Spacer(Modifier.height(8.dp))
-            Text(
-                stringResource(R.string.subtitle_color),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Spacer(Modifier.height(10.dp))
+            // Size and colour share a row: the slider takes the width it can and
+            // the swatches sit at the end, so the look controls cost one line,
+            // not three.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.subtitle_size),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Slider(
+                    value = scale,
+                    onValueChange = onScale,
+                    valueRange = AppPreferences.MIN_SUBTITLE_SCALE..AppPreferences.MAX_SUBTITLE_SCALE,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 10.dp),
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.subtitle_color),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(end = 4.dp),
+                )
                 for (swatch in SUBTITLE_COLORS) {
                     val chosen = swatch == color
                     Box(
                         Modifier
-                            .size(36.dp)
+                            .size(28.dp)
                             .border(
                                 width = if (chosen) 3.dp else 1.dp,
                                 color = if (chosen) {
@@ -803,7 +833,7 @@ private fun SubtitleSheet(
                                 },
                                 shape = CircleShape,
                             )
-                            .padding(4.dp)
+                            .padding(3.dp)
                             .background(Color(swatch), CircleShape)
                             .clickable { onColor(swatch) },
                     )
@@ -819,16 +849,20 @@ private fun SubtitleChoice(label: String, selected: Boolean, onClick: () -> Unit
         Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 2.dp),
+            .padding(vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RadioButton(selected = selected, onClick = onClick)
+        RadioButton(
+            selected = selected,
+            onClick = onClick,
+            modifier = Modifier.size(22.dp),
+        )
         Text(
             label,
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = 4.dp),
+            modifier = Modifier.padding(start = 12.dp),
         )
     }
 }
@@ -987,21 +1021,32 @@ private fun sidecarSubtitles(video: File, cacheDir: File): List<MediaItem.Subtit
             Uri.fromFile(file) to (SUBTITLE_MIME[ext] ?: return@mapNotNull null)
         }
         val tag = stem.removePrefix(base).trimStart('.', '_', '-', ' ')
-        Triple(uri, mime, languageOf(tag))
+        // The track is named after its file, so the picker shows which external
+        // subtitle it is rather than a bare "subtitle" that reads the same as
+        // every other unnamed one.
+        SidecarSub(uri, mime, languageOf(tag), file.name)
     }
 
     // Show one by default: a Korean track if there is one, else the first.
-    val defaultIdx = found.indexOfFirst { it.third == "ko" }.let {
+    val defaultIdx = found.indexOfFirst { it.language == "ko" }.let {
         if (it >= 0) it else if (found.isNotEmpty()) 0 else -1
     }
-    return found.mapIndexed { i, (uri, mime, language) ->
-        MediaItem.SubtitleConfiguration.Builder(uri)
-            .setMimeType(mime)
-            .setLanguage(language)
+    return found.mapIndexed { i, sub ->
+        MediaItem.SubtitleConfiguration.Builder(sub.uri)
+            .setMimeType(sub.mime)
+            .setLanguage(sub.language)
+            .setLabel(sub.label)
             .setSelectionFlags(if (i == defaultIdx) C.SELECTION_FLAG_DEFAULT else 0)
             .build()
     }
 }
+
+private data class SidecarSub(
+    val uri: Uri,
+    val mime: String,
+    val language: String?,
+    val label: String,
+)
 
 /**
  * Loads a subtitle the reader picked by hand and shows it, whatever its name or
@@ -1036,11 +1081,13 @@ private fun loadPickedSubtitle(
         val vtt = SamiSubtitles.toVttFile(context.cacheDir, name, bytes) ?: return
         MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(vtt))
             .setMimeType(MimeTypes.TEXT_VTT)
+            .setLabel(name)
             .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
             .build()
     } else {
         MediaItem.SubtitleConfiguration.Builder(picked)
             .setMimeType(SUBTITLE_MIME[ext] ?: MimeTypes.APPLICATION_SUBRIP)
+            .setLabel(name)
             .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
             .build()
     }
