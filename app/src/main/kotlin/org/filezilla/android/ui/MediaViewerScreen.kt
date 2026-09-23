@@ -1,10 +1,12 @@
 package org.filezilla.android.ui
 
+import android.annotation.SuppressLint
 import android.content.pm.ActivityInfo
 import android.net.Uri
+import android.view.GestureDetector
+import android.view.MotionEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -26,7 +28,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -36,8 +37,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -73,6 +72,11 @@ import org.filezilla.android.R
  */
 // media3 marks these APIs unstable through androidx's opt-in, not Kotlin's, so
 // the annotation is androidx.annotation.OptIn rather than kotlin's @OptIn.
+// The seek gesture is a touch listener on the player view rather than a Compose
+// overlay: an overlay on top of the view swallows the taps the player's own
+// controls need, so the menu stopped coming up. The listener never consumes a
+// tap -- it watches for a sideways drag and leaves everything else to the view.
+@SuppressLint("ClickableViewAccessibility")
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 fun MediaViewerScreen(viewer: MainViewModel.MediaViewer, model: MainViewModel) {
@@ -154,57 +158,80 @@ fun MediaViewerScreen(viewer: MainViewModel.MediaViewer, model: MainViewModel) {
 
     BackHandler { model.closeMediaViewer() }
 
-    // A finger dragged across the picture scrubs: the distance maps to time,
-    // a full width being two minutes, and a read-out of where the release
-    // would land shows while the drag is in hand.
-    var widthPx by remember { mutableIntStateOf(0) }
-    var dragBase by remember { mutableLongStateOf(0L) }
-    var dragAccum by remember { mutableFloatStateOf(0f) }
+    // A finger dragged across the picture scrubs: the distance maps to time, a
+    // full width being two minutes, and a read-out of where the release would
+    // land shows while the drag is in hand. The drag is watched on the player
+    // view itself (see the class comment) rather than an overlay, so it is fed
+    // as a preview here and committed on release.
     var seekTarget by remember { mutableLongStateOf(-1L) }
+    val onSeekPreview: (Long) -> Unit = { seekTarget = it }
+    val onSeekCommit: () -> Unit = {
+        val target = seekTarget
+        if (target >= 0) exo.seekTo(target)
+        seekTarget = -1L
+    }
 
     Surface(Modifier.fillMaxSize(), color = Color.Black) {
         Box(Modifier.fillMaxSize()) {
             AndroidView(
                 factory = { ctx ->
-                    PlayerView(ctx).apply {
-                        player = exo
-                        useController = true
-                        controllerShowTimeoutMs = 3_000
-                        setShowNextButton(viewer.items.size > 1)
-                        setShowPreviousButton(viewer.items.size > 1)
-                        setBackgroundColor(android.graphics.Color.BLACK)
+                    val playerView = PlayerView(ctx)
+                    playerView.player = exo
+                    playerView.useController = true
+                    playerView.controllerShowTimeoutMs = 3_000
+                    playerView.setShowNextButton(viewer.items.size > 1)
+                    playerView.setShowPreviousButton(viewer.items.size > 1)
+                    playerView.setBackgroundColor(android.graphics.Color.BLACK)
+
+                    // Sideways-drag scrubbing, watched but never consumed: the
+                    // listener always returns false, so a tap still reaches the
+                    // view's own controls and a press still reaches a control's
+                    // button. Only a horizontal drag drives the seek, and it is
+                    // committed when the finger lifts.
+                    var seeking = false
+                    var base = 0L
+                    val detector = GestureDetector(
+                        ctx,
+                        object : GestureDetector.SimpleOnGestureListener() {
+                            override fun onDown(e: MotionEvent) = true
+
+                            override fun onScroll(
+                                e1: MotionEvent?,
+                                e2: MotionEvent,
+                                distanceX: Float,
+                                distanceY: Float,
+                            ): Boolean {
+                                if (e1 == null) return false
+                                val movedX = e2.x - e1.x
+                                val movedY = e2.y - e1.y
+                                if (kotlin.math.abs(movedX) <= kotlin.math.abs(movedY)) return false
+                                val width = playerView.width.takeIf { it > 0 } ?: return false
+                                val duration = exo.duration.takeIf { it > 0 } ?: return false
+                                if (!seeking) {
+                                    seeking = true
+                                    base = exo.currentPosition
+                                }
+                                val delta = (movedX / width * 120_000f).toLong()
+                                onSeekPreview((base + delta).coerceIn(0L, duration))
+                                return true
+                            }
+                        },
+                    )
+                    playerView.setOnTouchListener { _, event ->
+                        detector.onTouchEvent(event)
+                        if (event.actionMasked == MotionEvent.ACTION_UP ||
+                            event.actionMasked == MotionEvent.ACTION_CANCEL
+                        ) {
+                            if (seeking) {
+                                onSeekCommit()
+                                seeking = false
+                            }
+                        }
+                        false
                     }
+                    playerView
                 },
                 modifier = Modifier.fillMaxSize(),
-            )
-            // The scrub layer. It consumes only horizontal drags, so a tap
-            // still falls through to the player's own controls and the buttons
-            // laid over the top still take their presses.
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .onSizeChanged { widthPx = it.width }
-                    .pointerInput(exo) {
-                        detectHorizontalDragGestures(
-                            onDragStart = {
-                                dragBase = exo.currentPosition
-                                dragAccum = 0f
-                                seekTarget = dragBase
-                            },
-                            onDragEnd = {
-                                if (seekTarget >= 0) exo.seekTo(seekTarget)
-                                seekTarget = -1L
-                            },
-                            onDragCancel = { seekTarget = -1L },
-                        ) { change, dragAmount ->
-                            dragAccum += dragAmount
-                            val width = widthPx.takeIf { it > 0 } ?: return@detectHorizontalDragGestures
-                            val duration = exo.duration.takeIf { it > 0 } ?: return@detectHorizontalDragGestures
-                            val delta = (dragAccum / width * 120_000f).toLong()
-                            seekTarget = (dragBase + delta).coerceIn(0L, duration)
-                            change.consume()
-                        }
-                    },
             )
             // A way back, over the top-left, since the player's own controls
             // have no exit; and a turn button opposite it.
