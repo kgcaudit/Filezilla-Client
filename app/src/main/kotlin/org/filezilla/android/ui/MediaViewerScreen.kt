@@ -70,6 +70,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -453,7 +454,7 @@ private fun MediaPlayer(
                     if (!group.isTrackSupported(i)) continue
                     val format = group.getTrackFormat(i)
                     number++
-                    val external = format.id?.startsWith(EXTERNAL_SUB_ID_PREFIX) == true
+                    val external = isExternalSubtitle(format)
                     val language = format.language?.takeIf { it.isNotBlank() }
                     add(
                         TextTrack(
@@ -514,11 +515,21 @@ private fun MediaPlayer(
     var resizeMode by rememberSaveable { mutableIntStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
     LaunchedEffect(playerViewRef, resizeMode) { playerViewRef?.resizeMode = resizeMode }
 
+    // Two fingers pinched apart or together zoom the picture in or out, held
+    // between its own size and four times it.
+    var videoScale by rememberSaveable { mutableFloatStateOf(1f) }
+    val onScaleDelta: (Float) -> Unit = { factor ->
+        videoScale = (videoScale * factor).coerceIn(1f, 4f)
+    }
+
     Surface(Modifier.fillMaxSize(), color = Color.Black) {
         Box(Modifier.fillMaxSize()) {
             AndroidView(
                 factory = { ctx ->
-                    val playerView = PlayerView(ctx)
+                    // Inflated (not new PlayerView(ctx)) so it uses a TextureView,
+                    // which the pinch-zoom can scale; a SurfaceView cannot.
+                    val playerView = android.view.LayoutInflater.from(ctx)
+                        .inflate(R.layout.media_player_view, null) as PlayerView
                     playerView.player = player
                     playerView.useController = true
                     // The controls come up on a tap, not on their own, so the
@@ -610,8 +621,21 @@ private fun MediaPlayer(
                             }
                         },
                     )
+                    // Two-finger pinch to zoom, watched alongside the one-finger
+                    // gestures. While a pinch is in hand the one-finger detector
+                    // is left out, so a zoom is not also read as a scrub or dial.
+                    val scaleDetector = android.view.ScaleGestureDetector(
+                        ctx,
+                        object : android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                            override fun onScale(d: android.view.ScaleGestureDetector): Boolean {
+                                onScaleDelta(d.scaleFactor)
+                                return true
+                            }
+                        },
+                    )
                     playerView.setOnTouchListener { _, event ->
-                        detector.onTouchEvent(event)
+                        scaleDetector.onTouchEvent(event)
+                        if (!scaleDetector.isInProgress) detector.onTouchEvent(event)
                         if (event.actionMasked == MotionEvent.ACTION_UP ||
                             event.actionMasked == MotionEvent.ACTION_CANCEL
                         ) {
@@ -625,7 +649,12 @@ private fun MediaPlayer(
                     }
                     playerView
                 },
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = videoScale
+                        scaleY = videoScale
+                    },
             )
             // A way back, over the top-left, since the player's own controls
             // have no exit; the subtitle and turn buttons opposite it. Shown
@@ -975,8 +1004,23 @@ private fun disableTextTracks(player: Player) {
 }
 
 /**
+ * Whether a track is a subtitle the app attached from a file rather than one
+ * carried inside the film. The mark it was given (an id) is the sure sign; a
+ * label that is a subtitle filename is the fallback, for a media3 that dropped
+ * the id in passing.
+ */
+@androidx.annotation.OptIn(UnstableApi::class)
+private fun isExternalSubtitle(format: androidx.media3.common.Format): Boolean {
+    if (format.id?.startsWith(EXTERNAL_SUB_ID_PREFIX) == true) return true
+    val labelExt = format.label?.substringAfterLast('.', "")?.lowercase()
+    return labelExt != null && labelExt in SUBTITLE_EXTENSIONS
+}
+
+/**
  * The short format name for a track: for an external one, the file's own
  * extension (SRT, SMI, ASS); for one inside the film, its codec (SUBRIP, VTT).
+ * When a subtitle has been transcoded to media3's cues, its own format is kept
+ * in the codecs field, which is read here so the cue name never shows.
  */
 @androidx.annotation.OptIn(UnstableApi::class)
 private fun subtitleFormat(external: Boolean, format: androidx.media3.common.Format): String {
@@ -984,14 +1028,19 @@ private fun subtitleFormat(external: Boolean, format: androidx.media3.common.For
         val ext = format.label?.substringAfterLast('.', "")?.uppercase().orEmpty()
         if (ext.isNotEmpty()) return ext
     }
-    return when (format.sampleMimeType) {
+    val mime = if (format.sampleMimeType == MimeTypes.APPLICATION_MEDIA3_CUES) {
+        format.codecs ?: format.sampleMimeType
+    } else {
+        format.sampleMimeType
+    }
+    return when (mime) {
         MimeTypes.APPLICATION_SUBRIP -> "SUBRIP"
         MimeTypes.TEXT_VTT -> "VTT"
         MimeTypes.TEXT_SSA -> "SSA"
         MimeTypes.APPLICATION_TTML -> "TTML"
         MimeTypes.APPLICATION_PGS -> "PGS"
         MimeTypes.APPLICATION_DVBSUBS -> "DVB"
-        else -> format.sampleMimeType?.substringAfterLast('/')?.uppercase() ?: "SUB"
+        else -> mime?.substringAfterLast('/')?.uppercase() ?: "SUB"
     }
 }
 
