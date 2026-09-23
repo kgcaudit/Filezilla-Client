@@ -345,22 +345,28 @@ private fun MediaPlayer(
     // The left of the picture is a brightness dial, the right a volume dial:
     // slide up or down on either. Brightness is the window's own, handed back to
     // the system on the way out; volume is the media stream's. Each shows a
-    // read-out while the finger is down. Brightness starts from wherever the
-    // system had it, volume from where the stream is.
+    // read-out while the finger is down. Brightness opens at full and holds where
+    // it is set; volume follows the stream.
     val audio = remember {
         context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
     }
-    var brightness by remember { mutableFloatStateOf(-1f) }
-    var volume by remember { mutableFloatStateOf(-1f) }
+    // Held across a rotation or a trip to the background -- which is what used to
+    // drop the brightness back to the system's level. Brightness begins at full.
+    var brightness by rememberSaveable { mutableFloatStateOf(1f) }
+    var volume by rememberSaveable { mutableFloatStateOf(-1f) }
     var brightnessHud by remember { mutableFloatStateOf(-1f) }
     var volumeHud by remember { mutableFloatStateOf(-1f) }
-    val onBrightnessDelta: (Float) -> Unit = { fraction ->
-        val start = if (brightness in 0f..1f) brightness else systemBrightness(context)
-        val next = (start + fraction).coerceIn(0.01f, 1f)
-        brightness = next
+    // Applied from here, not only on a drag, so the window takes the remembered
+    // brightness on opening -- full, to start -- and takes it again after a
+    // rotation or a return from the background, which reset the window otherwise.
+    LaunchedEffect(activity, brightness) {
         activity?.window?.let { window ->
-            window.attributes = window.attributes.also { it.screenBrightness = next }
+            window.attributes = window.attributes.also { it.screenBrightness = brightness }
         }
+    }
+    val onBrightnessDelta: (Float) -> Unit = { fraction ->
+        val next = (brightness + fraction).coerceIn(0.01f, 1f)
+        brightness = next
         brightnessHud = next
         volumeHud = -1f
     }
@@ -1087,18 +1093,6 @@ private val SUBTITLE_COLORS = listOf(
     0xFF76FF03.toInt(),
     0xFFFF5252.toInt(),
 )
-
-/**
- * The system's current screen brightness as a 0..1 fraction, the starting
- * point for the brightness dial before it has moved the window's own. Falls
- * back to the middle if the setting cannot be read.
- */
-private fun systemBrightness(context: Context): Float = runCatching {
-    android.provider.Settings.System.getInt(
-        context.contentResolver,
-        android.provider.Settings.System.SCREEN_BRIGHTNESS,
-    ) / 255f
-}.getOrDefault(0.5f).coerceIn(0.01f, 1f)
 
 /** A readable name for a subtitle track's language code, for the picker. */
 private fun trackLanguageName(language: String?): String? = when (language?.lowercase()) {
