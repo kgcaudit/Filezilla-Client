@@ -570,21 +570,27 @@ private fun MediaPlayer(
                     }
                     playerViewRef = playerView
 
-                    // All touches on the picture are ours, so the controls show
-                    // and hide only as told. A tap in the middle half brings the
-                    // controls up (or, if they are up, a tap anywhere puts them
-                    // down); a tap on an edge does nothing, so resting a thumb
-                    // there does not keep flashing the menu. A sideways drag
-                    // scrubs. An up-or-down drag is a brightness dial on the left
-                    // quarter and a volume dial on the right quarter -- the
-                    // middle is left to the tap. The control buttons are child
-                    // views and take their own presses before this runs.
+                    // Touches are read by what they are, not by where they land,
+                    // and each does one thing only -- so a dial never also scrubs
+                    // and no drag ever flashes the menu. A tap works the controls,
+                    // wherever it falls. A drag is sorted the moment it starts, by
+                    // which way it leans, and keeps that kind to the end: an
+                    // up-or-down drag is a dial -- brightness on the left half,
+                    // volume on the right -- and a sideways drag scrubs. The dials
+                    // sit on top: a drag that leans even slightly vertical is a
+                    // dial, so the whole picture raises brightness or volume rather
+                    // than a narrow edge. The control buttons are child views and
+                    // take their own presses before this runs.
                     var seeking = false
                     var base = 0L
+                    var dragMode = DRAG_NONE
                     val detector = GestureDetector(
                         ctx,
                         object : GestureDetector.SimpleOnGestureListener() {
-                            override fun onDown(e: MotionEvent) = true
+                            override fun onDown(e: MotionEvent): Boolean {
+                                dragMode = DRAG_NONE
+                                return true
+                            }
 
                             // A confirmed single tap (one that is not the start of
                             // a double tap) works the controls; a double tap plays
@@ -595,13 +601,7 @@ private fun MediaPlayer(
                                 if (playerView.isControllerFullyVisible) {
                                     playerView.hideController()
                                 } else {
-                                    val width = playerView.width
-                                    if (width > 0 &&
-                                        e.x > width * DIAL_EDGE_FRACTION &&
-                                        e.x < width * (1f - DIAL_EDGE_FRACTION)
-                                    ) {
-                                        playerView.showController()
-                                    }
+                                    playerView.showController()
                                 }
                                 return true
                             }
@@ -620,33 +620,36 @@ private fun MediaPlayer(
                                 if (e1 == null) return false
                                 val width = playerView.width.takeIf { it > 0 } ?: return false
                                 val height = playerView.height.takeIf { it > 0 } ?: return false
-                                // Which dial a drag is depends only on where it
-                                // started, held for the whole drag: a drag begun
-                                // in the left seventh is brightness, in the right
-                                // seventh volume, and only one begun in the middle
-                                // five-sevenths scrubs. So a brightness or volume
-                                // drag that wanders a little sideways no longer
-                                // jumps the playback position. distanceY is
-                                // positive moving up, so up brightens and raises.
-                                when {
-                                    e1.x < width * DIAL_EDGE_FRACTION ->
+                                // Sort the drag once, on the first move, and hold
+                                // that kind to the end -- which is what keeps a dial
+                                // from turning into a scrub when the finger wanders.
+                                // A drag that leans vertical is a dial and the dials
+                                // win the tie, so they sit on top; left half is
+                                // brightness, right half volume. A clearly sideways
+                                // drag scrubs.
+                                if (dragMode == DRAG_NONE) {
+                                    val movedX = kotlin.math.abs(e2.x - e1.x)
+                                    val movedY = kotlin.math.abs(e2.y - e1.y)
+                                    dragMode = if (movedY >= movedX) {
+                                        if (e1.x < width / 2f) DRAG_BRIGHTNESS else DRAG_VOLUME
+                                    } else {
+                                        DRAG_SEEK
+                                    }
+                                }
+                                // distanceY is positive moving up, so up brightens
+                                // and raises.
+                                when (dragMode) {
+                                    DRAG_BRIGHTNESS ->
                                         onBrightnessDelta(distanceY / height * DIAL_SENSITIVITY)
-                                    e1.x > width * (1f - DIAL_EDGE_FRACTION) ->
+                                    DRAG_VOLUME ->
                                         onVolumeDelta(distanceY / height * DIAL_SENSITIVITY)
                                     else -> {
-                                        // Middle: scrub, but only on a clearly
-                                        // sideways drag, so an up-or-down one here
-                                        // does nothing.
-                                        val movedX = e2.x - e1.x
-                                        val movedY = e2.y - e1.y
-                                        if (kotlin.math.abs(movedX) <= kotlin.math.abs(movedY)) {
-                                            return false
-                                        }
                                         val duration = player.duration.takeIf { it > 0 } ?: return false
                                         if (!seeking) {
                                             seeking = true
                                             base = player.currentPosition
                                         }
+                                        val movedX = e2.x - e1.x
                                         val delta = (movedX / width * 120_000f).toLong()
                                         onSeekPreview((base + delta).coerceIn(0L, duration))
                                     }
@@ -1107,10 +1110,14 @@ private fun trackLanguageName(language: String?): String? = when (language?.lowe
     else -> language.uppercase(Locale.ROOT)
 }
 
-// How wide the brightness and volume edges are, as a fraction of the width: a
-// seventh each, so the picture divides 1:5:1 -- brightness, the tap-and-scrub
-// middle, volume.
-private const val DIAL_EDGE_FRACTION = 1f / 7f
+// A one-finger drag is one of these for its whole length, fixed the moment it
+// begins by the way it leans. Deciding once and holding it is what keeps a dial
+// from turning into a scrub -- or the reverse -- when the finger wanders, and it
+// is why a drag and the menu tap can never both fire.
+private const val DRAG_NONE = 0
+private const val DRAG_BRIGHTNESS = 1
+private const val DRAG_VOLUME = 2
+private const val DRAG_SEEK = 3
 
 // How fast the brightness and volume dials move: a full sweep of either takes
 // about a third of the height, rather than the whole of it, which felt sluggish.
