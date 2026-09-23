@@ -112,6 +112,10 @@ class WordingTest {
         // three questions the panes and the old browser both ask.
         val allowed = listOf(
             "action_cancel", "action_delete", "confirm_delete_detail", "filter_clear",
+            // The way out of a full-screen viewer, read on the back arrow of the
+            // text reader and the image reader and on the reader's end card:
+            // one "close" for the one thing it does, wherever it is shown.
+            "action_close",
             // The verb a prompt's button carries. Two prompts each make
             // something and two each rename something, and they have to
             // say it the same way -- which is the whole reason the button

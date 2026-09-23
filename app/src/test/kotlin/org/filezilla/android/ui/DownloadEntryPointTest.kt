@@ -150,8 +150,16 @@ class DownloadEntryPointTest {
      */
     @Test
     fun `only one place copies or moves what is held`() {
-        assertEquals(setOf("runPaste"), membersContaining("LocalOperations.copy("))
-        assertEquals(setOf("runPaste"), membersContaining("LocalOperations.move("))
+        // The copy and the move themselves live in one pure function,
+        // pasteLocally, and only in the file that holds it -- so a second
+        // place writing files behind the paste would show up here.
+        val copyMoveFiles = uiSources()
+            .filter { (_, source) -> "LocalOperations.copy(" in source || "LocalOperations.move(" in source }
+            .map { it.first }
+            .toSet()
+        assertEquals(setOf("PasteConflicts.kt"), copyMoveFiles)
+        // And the view model reaches that one function through runPaste alone.
+        assertEquals(setOf("runPaste"), membersContaining("pasteLocally("))
     }
 
     @Test
@@ -228,7 +236,11 @@ class DownloadEntryPointTest {
 
     @Test
     fun `only the two places that walked the folder remove anything from a server`() {
-        val removers = setOf("removeRemotely", "runRemoteMove")
+        // A selection delete walks the folder in removeRemotely; a same-server
+        // move that lands on a taken name clears it through deleteRemoteTree,
+        // which runRemoteMove calls -- both go through the RemoteDelete walk, so
+        // a bare RMD on a non-empty folder cannot creep back in.
+        val removers = setOf("removeRemotely", "deleteRemoteTree")
         assertEquals(removers, membersContaining("session.removeDirectory("))
         assertEquals(removers, membersContaining("session.deleteFile("))
         assertEquals(removers, membersContaining("RemoteDelete.plan("))

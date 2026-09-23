@@ -1779,7 +1779,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun openLocalImage(id: PaneId, file: java.io.File) {
         val folder = pane(id).path
-        val images = pane(id).entries.filter { !it.isDirectory && ImageFiles.looksImage(it.name) }
+        // Ordered for reading, not by whatever the browser is sorted by: a
+        // folder shown newest-first would otherwise open its pictures in that
+        // order, so the pages are put back into natural name order here.
+        val images = pane(id).entries
+            .filter { !it.isDirectory && ImageFiles.looksImage(it.name) }
+            .sortedWith(org.filezilla.android.files.NaturalOrder.by { it.name })
         openImageViewer(
             images = images.map { ImageRef.OnDisk(java.io.File(folder, it.name)) },
             index = images.indexOfFirst { it.name == file.name },
@@ -2168,7 +2173,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             // is what reading a cbz is. The images are still inside the archive
             // and unpacked one at a time as they are reached.
             ImageFiles.looksImage(name) -> {
-                val images = rows.filter { !it.isDirectory && ImageFiles.looksImage(it.name) }
+                val images = rows
+                    .filter { !it.isDirectory && ImageFiles.looksImage(it.name) }
+                    .sortedWith(org.filezilla.android.files.NaturalOrder.by { it.name })
                 val refs = images.mapNotNull { r ->
                     ArchiveNav.entryFor(session, r.name)?.let { ImageRef.InArchive(session, it) }
                 }

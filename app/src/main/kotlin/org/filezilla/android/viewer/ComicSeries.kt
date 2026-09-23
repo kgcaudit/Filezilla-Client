@@ -1,5 +1,7 @@
 package org.filezilla.android.viewer
 
+import org.filezilla.android.files.NaturalOrder
+
 /**
  * Finding the next book in a series, and putting a folder of them in order.
  *
@@ -53,34 +55,8 @@ object ComicSeries {
     }
 
     /** Orders names so a number reads by its value: 2 before 10, not after. */
-    val NATURAL: Comparator<String> = Comparator { a, b -> naturalCompare(a, b) }
+    val NATURAL: Comparator<String> = NaturalOrder.byName
 
-    fun naturalCompare(a: String, b: String): Int {
-        var i = 0
-        var j = 0
-        while (i < a.length && j < b.length) {
-            val ca = a[i]
-            val cb = b[j]
-            if (ca.isDigit() && cb.isDigit()) {
-                var ni = i
-                while (ni < a.length && a[ni].isDigit()) ni++
-                var nj = j
-                while (nj < b.length && b[nj].isDigit()) nj++
-                // By value, which for equal-length runs is the same as by text
-                // once the leading zeros are set aside.
-                val da = a.substring(i, ni).trimStart('0').ifEmpty { "0" }
-                val db = b.substring(j, nj).trimStart('0').ifEmpty { "0" }
-                val c = if (da.length != db.length) da.length - db.length else da.compareTo(db)
-                if (c != 0) return c
-                i = ni
-                j = nj
-            } else {
-                val c = ca.lowercaseChar().compareTo(cb.lowercaseChar())
-                if (c != 0) return c
-                i++
-                j++
-            }
-        }
-        return (a.length - i) - (b.length - j)
-    }
+    /** The one natural order the whole app uses; kept here for its old callers. */
+    fun naturalCompare(a: String, b: String): Int = NaturalOrder.compare(a, b)
 }

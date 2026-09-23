@@ -64,7 +64,8 @@ object ArchiveBrowsing {
                     unreadable = entry.unreadable,
                 )
             }
-        return here.sortedBy { it.name.lowercase() } + files.sortedBy { it.name.lowercase() }
+        val byName = org.filezilla.android.files.NaturalOrder.by<ArchiveRow> { it.name }
+        return here.sortedWith(byName) + files.sortedWith(byName)
     }
 
     /**

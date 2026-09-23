@@ -1,5 +1,6 @@
 package org.filezilla.android.ui
 
+import org.filezilla.android.files.NaturalOrder
 import org.filezilla.ftp.listing.DirectoryEntry
 
 /** What the listing is ordered by. */
@@ -55,23 +56,24 @@ object BrowseListing {
             rows = rows.filter { it.name.contains(needle, ignoreCase = true) }
         }
 
+        // Case-insensitive and value-aware, so "album" and "Photos" sort where
+        // a reader expects and a page named "10" comes after "2", not before.
+        val byName = NaturalOrder.by<DirectoryEntry> { it.name }
         val byKey = when (options.sortKey) {
-            // Locale-aware and case-insensitive, or "Photos" sorts away from
-            // "album" for reasons no one looking at the screen would guess.
-            SortKey.NAME -> compareBy(String.CASE_INSENSITIVE_ORDER) { it: DirectoryEntry -> it.name }
+            SortKey.NAME -> byName
 
             // A directory has no meaningful size, so size order falls back to
             // the name for them rather than scattering them by -1.
             SortKey.SIZE -> compareBy<DirectoryEntry> { if (it.isDirectory) -1L else it.size }
-                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+                .then(byName)
 
             // Entries with no timestamp sort together at one end instead of
             // being interleaved arbitrarily.
             SortKey.DATE -> compareBy<DirectoryEntry> { it.time?.epochMillis ?: Long.MIN_VALUE }
-                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+                .then(byName)
 
             SortKey.TYPE -> compareBy<DirectoryEntry> { extensionOf(it) }
-                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+                .then(byName)
         }
 
         val directed = if (options.ascending) byKey else byKey.reversed()

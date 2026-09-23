@@ -140,7 +140,10 @@ class TextFieldShellTest {
             .sorted()
             .toList()
 
-        assertEquals(listOf("ArchiveScreen.kt", "BrowseScreen.kt", "Dialogs.kt", "SiteEditor.kt"), users)
+        assertEquals(
+            listOf("ArchiveScreen.kt", "BrowseScreen.kt", "Dialogs.kt", "SiteEditor.kt", "TextViewerScreen.kt"),
+            users,
+        )
     }
 }
 

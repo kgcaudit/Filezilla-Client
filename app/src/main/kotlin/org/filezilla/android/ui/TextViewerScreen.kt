@@ -105,8 +105,23 @@ fun TextViewerScreen(viewer: MainViewModel.TextViewer, model: MainViewModel) {
                 }
                 if (viewer.editable && loaded != null) {
                     if (editing && !saved) {
+                        val context = androidx.compose.ui.platform.LocalContext.current
+                        val savedText = stringResource(R.string.viewer_saved)
+                        val saveFailedText = stringResource(R.string.viewer_save_failed)
                         IconButton(onClick = {
-                            loaded?.let { l -> model.saveText(viewer.file, l, value.text) { ok -> saved = ok } }
+                            loaded?.let { l ->
+                                model.saveText(viewer.file, l, value.text) { ok ->
+                                    saved = ok
+                                    // A save is silent otherwise: the button just
+                                    // vanishes, which reads the same whether it
+                                    // worked or the file could not be written.
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        if (ok) savedText else saveFailedText,
+                                        android.widget.Toast.LENGTH_SHORT,
+                                    ).show()
+                                }
+                            }
                         }) { Icon(Icons.Filled.Save, stringResource(R.string.viewer_save)) }
                     }
                     IconButton(onClick = { editing = !editing }) {
