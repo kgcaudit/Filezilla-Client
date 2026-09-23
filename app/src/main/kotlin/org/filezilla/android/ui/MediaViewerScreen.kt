@@ -621,8 +621,10 @@ private fun MediaPlayer(
                                 // jumps the playback position. distanceY is
                                 // positive moving up, so up brightens and raises.
                                 when {
-                                    e1.x < width * DIAL_EDGE_FRACTION -> onBrightnessDelta(distanceY / height)
-                                    e1.x > width * (1f - DIAL_EDGE_FRACTION) -> onVolumeDelta(distanceY / height)
+                                    e1.x < width * DIAL_EDGE_FRACTION ->
+                                        onBrightnessDelta(distanceY / height * DIAL_SENSITIVITY)
+                                    e1.x > width * (1f - DIAL_EDGE_FRACTION) ->
+                                        onVolumeDelta(distanceY / height * DIAL_SENSITIVITY)
                                     else -> {
                                         // Middle: scrub, but only on a clearly
                                         // sideways drag, so an up-or-down one here
@@ -1118,6 +1120,10 @@ private fun trackLanguageName(language: String?): String? = when (language?.lowe
 // seventh each, so the picture divides 1:5:1 -- brightness, the tap-and-scrub
 // middle, volume.
 private const val DIAL_EDGE_FRACTION = 1f / 7f
+
+// How fast the brightness and volume dials move: a full sweep of either takes
+// about a third of the height, rather than the whole of it, which felt sluggish.
+private const val DIAL_SENSITIVITY = 3f
 
 // The playback rates the speed button steps through, slow to fast.
 private val SPEEDS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
