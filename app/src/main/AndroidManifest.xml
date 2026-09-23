@@ -28,6 +28,13 @@
     -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!--
+        Audio and video keep playing after the app leaves the screen, from a
+        media service that shows a playback notification with its controls.
+        mediaPlayback is the foreground-service type that covers it, the same
+        way dataSync covers a transfer above.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!--
@@ -101,5 +108,21 @@
             android:name=".service.TransferService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!--
+            The media player's engine, so a video or a sound keeps playing
+            with a notification once the app is in the background. media3's
+            MediaSessionService finds this by its action; exported so the
+            system's media controls and the notification can reach the
+            session.
+        -->
+        <service
+            android:name=".playback.PlaybackService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

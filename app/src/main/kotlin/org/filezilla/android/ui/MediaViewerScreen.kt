@@ -1,12 +1,16 @@
 package org.filezilla.android.ui
 
 import android.annotation.SuppressLint
+import android.content.ComponentName
+import android.content.Context
 import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,6 +29,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -60,6 +65,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
@@ -67,13 +73,15 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import java.io.File
 import java.util.Locale
 import org.filezilla.android.R
 import org.filezilla.android.data.AppPreferences
+import org.filezilla.android.playback.PlaybackService
 
 /**
  * The app's own player for a video or a sound.
@@ -93,65 +101,44 @@ import org.filezilla.android.data.AppPreferences
  */
 // media3 marks these APIs unstable through androidx's opt-in, not Kotlin's, so
 // the annotation is androidx.annotation.OptIn rather than kotlin's @OptIn.
-// The seek gesture is a touch listener on the player view rather than a Compose
-// overlay: an overlay on top of the view swallows the taps the player's own
-// controls need, so the menu stopped coming up. The listener never consumes a
-// tap -- it watches for a sideways drag and leaves everything else to the view.
-@SuppressLint("ClickableViewAccessibility")
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 fun MediaViewerScreen(viewer: MainViewModel.MediaViewer, model: MainViewModel) {
     val context = LocalContext.current
-    val exo = remember { ExoPlayer.Builder(context).build() }
 
-    // Load the playlist and start where the opened file was left. Each entry
-    // carries whatever subtitle files were found beside it. Keyed on the list
-    // so reopening a different folder rebuilds it.
-    LaunchedEffect(viewer.items, viewer.index) {
-        val start = model.mediaPosition(viewer.items[viewer.index])
-        exo.setMediaItems(viewer.items.map { mediaItemFor(it) }, viewer.index, start)
-        exo.prepare()
-        exo.playWhenReady = true
-    }
+    // Playback lives in a service so it carries on once the app is in the
+    // background; this connects to it from the front, and is null until it has.
+    val player = rememberMediaController(context)
 
-    // Keep the place. A file the player moves on from, or plays to the end, is
-    // put back to the start; one left partway keeps its position, unless it is
-    // within a second of the end, which reads as finished.
-    var index by remember { mutableIntStateOf(viewer.index) }
-    // Bumped whenever the available tracks change, so the subtitle sheet's list
-    // rebuilds -- both when a new file loads and after a pick takes effect.
-    var tracksVersion by remember { mutableIntStateOf(0) }
-    DisposableEffect(exo) {
-        val listener = object : Player.Listener {
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                viewer.items.getOrNull(index)?.let { model.setMediaPosition(it, 0L) }
-                index = exo.currentMediaItemIndex
-            }
-
-            override fun onPlaybackStateChanged(state: Int) {
-                if (state == Player.STATE_ENDED) {
-                    viewer.items.getOrNull(exo.currentMediaItemIndex)?.let { model.setMediaPosition(it, 0L) }
-                }
-            }
-
-            override fun onTracksChanged(tracks: Tracks) {
-                tracksVersion++
-            }
-        }
-        exo.addListener(listener)
-        onDispose {
-            val at = exo.currentMediaItemIndex
-            val position = exo.currentPosition
-            val duration = exo.duration
-            val save = if (duration > 0 && position >= duration - 1_000) 0L else position
-            viewer.items.getOrNull(at)?.let { model.setMediaPosition(it, save) }
-            exo.removeListener(listener)
-            exo.release()
+    // Ask once for the notification permission the background player needs to
+    // show its controls. Playback works without it, only without a notification.
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) {}
+    LaunchedEffect(Unit) {
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.POST_NOTIFICATIONS,
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 
-    // While playing, the phone's bars go away so a video has the whole screen;
-    // leaving the player restores them.
+    // Leaving on purpose -- the back arrow or the system back -- stops the sound
+    // and clears the notification. Leaving the app (home, screen off) does
+    // neither, so that keeps playing in the background.
+    val close: () -> Unit = {
+        player?.let {
+            it.stop()
+            it.clearMediaItems()
+        }
+        model.closeMediaViewer()
+    }
+
+    // While the player is up, the phone's bars go away so a video has the whole
+    // screen; leaving restores them.
     val view = androidx.compose.ui.platform.LocalView.current
     DisposableEffect(view) {
         val window = (view.context as? android.app.Activity)?.window
@@ -160,6 +147,131 @@ fun MediaViewerScreen(viewer: MainViewModel.MediaViewer, model: MainViewModel) {
             androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         controller?.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
         onDispose { controller?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars()) }
+    }
+
+    BackHandler(onBack = close)
+
+    if (player == null) {
+        // Connecting: a black hold with a way back, so a slow connect is never
+        // a dead screen.
+        Surface(Modifier.fillMaxSize(), color = Color.Black) {
+            Box(Modifier.fillMaxSize()) {
+                IconButton(onClick = close, modifier = Modifier.statusBarsPadding()) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.action_back),
+                        tint = Color.White,
+                    )
+                }
+            }
+        }
+        return
+    }
+
+    MediaPlayer(player = player, viewer = viewer, model = model, onClose = close)
+}
+
+/**
+ * Connects to the playback service and hands back its controller, or null while
+ * the connection is still being made. Letting go of the controller on the way
+ * out releases the front end without stopping the service's player, so the
+ * sound carries on in the background.
+ */
+@Composable
+private fun rememberMediaController(context: Context): MediaController? {
+    var controller by remember { mutableStateOf<MediaController?>(null) }
+    DisposableEffect(context) {
+        val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
+        val future = MediaController.Builder(context, token).buildAsync()
+        future.addListener(
+            { runCatching { future.get() }.getOrNull()?.let { controller = it } },
+            ContextCompat.getMainExecutor(context),
+        )
+        onDispose {
+            MediaController.releaseFuture(future)
+            controller = null
+        }
+    }
+    return controller
+}
+
+/**
+ * The player's face: the picture and controls, the top bar, the seek gesture
+ * and the subtitle settings, over a service controller that outlives it.
+ */
+// The seek gesture is a touch listener on the player view rather than a Compose
+// overlay: an overlay on top of the view swallows the taps the player's own
+// controls need, so the menu stopped coming up. The listener never consumes a
+// tap -- it watches for a sideways drag and leaves everything else to the view.
+@SuppressLint("ClickableViewAccessibility")
+@androidx.annotation.OptIn(UnstableApi::class)
+@Composable
+private fun MediaPlayer(
+    player: MediaController,
+    viewer: MainViewModel.MediaViewer,
+    model: MainViewModel,
+    onClose: () -> Unit,
+) {
+    val context = LocalContext.current
+
+    // Which file is showing, and a counter bumped when the tracks change so the
+    // subtitle sheet's list rebuilds.
+    var index by remember { mutableIntStateOf(viewer.index) }
+    var tracksVersion by remember { mutableIntStateOf(0) }
+
+    // Keep the place. A file the player moves on from, or plays to the end, is
+    // put back to the start; one left partway keeps its position, unless it is
+    // within a second of the end, which reads as finished. The player belongs
+    // to the service and is only let go of here, not released, so the sound can
+    // carry on in the background.
+    DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                viewer.items.getOrNull(index)?.let { model.setMediaPosition(it, 0L) }
+                index = player.currentMediaItemIndex
+            }
+
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_ENDED) {
+                    viewer.items.getOrNull(player.currentMediaItemIndex)
+                        ?.let { model.setMediaPosition(it, 0L) }
+                }
+            }
+
+            override fun onTracksChanged(tracks: Tracks) {
+                tracksVersion++
+            }
+        }
+        player.addListener(listener)
+        onDispose {
+            if (player.mediaItemCount > 0) {
+                val at = player.currentMediaItemIndex
+                val position = player.currentPosition
+                val duration = player.duration
+                val save = if (duration > 0 && position >= duration - 1_000) 0L else position
+                viewer.items.getOrNull(at)?.let { model.setMediaPosition(it, save) }
+            }
+            player.removeListener(listener)
+        }
+    }
+
+    // Load the playlist and start where the opened file was left -- unless the
+    // service is already on this very playlist, as after a rotation, when
+    // resetting it would jerk playback back to the start. Each entry carries
+    // whatever subtitle files were found beside it.
+    LaunchedEffect(player, viewer.items, viewer.index) {
+        val wantUris = viewer.items.map { Uri.fromFile(it) }
+        val haveUris = (0 until player.mediaItemCount).map {
+            player.getMediaItemAt(it).localConfiguration?.uri
+        }
+        if (haveUris != wantUris) {
+            val start = model.mediaPosition(viewer.items[viewer.index])
+            player.setMediaItems(viewer.items.map { mediaItemFor(it) }, viewer.index, start)
+            player.prepare()
+            player.playWhenReady = true
+        } else {
+            index = player.currentMediaItemIndex
+        }
     }
 
     // The screen's own turning, controlled by the rotate button, and put back
@@ -184,8 +296,6 @@ fun MediaViewerScreen(viewer: MainViewModel.MediaViewer, model: MainViewModel) {
     LaunchedEffect(reservedTop) { reservedTopPx = reservedTop }
     val reservedTopDp = with(density) { reservedTop.toDp() }
 
-    BackHandler { model.closeMediaViewer() }
-
     // A finger dragged across the picture scrubs: the distance maps to time, a
     // full width being two minutes, and a read-out of where the release would
     // land shows while the drag is in hand. The drag is watched on the player
@@ -195,7 +305,7 @@ fun MediaViewerScreen(viewer: MainViewModel.MediaViewer, model: MainViewModel) {
     val onSeekPreview: (Long) -> Unit = { seekTarget = it }
     val onSeekCommit: () -> Unit = {
         val target = seekTarget
-        if (target >= 0) exo.seekTo(target)
+        if (target >= 0) player.seekTo(target)
         seekTarget = -1L
     }
 
@@ -234,7 +344,7 @@ fun MediaViewerScreen(viewer: MainViewModel.MediaViewer, model: MainViewModel) {
             AndroidView(
                 factory = { ctx ->
                     val playerView = PlayerView(ctx)
-                    playerView.player = exo
+                    playerView.player = player
                     playerView.useController = true
                     playerView.controllerShowTimeoutMs = 3_000
                     playerView.setShowNextButton(viewer.items.size > 1)
@@ -271,10 +381,10 @@ fun MediaViewerScreen(viewer: MainViewModel.MediaViewer, model: MainViewModel) {
                                 val movedY = e2.y - e1.y
                                 if (kotlin.math.abs(movedX) <= kotlin.math.abs(movedY)) return false
                                 val width = playerView.width.takeIf { it > 0 } ?: return false
-                                val duration = exo.duration.takeIf { it > 0 } ?: return false
+                                val duration = player.duration.takeIf { it > 0 } ?: return false
                                 if (!seeking) {
                                     seeking = true
-                                    base = exo.currentPosition
+                                    base = player.currentPosition
                                 }
                                 val delta = (movedX / width * 120_000f).toLong()
                                 onSeekPreview((base + delta).coerceIn(0L, duration))
@@ -313,7 +423,7 @@ fun MediaViewerScreen(viewer: MainViewModel.MediaViewer, model: MainViewModel) {
                         .padding(horizontal = 4.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(onClick = model::closeMediaViewer) {
+                    IconButton(onClick = onClose) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.action_back),
@@ -365,7 +475,7 @@ fun MediaViewerScreen(viewer: MainViewModel.MediaViewer, model: MainViewModel) {
                     contentAlignment = Alignment.BottomCenter,
                 ) {
                     Text(
-                        text = clock(seekTarget) + " / " + clock(exo.duration.coerceAtLeast(0L)),
+                        text = clock(seekTarget) + " / " + clock(player.duration.coerceAtLeast(0L)),
                         style = MaterialTheme.typography.titleMedium,
                         color = Color.White,
                         modifier = Modifier
@@ -382,7 +492,7 @@ fun MediaViewerScreen(viewer: MainViewModel.MediaViewer, model: MainViewModel) {
 
     if (showSubtitleSheet) {
         SubtitleSheet(
-            player = exo,
+            player = player,
             tracksVersion = tracksVersion,
             scale = subScale,
             color = subColor,

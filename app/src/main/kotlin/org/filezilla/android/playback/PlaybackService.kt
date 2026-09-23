@@ -1,0 +1,63 @@
+package org.filezilla.android.playback
+
+import android.content.Intent
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaSession
+import androidx.media3.session.MediaSessionService
+
+/**
+ * The media player's engine, living in a service so it outlasts the screen.
+ *
+ * The player used to be built inside the viewer and released when the viewer
+ * closed, which meant it stopped the moment the app went to the background and
+ * never had a notification. Held here instead, the sound carries on when the
+ * phone is put down and media3 posts the playback notification with its
+ * controls for free. The viewer connects to this from the front with a
+ * MediaController and hands it a playlist; nothing else talks to it.
+ *
+ * The player also takes and holds audio focus, and pauses when the headphones
+ * are pulled out -- the two things a listener expects of anything that plays a
+ * sound and neither of which it did before.
+ */
+class PlaybackService : MediaSessionService() {
+
+    private var session: MediaSession? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        val player = ExoPlayer.Builder(this)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(C.USAGE_MEDIA)
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                    .build(),
+                /* handleAudioFocus = */ true,
+            )
+            .setHandleAudioBecomingNoisy(true)
+            .build()
+        session = MediaSession.Builder(this, player).build()
+    }
+
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
+
+    // Swiping the app away with nothing playing (or paused) should not leave a
+    // silent service and its notification behind; a running one is left alone
+    // so the sound survives the swipe.
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        val player = session?.player
+        if (player == null || !player.playWhenReady || player.mediaItemCount == 0) {
+            stopSelf()
+        }
+    }
+
+    override fun onDestroy() {
+        session?.run {
+            player.release()
+            release()
+        }
+        session = null
+        super.onDestroy()
+    }
+}
