@@ -91,8 +91,16 @@ fun ArchivePasswordDialog(
 fun ArchiveWorkDialog(busy: ArchiveBusy) {
     OloDialog(
         title = busy.title,
-        onDismiss = busy.onStop,
+        // A touch outside, or a back gesture, must not be read as "stop" -- a
+        // long compress cancelled by a stray tap on the screen is a real loss.
+        // Stopping is the stop button's job and only its; nothing else closes
+        // this while the work runs.
+        onDismiss = {},
         dismissLabel = null,
+        properties = androidx.compose.ui.window.DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+        ),
         content = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (busy.path.isNotEmpty()) {

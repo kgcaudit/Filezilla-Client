@@ -63,6 +63,13 @@ fun OloDialog(
     /** The sentence under the title. Present tense, and about consequences. */
     detail: String? = null,
     dismissLabel: String? = stringResource(R.string.action_cancel),
+    /**
+     * How the dialog may be dismissed. The default lets a tap outside or the
+     * back gesture close it, which is right for a question; a dialog reporting
+     * work in progress passes properties that turn both off, so a stray touch
+     * cannot be read as "stop" -- the stop button is the only way to stop.
+     */
+    properties: androidx.compose.ui.window.DialogProperties = androidx.compose.ui.window.DialogProperties(),
     content: (@Composable () -> Unit)? = null,
     /** What the dialog is for. One button, usually; three, for a conflict. */
     action: @Composable () -> Unit,
@@ -70,6 +77,7 @@ fun OloDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = modifier,
+        properties = properties,
         title = { Text(title) },
         text = if (detail == null && content == null) {
             null

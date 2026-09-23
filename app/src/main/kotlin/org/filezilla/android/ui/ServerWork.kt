@@ -77,10 +77,14 @@ fun ServerWorkDialog(work: ServerWork, onStop: () -> Unit) {
                 ServerWork.Kind.DELETING -> R.string.work_deleting
             },
         ),
-        onDismiss = onStop,
-        // Nothing to confirm. The only decision is whether to carry on, and
-        // the button below already asks it.
+        // A stray touch outside, or a back gesture, must not stop the work: the
+        // stop button below is the only way to stop, so nothing else closes it.
+        onDismiss = {},
         dismissLabel = null,
+        properties = androidx.compose.ui.window.DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+        ),
         content = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 val total = work.total
