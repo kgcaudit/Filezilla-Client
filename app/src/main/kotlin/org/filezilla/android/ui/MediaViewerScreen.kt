@@ -39,7 +39,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.ScreenLockRotation
 import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -47,7 +49,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -66,6 +67,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -84,6 +86,7 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import java.io.File
@@ -289,13 +292,18 @@ private fun MediaPlayer(
         }
     }
 
-    // The screen's own turning, controlled by the rotate button, and put back
-    // to the phone's own preference on the way out. Cycled upright -> on its
-    // side -> follow the sensor, so a locked view can be forced either way and
-    // then handed back to the accelerometer.
+    // The screen's own turning, a plain on/off: on, it follows the sensor and
+    // turns with the phone; off, it holds the way it is. Put back to the
+    // phone's own preference on the way out.
     val activity = context as? android.app.Activity
-    var orientation by rememberSaveable { mutableIntStateOf(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) }
-    LaunchedEffect(orientation) { activity?.requestedOrientation = orientation }
+    var autoRotate by rememberSaveable { mutableStateOf(true) }
+    LaunchedEffect(autoRotate) {
+        activity?.requestedOrientation = if (autoRotate) {
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_LOCKED
+        }
+    }
     DisposableEffect(Unit) {
         onDispose {
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -409,6 +417,13 @@ private fun MediaPlayer(
     }
     LaunchedEffect(subScale, subColor) { model.setSubtitleStyle(subScale, subColor) }
 
+    // Playback speed, cycled by the speed button, and the picture's fit --
+    // letterboxed, cropped to fill, or stretched -- cycled by the aspect button.
+    var speed by rememberSaveable { mutableFloatStateOf(1f) }
+    LaunchedEffect(player, speed) { player.setPlaybackSpeed(speed) }
+    var resizeMode by rememberSaveable { mutableIntStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
+    LaunchedEffect(playerViewRef, resizeMode) { playerViewRef?.resizeMode = resizeMode }
+
     Surface(Modifier.fillMaxSize(), color = Color.Black) {
         Box(Modifier.fillMaxSize()) {
             AndroidView(
@@ -420,8 +435,13 @@ private fun MediaPlayer(
                     // picture is clear until asked.
                     playerView.controllerAutoShow = false
                     playerView.controllerShowTimeoutMs = 3_000
-                    playerView.setShowNextButton(viewer.items.size > 1)
-                    playerView.setShowPreviousButton(viewer.items.size > 1)
+                    // The centre is play, flanked by a ten-second rewind and
+                    // fast-forward rather than the previous and next file: the
+                    // side buttons move within this film, not between films.
+                    playerView.setShowNextButton(false)
+                    playerView.setShowPreviousButton(false)
+                    playerView.setShowRewindButton(true)
+                    playerView.setShowFastForwardButton(true)
                     playerView.setBackgroundColor(android.graphics.Color.BLACK)
                     // The top bar follows the controls in and out.
                     playerView.setControllerVisibilityListener(
@@ -528,6 +548,33 @@ private fun MediaPlayer(
                             .weight(1f)
                             .padding(horizontal = 4.dp),
                     )
+                    // Speed: a tap steps through the usual rates.
+                    Text(
+                        speedLabel(speed),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = Color.White,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .clickable { speed = nextSpeed(speed) }
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                    )
+                    IconButton(
+                        onClick = {
+                            resizeMode = when (resizeMode) {
+                                AspectRatioFrameLayout.RESIZE_MODE_FIT ->
+                                    AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                AspectRatioFrameLayout.RESIZE_MODE_ZOOM ->
+                                    AspectRatioFrameLayout.RESIZE_MODE_FILL
+                                else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+                            }
+                        },
+                    ) {
+                        Icon(
+                            Icons.Filled.AspectRatio,
+                            contentDescription = stringResource(R.string.action_aspect),
+                            tint = Color.White,
+                        )
+                    }
                     IconButton(onClick = { showSubtitleSheet = true }) {
                         Icon(
                             Icons.Filled.Subtitles,
@@ -535,22 +582,20 @@ private fun MediaPlayer(
                             tint = Color.White,
                         )
                     }
-                    IconButton(
-                        onClick = {
-                            orientation = when (orientation) {
-                                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE ->
-                                    ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-                                ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT ->
-                                    ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                                else -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                            }
-                        },
-                    ) {
-                        Icon(
-                            Icons.Filled.ScreenRotation,
-                            contentDescription = stringResource(R.string.action_rotate),
-                            tint = Color.White,
-                        )
+                    IconButton(onClick = { autoRotate = !autoRotate }) {
+                        if (autoRotate) {
+                            Icon(
+                                Icons.Filled.ScreenRotation,
+                                contentDescription = stringResource(R.string.action_rotate),
+                                tint = Color.White,
+                            )
+                        } else {
+                            Icon(
+                                Icons.Filled.ScreenLockRotation,
+                                contentDescription = stringResource(R.string.action_rotate_lock),
+                                tint = Color.White,
+                            )
+                        }
                     }
                 }
             }
@@ -604,15 +649,11 @@ private fun MediaPlayer(
         }
     }
 
-    // Picking a subtitle file by hand: any file, since providers seldom report
-    // a subtitle's own type. What comes back is loaded onto the current film.
-    val subtitlePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument(),
-    ) { picked ->
-        if (picked != null) {
-            loadPickedSubtitle(context, player, viewer.items, index, picked)
-        }
-        showSubtitleSheet = false
+    // Other subtitle files sitting in this film's own folder, offered for
+    // choosing by hand -- so an oddly named one is loaded without leaving the
+    // player for the system's file chooser, which came up the wrong way round.
+    val folderSubtitles = remember(viewer.items, index) {
+        folderSubtitleFiles(viewer.items.getOrNull(index))
     }
 
     if (showSubtitleSheet) {
@@ -623,7 +664,11 @@ private fun MediaPlayer(
             color = subColor,
             onScale = { subScale = it },
             onColor = { subColor = it },
-            onPickSubtitle = { subtitlePicker.launch(arrayOf("*/*")) },
+            folderSubtitles = folderSubtitles,
+            onPickFolderSubtitle = { file ->
+                loadPickedSubtitle(context, player, viewer.items, index, Uri.fromFile(file))
+                showSubtitleSheet = false
+            },
             onDismiss = { showSubtitleSheet = false },
         )
     }
@@ -647,7 +692,8 @@ private fun SubtitleSheet(
     color: Int,
     onScale: (Float) -> Unit,
     onColor: (Int) -> Unit,
-    onPickSubtitle: () -> Unit,
+    folderSubtitles: List<File>,
+    onPickFolderSubtitle: (File) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState()
@@ -702,9 +748,25 @@ private fun SubtitleSheet(
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = onPickSubtitle, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.action_load_subtitle))
+            if (folderSubtitles.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    stringResource(R.string.subtitle_from_folder),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                folderSubtitles.forEach { file ->
+                    Text(
+                        file.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onPickFolderSubtitle(file) }
+                            .padding(vertical = 8.dp),
+                    )
+                }
             }
 
             Spacer(Modifier.height(16.dp))
@@ -803,6 +865,26 @@ private fun trackLanguageName(language: String?): String? = when (language?.lowe
     else -> language.uppercase(Locale.ROOT)
 }
 
+// The playback rates the speed button steps through, slow to fast.
+private val SPEEDS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
+
+/** The rate after [current] in the cycle, wrapping back to the slowest. */
+private fun nextSpeed(current: Float): Float {
+    val i = SPEEDS.indexOfFirst { kotlin.math.abs(it - current) < 0.001f }
+        .let { if (it < 0) SPEEDS.indexOf(1f) else it }
+    return SPEEDS[(i + 1) % SPEEDS.size]
+}
+
+/** A rate as it is shown on the button: 1.0x, 1.5x, 0.5x. */
+private fun speedLabel(speed: Float): String {
+    val text = if (speed == speed.toLong().toFloat()) {
+        String.format(Locale.ROOT, "%.1f", speed)
+    } else {
+        speed.toString()
+    }
+    return text + "x"
+}
+
 /** A duration as h:mm:ss, or m:ss under an hour. */
 private fun clock(ms: Long): String {
     val total = (ms.coerceAtLeast(0L)) / 1000
@@ -865,6 +947,18 @@ private val SUBTITLE_MIME = mapOf(
 )
 
 private val SUBTITLE_EXTENSIONS = SUBTITLE_MIME.keys + setOf("smi", "sami")
+
+/**
+ * Every subtitle file in [video]'s own folder, in name order, for choosing one
+ * by hand from within the player. Nearly every external subtitle sits beside
+ * its film, so this covers the oddly named ones without sending the reader out
+ * to the system's file chooser, which opens in its own orientation.
+ */
+private fun folderSubtitleFiles(video: File?): List<File> {
+    val dir = video?.parentFile ?: return emptyList()
+    return (dir.listFiles()?.filter { it.isFile && it.extension.lowercase() in SUBTITLE_EXTENSIONS } ?: emptyList())
+        .sortedWith(org.filezilla.android.files.NaturalOrder.by { it.name })
+}
 
 @androidx.annotation.OptIn(UnstableApi::class)
 private fun sidecarSubtitles(video: File, cacheDir: File): List<MediaItem.SubtitleConfiguration> {

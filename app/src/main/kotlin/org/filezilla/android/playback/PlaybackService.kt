@@ -29,6 +29,10 @@ class PlaybackService : MediaSessionService() {
 
     private var session: MediaSession? = null
 
+    private companion object {
+        const val SEEK_STEP_MS = 10_000L
+    }
+
     override fun onCreate() {
         super.onCreate()
         val player = ExoPlayer.Builder(this)
@@ -40,6 +44,11 @@ class PlaybackService : MediaSessionService() {
                 /* handleAudioFocus = */ true,
             )
             .setHandleAudioBecomingNoisy(true)
+            // The side buttons jump ten seconds back and on, rather than to the
+            // previous or next file: this is what makes the controls show a
+            // rewind and a fast-forward.
+            .setSeekBackIncrementMs(SEEK_STEP_MS)
+            .setSeekForwardIncrementMs(SEEK_STEP_MS)
             .build()
         session = MediaSession.Builder(this, player)
             .setCallback(RestoringCallback())

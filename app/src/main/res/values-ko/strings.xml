@@ -250,10 +250,12 @@
     <string name="exit_confirm">한 번 더 누르면 종료됩니다</string>
     <string name="action_back">뒤로</string>
     <string name="action_rotate">화면 회전</string>
+    <string name="action_rotate_lock">화면 고정</string>
+    <string name="action_aspect">화면 비율</string>
     <string name="action_subtitles">자막</string>
     <string name="subtitle_off">끄기</string>
     <string name="subtitle_track">자막 선택</string>
-    <string name="action_load_subtitle">자막 파일 불러오기</string>
+    <string name="subtitle_from_folder">이 폴더의 자막 파일</string>
     <string name="subtitle_size">크기</string>
     <string name="subtitle_color">색상</string>
     <string name="subtitle_default_name">자막</string>

@@ -121,10 +121,13 @@ class IconMeaningTest {
         "Search" to setOf("menu_filter"),
         "Add" to setOf("sites_add"),
         "ArrowBack" to setOf("action_back"),
-        // Turning the player between upright and on its side.
+        // The player's rotate switch: free to turn with the phone, or held.
         "ScreenRotation" to setOf("action_rotate"),
+        "ScreenLockRotation" to setOf("action_rotate_lock"),
         // The player's subtitle settings -- which track, and how it looks.
         "Subtitles" to setOf("action_subtitles"),
+        // The picture's fit: letterbox, crop-to-fill, or stretch.
+        "AspectRatio" to setOf("action_aspect"),
         // Packing files into an archive, and unpacking one. Verbs, a pair,
         // and the only zip glyphs in the app -- the row icons for archives
         // are the app's own tiles, not these.

@@ -253,10 +253,12 @@
     <string name="exit_confirm">Press back again to leave</string>
     <string name="action_back">Back</string>
     <string name="action_rotate">Rotate screen</string>
+    <string name="action_rotate_lock">Lock rotation</string>
+    <string name="action_aspect">Aspect ratio</string>
     <string name="action_subtitles">Subtitles</string>
     <string name="subtitle_off">Off</string>
     <string name="subtitle_track">Subtitle</string>
-    <string name="action_load_subtitle">Load subtitle file</string>
+    <string name="subtitle_from_folder">Subtitle files in this folder</string>
     <string name="subtitle_size">Size</string>
     <string name="subtitle_color">Colour</string>
     <string name="subtitle_default_name">Subtitle</string>
