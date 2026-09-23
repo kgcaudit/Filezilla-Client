@@ -252,7 +252,7 @@
     <string name="action_rotate">화면 회전</string>
     <string name="action_rotate_lock">화면 고정</string>
     <string name="action_aspect">화면 비율</string>
-    <string name="action_subtitles">자막</string>
+    <string name="action_settings">설정</string>
     <string name="subtitle_show">자막 보기</string>
     <string name="subtitle_external">외부자막</string>
     <string name="subtitle_internal">내부자막</string>

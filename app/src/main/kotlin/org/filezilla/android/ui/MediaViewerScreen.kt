@@ -15,7 +15,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -44,7 +43,7 @@ import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.ScreenLockRotation
 import androidx.compose.material.icons.filled.ScreenRotation
-import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -73,7 +72,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -516,17 +514,8 @@ private fun MediaPlayer(
         subtitleAppliedFor = file.path
     }
 
-    // Playback speed, set by dragging the speed chip sideways rather than tapping
-    // through fixed steps, and the picture's fit -- letterboxed, cropped to fill,
-    // or stretched -- cycled by the aspect button. The drag accumulates a raw
-    // value; what is applied and shown is that snapped to a twentieth, so the
-    // number stays tidy while the drag stays smooth.
-    var speedRaw by rememberSaveable { mutableFloatStateOf(1f) }
-    val speed = (speedRaw * 20f).roundToInt() / 20f
-    LaunchedEffect(player, speed) { player.setPlaybackSpeed(speed) }
-    val onSpeedDrag: (Float) -> Unit = { dragPx ->
-        speedRaw = (speedRaw + dragPx * SPEED_DRAG_GAIN).coerceIn(MIN_SPEED, MAX_SPEED)
-    }
+    // The picture's fit -- letterboxed, cropped to fill, or stretched -- cycled
+    // by the aspect button.
     var resizeMode by rememberSaveable { mutableIntStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
     LaunchedEffect(playerViewRef, resizeMode) { playerViewRef?.resizeMode = resizeMode }
 
@@ -723,23 +712,6 @@ private fun MediaPlayer(
                             .weight(1f)
                             .padding(horizontal = 4.dp),
                     )
-                    // Speed: drag the chip sideways to set the rate -- right
-                    // faster, left slower -- rather than tapping through steps.
-                    Text(
-                        speedLabel(speed),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = Color.White,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(Color.White.copy(alpha = 0.15f))
-                            .pointerInput(Unit) {
-                                detectHorizontalDragGestures { change, dragAmount ->
-                                    onSpeedDrag(dragAmount)
-                                    change.consume()
-                                }
-                            }
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                    )
                     IconButton(
                         onClick = {
                             resizeMode = when (resizeMode) {
@@ -754,13 +726,6 @@ private fun MediaPlayer(
                         Icon(
                             Icons.Filled.AspectRatio,
                             contentDescription = stringResource(R.string.action_aspect),
-                            tint = Color.White,
-                        )
-                    }
-                    IconButton(onClick = { showSubtitleSheet = true }) {
-                        Icon(
-                            Icons.Filled.Subtitles,
-                            contentDescription = stringResource(R.string.action_subtitles),
                             tint = Color.White,
                         )
                     }
@@ -779,6 +744,26 @@ private fun MediaPlayer(
                             )
                         }
                     }
+                }
+            }
+            // The settings gear, low on the right over the player's controls,
+            // opens the subtitle sheet. Shown with the controls, like the top
+            // bar, so the picture is otherwise clear.
+            AnimatedVisibility(
+                visible = controlsVisible,
+                modifier = Modifier.align(Alignment.BottomEnd),
+            ) {
+                IconButton(
+                    onClick = { showSubtitleSheet = true },
+                    modifier = Modifier
+                        .navigationBarsPadding()
+                        .padding(8.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.Settings,
+                        contentDescription = stringResource(R.string.action_settings),
+                        tint = Color.White,
+                    )
                 }
             }
             // Where the scrub would land, shown only while a drag is in hand.
@@ -1140,23 +1125,6 @@ private const val DIAL_EDGE_FRACTION = 1f / 7f
 // How fast the brightness and volume dials move: a full sweep of either takes
 // about a third of the height, rather than the whole of it, which felt sluggish.
 private const val DIAL_SENSITIVITY = 3f
-
-// The playback-rate range, and how far a sideways drag of the speed chip moves
-// it: a pixel is a four-thousandth of a turn, so a comfortable drag spans the
-// whole range.
-private const val MIN_SPEED = 0.25f
-private const val MAX_SPEED = 3f
-private const val SPEED_DRAG_GAIN = 0.004f
-
-/** A rate as it is shown on the button: 1.0x, 1.5x, 0.5x. */
-private fun speedLabel(speed: Float): String {
-    val text = if (speed == speed.toLong().toFloat()) {
-        String.format(Locale.ROOT, "%.1f", speed)
-    } else {
-        speed.toString()
-    }
-    return text + "x"
-}
 
 /**
  * Saves where the playing file is now, so it reopens there. A file within a

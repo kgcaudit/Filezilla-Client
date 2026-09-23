@@ -255,7 +255,7 @@
     <string name="action_rotate">Rotate screen</string>
     <string name="action_rotate_lock">Lock rotation</string>
     <string name="action_aspect">Aspect ratio</string>
-    <string name="action_subtitles">Subtitles</string>
+    <string name="action_settings">Settings</string>
     <string name="subtitle_show">Show subtitles</string>
     <string name="subtitle_external">External</string>
     <string name="subtitle_internal">Internal</string>
