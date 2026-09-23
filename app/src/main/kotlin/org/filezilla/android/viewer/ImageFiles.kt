@@ -117,6 +117,20 @@ object ImageFiles {
     }
 
     /**
+     * The image size from a [stream], reading only as far as the header.
+     *
+     * For measuring a long strip's pages: a header sniff reads a few hundred
+     * bytes, so a whole archive of pages can be sized in one pass over it
+     * rather than by extracting each entry in full just to learn its shape.
+     */
+    fun sizeOf(stream: java.io.InputStream): Size? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeStream(stream, null, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        return Size(bounds.outWidth, bounds.outHeight)
+    }
+
+    /**
      * Decodes just the rows [top, bottom) of the image in [bytes], shrunk by
      * [sample], as one band of a webtoon strip.
      *

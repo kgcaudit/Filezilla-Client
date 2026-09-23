@@ -138,8 +138,17 @@ fun TextViewerScreen(viewer: MainViewModel.TextViewer, model: MainViewModel) {
                     query = query,
                     onQuery = { query = it },
                     matchCount = matches.size,
+                    // currentMatch is the match at or after the cursor. Prev
+                    // steps to the one before it; Next lands on that match
+                    // itself unless the cursor is already sitting on it, so the
+                    // first press after a search does not skip the first hit.
                     onPrev = { jumpTo(currentMatch(matches, value.selection.start) - 1) },
-                    onNext = { jumpTo(currentMatch(matches, value.selection.start) + 1) },
+                    onNext = {
+                        val cursor = value.selection.start
+                        val here = currentMatch(matches, cursor)
+                        val onIt = matches.getOrNull(here) == cursor
+                        jumpTo(if (onIt) here + 1 else here)
+                    },
                 )
             }
 

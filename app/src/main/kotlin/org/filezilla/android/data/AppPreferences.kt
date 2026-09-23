@@ -277,9 +277,17 @@ class AppPreferences(context: Context) {
             ?.filter { it.isNotEmpty() }
             .orEmpty()
 
-    // Hashed so a long file path does not become an unbounded preferences key,
-    // and so a path with any character in it is still a valid key.
-    private fun comicPageKey(key: String) = "$KEY_COMIC_PAGE${key.hashCode()}"
+    // Digested so a long file path does not become an unbounded preferences
+    // key, and so a path with any character in it is still a valid key. A
+    // 32-bit hashCode was tried and is a hazard: two books whose hashes collide
+    // would share -- and overwrite -- each other's saved page, and the eviction
+    // list would fall out of step with the stored values. A SHA-256 prefix does
+    // not collide in any collection a phone will ever hold.
+    private fun comicPageKey(key: String): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(key.toByteArray())
+        val hex = digest.take(16).joinToString("") { "%02x".format(it) }
+        return "$KEY_COMIC_PAGE$hex"
+    }
 
     /** A stored name that no longer exists falls back rather than throwing. */
     private fun panePathKey(pane: String, source: String) = "$KEY_PANE_PATH$pane/$source"

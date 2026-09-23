@@ -1788,7 +1788,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         openImageViewer(
             images = images.map { ImageRef.OnDisk(java.io.File(folder, it.name)) },
             index = images.indexOfFirst { it.name == file.name },
-            comicKey = "dir\u0000$folder",
+            // No remembered place for a folder of photos: tapping a picture
+            // opens that picture, not wherever the folder was last left -- a
+            // saved page would override the very image the tap chose.
+            comicKey = null,
         )
     }
 
@@ -1934,6 +1937,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** [ref]'s real pixel size, read from its header alone, for planning a strip. */
     suspend fun imageSize(ref: ImageRef): android.util.Size? = withContext(Dispatchers.IO) {
         imageBytes(ref)?.let { ImageFiles.sizeOf(it) }
+    }
+
+    /**
+     * The sizes of a whole strip's pages, in order, for laying it out.
+     *
+     * A run of pages inside one archive is measured in a single pass over it:
+     * the archive is opened once and each page's header sniffed from its own
+     * stream, rather than the archive being reopened and a page extracted whole
+     * for every one of them -- which, on a long webtoon, is the difference
+     * between a moment and a stall. Pages on disk are measured one by one,
+     * which is already cheap. A page that will not read is a null in its place.
+     */
+    suspend fun imageSizes(refs: List<ImageRef>): List<android.util.Size?> = withContext(Dispatchers.IO) {
+        val session = (refs.firstOrNull() as? ImageRef.InArchive)?.session
+        // The common case, and the one worth the single pass: every page is an
+        // entry of the one archive. Anything else falls back to one at a time.
+        if (session != null && refs.all { it is ImageRef.InArchive && it.session === session }) {
+            runCatching {
+                Archives.open(session.file).use { archive ->
+                    refs.map { ref ->
+                        val entry = (ref as ImageRef.InArchive).entry
+                        runCatching { archive.open(entry).use { ImageFiles.sizeOf(it) } }.getOrNull()
+                    }
+                }
+            }.getOrElse { refs.map { null } }
+        } else {
+            refs.map { ref -> imageBytes(ref)?.let { ImageFiles.sizeOf(it) } }
+        }
     }
 
     /** Decodes the rows [top, bottom) of [ref], shrunk by [sample], as one band of a strip. */
@@ -2181,14 +2212,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 // The book is the archive and the folder within it; its place is
                 // kept under that, so it reopens where it was left, and it runs
-                // on to the next volume beside it when it ends.
-                openImageViewer(
-                    images = refs,
-                    index = images.indexOfFirst { it.name == name },
-                    comicKey = "arc\u0000${session.file.path}\u0000${session.at}",
-                    book = true,
-                    nextComic = nextComicAfter(session.file),
-                )
+                // on to the next volume beside it when it ends. Finding that
+                // next volume reads the folder off disk, so it is done off the
+                // main thread before the viewer is opened.
+                val index = images.indexOfFirst { it.name == name }
+                val comicKey = "arc\u0000${session.file.path}\u0000${session.at}"
+                viewModelScope.launch {
+                    val next = withContext(Dispatchers.IO) { nextComicAfter(session.file) }
+                    openImageViewer(
+                        images = refs,
+                        index = index,
+                        comicKey = comicKey,
+                        book = true,
+                        nextComic = next,
+                    )
+                }
             }
             else -> openArchiveEntry(id, session, name, password = null)
         }

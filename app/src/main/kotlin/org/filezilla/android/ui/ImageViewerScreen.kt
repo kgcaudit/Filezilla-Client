@@ -47,7 +47,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -314,15 +313,12 @@ private fun WebtoonReader(
     val scope = rememberCoroutineScope()
     val images = viewer.images
 
-    // Each page's pixel size, filled in reading order. A zero stands for a page
-    // that would not read, so it plans to nothing rather than stalling the run.
-    val sizes = remember(images) {
-        mutableStateListOf<android.util.Size?>().apply { repeat(images.size) { add(null) } }
-    }
+    // Every page's pixel size, measured once in a single pass over the source
+    // so a long strip is not extracted page by page just to be laid out. Null
+    // until that pass finishes; a zero stands for a page that would not read.
+    var sizes by remember(images) { mutableStateOf<List<android.util.Size>?>(null) }
     LaunchedEffect(images) {
-        for (i in images.indices) {
-            if (sizes[i] == null) sizes[i] = model.imageSize(images[i]) ?: android.util.Size(0, 0)
-        }
+        sizes = model.imageSizes(images).map { it ?: android.util.Size(0, 0) }
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -336,16 +332,11 @@ private fun WebtoonReader(
             if (narrow) (screenWidth * widthPercent / 100).coerceAtLeast(1) else screenWidth
         val columnWidthDp = with(LocalDensity.current) { columnWidth.toDp() }
 
-        // Only the pages known so far, from the top without a gap: the strip is
-        // read downward, so the bands appear as their sizes arrive and the rest
-        // waits below a spinner rather than leaving holes in the scroll.
-        val prefix = ArrayList<Pair<Int, Int>>()
-        for (size in sizes) {
-            if (size == null) break
-            prefix.add(size.width to size.height)
+        val known = sizes
+        val allKnown = known != null
+        val bands = remember(known, columnWidth) {
+            Webtoon.plan(known.orEmpty().map { it.width to it.height }, columnWidth)
         }
-        val allKnown = prefix.size == images.size
-        val bands = remember(prefix.toList(), columnWidth) { Webtoon.plan(prefix, columnWidth) }
 
         val listState = rememberLazyListState()
 
@@ -535,14 +526,19 @@ private fun ReaderTopBar(
                     // Shown only once the narrow column is on, since at full
                     // width there is nothing to slide.
                     if (narrow) {
+                        // Dragged live for the number and the preview, but only
+                        // written down when let go -- otherwise every pixel of
+                        // the drag rewrites the setting and replans the strip.
+                        var dragged by remember(widthPercent) { mutableFloatStateOf(widthPercent.toFloat()) }
                         Column(Modifier.width(240.dp).padding(horizontal = 16.dp)) {
                             Text(
-                                stringResource(R.string.reader_webtoon_width, widthPercent),
+                                stringResource(R.string.reader_webtoon_width, dragged.toInt()),
                                 style = MaterialTheme.typography.labelMedium,
                             )
                             Slider(
-                                value = widthPercent.toFloat(),
-                                onValueChange = { onWidthPercent(it.toInt()) },
+                                value = dragged,
+                                onValueChange = { dragged = it },
+                                onValueChangeFinished = { onWidthPercent(dragged.toInt()) },
                                 valueRange = 40f..100f,
                             )
                         }
