@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -52,6 +53,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -69,6 +71,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -142,9 +145,12 @@ fun MediaViewerScreen(viewer: MainViewModel.MediaViewer, model: MainViewModel) {
 
     // Leaving on purpose -- the back arrow or the system back -- stops the sound
     // and clears the notification. Leaving the app (home, screen off) does
-    // neither, so that keeps playing in the background.
+    // neither, so that keeps playing in the background. The place is saved
+    // before the playlist is cleared, or leaving would lose it and the film
+    // would reopen at the start.
     val close: () -> Unit = {
         player?.let {
+            savePlaybackPosition(it, viewer.items, model)
             it.stop()
             it.clearMediaItems()
         }
@@ -258,13 +264,7 @@ private fun MediaPlayer(
         }
         player.addListener(listener)
         onDispose {
-            if (player.mediaItemCount > 0) {
-                val at = player.currentMediaItemIndex
-                val position = player.currentPosition
-                val duration = player.duration
-                val save = if (duration > 0 && position >= duration - 1_000) 0L else position
-                viewer.items.getOrNull(at)?.let { model.setMediaPosition(it, save) }
-            }
+            savePlaybackPosition(player, viewer.items, model)
             player.removeListener(listener)
         }
     }
@@ -315,6 +315,26 @@ private fun MediaPlayer(
                         android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
                 }
             }
+        }
+    }
+
+    // While something is playing the screen is held awake, so a film is not
+    // dimmed or slept through for want of a touch. The flag is cleared the
+    // moment playback pauses, and on the way out.
+    DisposableEffect(player, activity) {
+        val window = activity?.window
+        val keepAwake = android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        fun sync() {
+            if (player.isPlaying) window?.addFlags(keepAwake) else window?.clearFlags(keepAwake)
+        }
+        val listener = object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) = sync()
+        }
+        player.addListener(listener)
+        sync()
+        onDispose {
+            player.removeListener(listener)
+            window?.clearFlags(keepAwake)
         }
     }
 
@@ -416,6 +436,72 @@ private fun MediaPlayer(
         )
     }
     LaunchedEffect(subScale, subColor) { model.setSubtitleStyle(subScale, subColor) }
+
+    // The subtitle tracks the player has, named for the picker: which number,
+    // whether it comes from a file beside the film or from inside it, its
+    // format and its language. Rebuilt whenever the tracks change.
+    val undLabel = stringResource(R.string.subtitle_language_unknown)
+    val textTracks = remember(tracksVersion, player, undLabel) {
+        buildList {
+            var number = 0
+            for (group in player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }) {
+                for (i in 0 until group.length) {
+                    if (!group.isTrackSupported(i)) continue
+                    val format = group.getTrackFormat(i)
+                    number++
+                    val external = format.id?.startsWith(EXTERNAL_SUB_ID_PREFIX) == true
+                    val language = format.language?.takeIf { it.isNotBlank() }
+                    add(
+                        TextTrack(
+                            group = group,
+                            trackIndex = i,
+                            number = number,
+                            external = external,
+                            format = subtitleFormat(external, format),
+                            language = trackLanguageName(language) ?: language ?: undLabel,
+                            token = subtitleToken(external, format, number),
+                            selected = group.isTrackSelected(i),
+                        ),
+                    )
+                }
+            }
+        }
+    }
+    val subtitleOn = textTracks.any { it.selected }
+
+    // Choosing a subtitle, and remembering the choice against this file so it
+    // comes back the same next time. Turning the toggle on picks the first
+    // track; off disables text.
+    val currentFile = viewer.items.getOrNull(index)
+    val onSelectTrack: (TextTrack) -> Unit = { track ->
+        applyTextTrack(player, track)
+        currentFile?.let { model.setSubtitleChoice(it, track.token) }
+    }
+    val onSubtitleToggle: (Boolean) -> Unit = { on ->
+        if (on) {
+            textTracks.firstOrNull()?.let { onSelectTrack(it) }
+        } else {
+            disableTextTracks(player)
+            currentFile?.let { model.setSubtitleChoice(it, SUBTITLE_OFF_TOKEN) }
+        }
+    }
+
+    // On opening a file, put back the subtitle it was last watched with -- once,
+    // as soon as the tracks are known.
+    var subtitleAppliedFor by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(currentFile, tracksVersion) {
+        val file = currentFile ?: return@LaunchedEffect
+        if (subtitleAppliedFor == file.path) return@LaunchedEffect
+        if (textTracks.isEmpty() && player.playbackState != Player.STATE_READY) return@LaunchedEffect
+        model.subtitleChoice(file)?.let { token ->
+            if (token == SUBTITLE_OFF_TOKEN) {
+                disableTextTracks(player)
+            } else {
+                textTracks.firstOrNull { it.token == token }?.let { applyTextTrack(player, it) }
+            }
+        }
+        subtitleAppliedFor = file.path
+    }
 
     // Playback speed, cycled by the speed button, and the picture's fit --
     // letterboxed, cropped to fill, or stretched -- cycled by the aspect button.
@@ -641,31 +727,22 @@ private fun MediaPlayer(
                     )
                 }
             }
-            // The brightness or volume read-out, centred, shown only while that
-            // dial is in hand.
-            if (brightnessHud >= 0 || volumeHud >= 0) {
-                val isBrightness = brightnessHud >= 0
-                val level = if (isBrightness) brightnessHud else volumeHud
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Row(
-                        Modifier
-                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            if (isBrightness) Icons.Filled.LightMode else Icons.AutoMirrored.Filled.VolumeUp,
-                            contentDescription = null,
-                            tint = Color.White,
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "${(level * 100).roundToInt()}%",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color.White,
-                        )
-                    }
-                }
+            // The brightness and volume read-outs: a bar up the side the dial is
+            // on -- brightness on the left, volume on the right -- shown only
+            // while that dial is in hand.
+            if (brightnessHud >= 0) {
+                EdgeLevelBar(
+                    level = brightnessHud,
+                    icon = Icons.Filled.LightMode,
+                    modifier = Modifier.align(Alignment.CenterStart),
+                )
+            }
+            if (volumeHud >= 0) {
+                EdgeLevelBar(
+                    level = volumeHud,
+                    icon = Icons.AutoMirrored.Filled.VolumeUp,
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                )
             }
         }
     }
@@ -679,8 +756,10 @@ private fun MediaPlayer(
 
     if (showSubtitleSheet) {
         SubtitleSheet(
-            player = player,
-            tracksVersion = tracksVersion,
+            subtitleOn = subtitleOn,
+            tracks = textTracks,
+            onToggle = onSubtitleToggle,
+            onSelectTrack = onSelectTrack,
             scale = subScale,
             color = subColor,
             onScale = { subScale = it },
@@ -698,17 +777,19 @@ private fun MediaPlayer(
 /**
  * The subtitle settings, in a sheet up from the bottom.
  *
- * Two things, in the one place: which subtitle to show -- off, or any of the
- * tracks the film carries or was found beside it -- and how it looks, its size
- * on a slider and its colour among a few. The look is the app's throughout; the
- * choice of track is this film's.
+ * A switch turns subtitles on or off; under it the tracks, each named by its
+ * number, by whether it comes from a file beside the film or from inside it,
+ * and by its format and language, the shown one marked. Below that, the other
+ * subtitle files in the folder, and the size and colour that hold for every
+ * film.
  */
 @OptIn(ExperimentalMaterial3Api::class)
-@androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun SubtitleSheet(
-    player: Player,
-    tracksVersion: Int,
+    subtitleOn: Boolean,
+    tracks: List<TextTrack>,
+    onToggle: (Boolean) -> Unit,
+    onSelectTrack: (TextTrack) -> Unit,
     scale: Float,
     color: Int,
     onScale: (Float) -> Unit,
@@ -729,42 +810,52 @@ private fun SubtitleSheet(
                 .padding(horizontal = 16.dp)
                 .padding(top = 2.dp, bottom = 8.dp),
         ) {
-            Text(
-                stringResource(R.string.subtitle_track),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            val textGroups = remember(tracksVersion, player) {
-                player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
-            }
-            val anySelected = textGroups.any { group ->
-                (0 until group.length).any { group.isTrackSelected(it) }
-            }
-            SubtitleChoice(
-                label = stringResource(R.string.subtitle_off),
-                selected = !anySelected,
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
-                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-                    .build()
+                Text(
+                    stringResource(R.string.subtitle_show),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Switch(checked = subtitleOn, onCheckedChange = onToggle)
             }
-            // A track shows its own name, or its language; one that carries
-            // neither -- an embedded track with nothing filled in -- is numbered,
-            // so two nameless tracks never read as the same "subtitle".
-            val fallback = stringResource(R.string.subtitle_default_name)
-            var unnamed = 0
-            textGroups.forEach { group ->
-                for (i in 0 until group.length) {
-                    if (!group.isTrackSupported(i)) continue
-                    val format = group.getTrackFormat(i)
-                    val label = format.label
-                        ?: trackLanguageName(format.language)
-                        ?: "$fallback ${++unnamed}"
-                    SubtitleChoice(label = label, selected = group.isTrackSelected(i)) {
-                        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
-                            .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, i))
-                            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                            .build()
+
+            tracks.forEach { track ->
+                val source = stringResource(
+                    if (track.external) R.string.subtitle_external else R.string.subtitle_internal,
+                )
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { onSelectTrack(track) }
+                        .padding(vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(
+                        selected = track.selected,
+                        onClick = { onSelectTrack(track) },
+                        modifier = Modifier.size(22.dp),
+                    )
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .padding(start = 12.dp),
+                    ) {
+                        Text(
+                            stringResource(R.string.subtitle_track_label, source, track.number),
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            "${track.format} · TEXT · ${track.language}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
             }
@@ -843,29 +934,106 @@ private fun SubtitleSheet(
     }
 }
 
+/**
+ * A slim bar up one edge of the picture showing a level from empty to full,
+ * with its dial's icon above it -- the brightness or volume read-out while a
+ * finger is on it, in the manner of the phone's own volume slider.
+ */
 @Composable
-private fun SubtitleChoice(label: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically,
+private fun EdgeLevelBar(level: Float, icon: ImageVector, modifier: Modifier) {
+    Column(
+        modifier
+            .padding(horizontal = 16.dp)
+            .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
+            .padding(horizontal = 10.dp, vertical = 14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        RadioButton(
-            selected = selected,
-            onClick = onClick,
-            modifier = Modifier.size(22.dp),
-        )
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = 12.dp),
-        )
+        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.height(10.dp))
+        Box(
+            Modifier
+                .width(6.dp)
+                .height(150.dp)
+                .clip(RoundedCornerShape(50))
+                .background(Color.White.copy(alpha = 0.3f)),
+            contentAlignment = Alignment.BottomCenter,
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(level.coerceIn(0f, 1f))
+                    .clip(RoundedCornerShape(50))
+                    .background(Color.White),
+            )
+        }
     }
 }
+
+/**
+ * A subtitle track as the picker shows it: its place in the list, whether it
+ * came from a file or from inside the film, its format and language, whether it
+ * is the one showing, and a token that names it in the saved-choice memory.
+ */
+private data class TextTrack(
+    val group: Tracks.Group,
+    val trackIndex: Int,
+    val number: Int,
+    val external: Boolean,
+    val format: String,
+    val language: String,
+    val token: String,
+    val selected: Boolean,
+)
+
+/** The value saved against a file whose subtitles the reader turned off. */
+private const val SUBTITLE_OFF_TOKEN = "off"
+
+/** Selects [track]'s text, turning subtitles on if they were off. */
+@androidx.annotation.OptIn(UnstableApi::class)
+private fun applyTextTrack(player: Player, track: TextTrack) {
+    player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+        .setOverrideForType(TrackSelectionOverride(track.group.mediaTrackGroup, track.trackIndex))
+        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+        .build()
+}
+
+/** Turns subtitles off. */
+private fun disableTextTracks(player: Player) {
+    player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+        .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+        .build()
+}
+
+/**
+ * The short format name for a track: for an external one, the file's own
+ * extension (SRT, SMI, ASS); for one inside the film, its codec (SUBRIP, VTT).
+ */
+@androidx.annotation.OptIn(UnstableApi::class)
+private fun subtitleFormat(external: Boolean, format: androidx.media3.common.Format): String {
+    if (external) {
+        val ext = format.label?.substringAfterLast('.', "")?.uppercase().orEmpty()
+        if (ext.isNotEmpty()) return ext
+    }
+    return when (format.sampleMimeType) {
+        MimeTypes.APPLICATION_SUBRIP -> "SUBRIP"
+        MimeTypes.TEXT_VTT -> "VTT"
+        MimeTypes.TEXT_SSA -> "SSA"
+        MimeTypes.APPLICATION_TTML -> "TTML"
+        MimeTypes.APPLICATION_PGS -> "PGS"
+        MimeTypes.APPLICATION_DVBSUBS -> "DVB"
+        else -> format.sampleMimeType?.substringAfterLast('/')?.uppercase() ?: "SUB"
+    }
+}
+
+/** A stable key for a track, for remembering which one a file was watched with. */
+@androidx.annotation.OptIn(UnstableApi::class)
+private fun subtitleToken(external: Boolean, format: androidx.media3.common.Format, number: Int): String =
+    if (external) {
+        format.id ?: "ext$number"
+    } else {
+        format.language?.takeIf { it.isNotBlank() } ?: format.label ?: format.id ?: "int$number"
+    }
 
 // The colours the subtitle can be, white first: the caption colours people
 // reach for, on a dark film.
@@ -917,6 +1085,20 @@ private fun speedLabel(speed: Float): String {
         speed.toString()
     }
     return text + "x"
+}
+
+/**
+ * Saves where the playing file is now, so it reopens there. A file within a
+ * second of its end is saved at the start, since that reads as finished. Does
+ * nothing once the playlist is empty -- there is nothing to place.
+ */
+private fun savePlaybackPosition(player: Player, items: List<File>, model: MainViewModel) {
+    if (player.mediaItemCount == 0) return
+    val at = player.currentMediaItemIndex
+    val position = player.currentPosition
+    val duration = player.duration
+    val save = if (duration > 0 && position >= duration - 1_000) 0L else position
+    items.getOrNull(at)?.let { model.setMediaPosition(it, save) }
 }
 
 /** A duration as h:mm:ss, or m:ss under an hour. */
@@ -1036,10 +1218,16 @@ private fun sidecarSubtitles(video: File, cacheDir: File): List<MediaItem.Subtit
             .setMimeType(sub.mime)
             .setLanguage(sub.language)
             .setLabel(sub.label)
+            .setId(EXTERNAL_SUB_ID_PREFIX + sub.label)
             .setSelectionFlags(if (i == defaultIdx) C.SELECTION_FLAG_DEFAULT else 0)
             .build()
     }
 }
+
+// A subtitle track the app added from a file, rather than one carried inside
+// the film, is marked by an id starting with this, so the picker can say which
+// is which and show the file's own extension as the format.
+const val EXTERNAL_SUB_ID_PREFIX = "olo-ext:"
 
 private data class SidecarSub(
     val uri: Uri,
@@ -1082,12 +1270,14 @@ private fun loadPickedSubtitle(
         MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(vtt))
             .setMimeType(MimeTypes.TEXT_VTT)
             .setLabel(name)
+            .setId(EXTERNAL_SUB_ID_PREFIX + name)
             .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
             .build()
     } else {
         MediaItem.SubtitleConfiguration.Builder(picked)
             .setMimeType(SUBTITLE_MIME[ext] ?: MimeTypes.APPLICATION_SUBRIP)
             .setLabel(name)
+            .setId(EXTERNAL_SUB_ID_PREFIX + name)
             .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
             .build()
     }

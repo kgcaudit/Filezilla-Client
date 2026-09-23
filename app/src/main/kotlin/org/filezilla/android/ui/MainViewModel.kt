@@ -1745,6 +1745,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         graph.preferences.setSubtitleStyle(scale, color)
     }
 
+    /** Which subtitle a file was last watched with, or null for none saved. */
+    fun subtitleChoice(file: java.io.File): String? = graph.preferences.subtitleChoice(file.path)
+
+    /** Remembers the subtitle a file is watched with, so it reopens the same. */
+    fun setSubtitleChoice(file: java.io.File, token: String) {
+        graph.preferences.setSubtitleChoice(file.path, token)
+    }
+
     /** One image the viewer can show, on the phone or still inside an archive. */
     sealed interface ImageRef {
         val name: String

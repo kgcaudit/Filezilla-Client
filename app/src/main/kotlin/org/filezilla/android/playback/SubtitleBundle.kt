@@ -23,6 +23,8 @@ object SubtitleBundle {
     private const val KEY_MIMES = "olo_sub_mimes"
     private const val KEY_LANGS = "olo_sub_langs"
     private const val KEY_FLAGS = "olo_sub_flags"
+    private const val KEY_LABELS = "olo_sub_labels"
+    private const val KEY_IDS = "olo_sub_ids"
 
     /** Packs a subtitle list into a bundle for a MediaItem's metadata extras. */
     fun encode(subtitles: List<MediaItem.SubtitleConfiguration>): Bundle {
@@ -31,6 +33,8 @@ object SubtitleBundle {
         bundle.putStringArray(KEY_MIMES, subtitles.map { it.mimeType.orEmpty() }.toTypedArray())
         bundle.putStringArray(KEY_LANGS, subtitles.map { it.language.orEmpty() }.toTypedArray())
         bundle.putIntArray(KEY_FLAGS, subtitles.map { it.selectionFlags }.toIntArray())
+        bundle.putStringArray(KEY_LABELS, subtitles.map { it.label.orEmpty() }.toTypedArray())
+        bundle.putStringArray(KEY_IDS, subtitles.map { it.id.orEmpty() }.toTypedArray())
         return bundle
     }
 
@@ -40,11 +44,15 @@ object SubtitleBundle {
         val mimes = extras.getStringArray(KEY_MIMES) ?: emptyArray()
         val langs = extras.getStringArray(KEY_LANGS) ?: emptyArray()
         val flags = extras.getIntArray(KEY_FLAGS) ?: IntArray(0)
+        val labels = extras.getStringArray(KEY_LABELS) ?: emptyArray()
+        val ids = extras.getStringArray(KEY_IDS) ?: emptyArray()
         return uris.mapIndexed { i, uri ->
             MediaItem.SubtitleConfiguration.Builder(Uri.parse(uri))
                 .setMimeType(mimes.getOrNull(i)?.ifEmpty { null })
                 .setLanguage(langs.getOrNull(i)?.ifEmpty { null })
                 .setSelectionFlags(flags.getOrElse(i) { 0 })
+                .setLabel(labels.getOrNull(i)?.ifEmpty { null })
+                .setId(ids.getOrNull(i)?.ifEmpty { null })
                 .build()
         }
     }

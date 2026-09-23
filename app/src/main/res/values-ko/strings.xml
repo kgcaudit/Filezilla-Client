@@ -253,12 +253,14 @@
     <string name="action_rotate_lock">화면 고정</string>
     <string name="action_aspect">화면 비율</string>
     <string name="action_subtitles">자막</string>
-    <string name="subtitle_off">끄기</string>
-    <string name="subtitle_track">자막 선택</string>
+    <string name="subtitle_show">자막 보기</string>
+    <string name="subtitle_external">외부자막</string>
+    <string name="subtitle_internal">내부자막</string>
+    <string name="subtitle_track_label">%1$s 트랙 %2$d</string>
+    <string name="subtitle_language_unknown">미지정</string>
     <string name="subtitle_from_folder">이 폴더의 자막 파일</string>
     <string name="subtitle_size">크기</string>
     <string name="subtitle_color">색상</string>
-    <string name="subtitle_default_name">자막</string>
     <string name="transfers_running">%1$d개 전송 중</string>
     <string name="transfers_waiting">%1$d개 전송 대기 중</string>
     <string name="transfers_percent">%1$d%%</string>

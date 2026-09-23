@@ -301,14 +301,42 @@ class AppPreferences(context: Context) {
 
     fun setMediaPosition(key: String, positionMs: Long) {
         val edit = prefs.edit()
+        rememberMedia(edit, key)
+        edit.putLong(mediaPositionKey(key), positionMs.coerceAtLeast(0L))
+        edit.apply()
+    }
+
+    /**
+     * Which subtitle a file was last watched with, so it comes back the same
+     * rather than defaulting every time. "off" means the reader turned
+     * subtitles off; anything else is a token naming the chosen track (see the
+     * player). Kept beside the position under the same budget, and forgotten
+     * with it.
+     */
+    fun subtitleChoice(key: String): String? =
+        prefs.getString(mediaSubtitleKey(key), null)?.ifEmpty { null }
+
+    fun setSubtitleChoice(key: String, token: String) {
+        val edit = prefs.edit()
+        rememberMedia(edit, key)
+        edit.putString(mediaSubtitleKey(key), token)
+        edit.apply()
+    }
+
+    /**
+     * Moves [key] to the front of the remembered-media list and drops the oldest
+     * past the cap, forgetting its position and subtitle together so the two
+     * never fall out of step over which files are still remembered.
+     */
+    private fun rememberMedia(edit: android.content.SharedPreferences.Editor, key: String) {
         val keys = (mediaKeys() - key).toMutableList()
         keys += key
         while (keys.size > MAX_REMEMBERED_MEDIA) {
-            edit.remove(mediaPositionKey(keys.removeAt(0)))
+            val dropped = keys.removeAt(0)
+            edit.remove(mediaPositionKey(dropped))
+            edit.remove(mediaSubtitleKey(dropped))
         }
-        edit.putLong(mediaPositionKey(key), positionMs.coerceAtLeast(0L))
         edit.putString(KEY_MEDIA_KEYS, keys.joinToString(KEY_SEPARATOR))
-        edit.apply()
     }
 
     private fun mediaKeys(): List<String> =
@@ -318,6 +346,8 @@ class AppPreferences(context: Context) {
             .orEmpty()
 
     private fun mediaPositionKey(key: String) = "$KEY_MEDIA_POSITION${comicHash(key)}"
+
+    private fun mediaSubtitleKey(key: String) = "$KEY_MEDIA_SUBTITLE${comicHash(key)}"
 
     /**
      * How the player draws subtitles: a text height as a fraction of the screen,
@@ -410,6 +440,7 @@ class AppPreferences(context: Context) {
         const val KEY_COMIC_WEBTOON = "comic_webtoon_"
         const val KEY_COMIC_KEYS = "comic_page_keys"
         const val KEY_MEDIA_POSITION = "media_pos_"
+        const val KEY_MEDIA_SUBTITLE = "media_sub_"
         const val KEY_MEDIA_KEYS = "media_pos_keys"
         const val KEY_SUBTITLE_SCALE = "subtitle_scale"
         const val KEY_SUBTITLE_COLOR = "subtitle_color"

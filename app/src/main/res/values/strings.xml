@@ -256,12 +256,14 @@
     <string name="action_rotate_lock">Lock rotation</string>
     <string name="action_aspect">Aspect ratio</string>
     <string name="action_subtitles">Subtitles</string>
-    <string name="subtitle_off">Off</string>
-    <string name="subtitle_track">Subtitle</string>
+    <string name="subtitle_show">Show subtitles</string>
+    <string name="subtitle_external">External</string>
+    <string name="subtitle_internal">Internal</string>
+    <string name="subtitle_track_label">%1$s track %2$d</string>
+    <string name="subtitle_language_unknown">Unknown</string>
     <string name="subtitle_from_folder">Subtitle files in this folder</string>
     <string name="subtitle_size">Size</string>
     <string name="subtitle_color">Colour</string>
-    <string name="subtitle_default_name">Subtitle</string>
     <string name="transfers_running">%1$d transferring</string>
     <string name="transfers_waiting">%1$d waiting to transfer</string>
     <string name="transfers_percent">%1$d%%</string>
