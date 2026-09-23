@@ -1165,15 +1165,51 @@ private val SUBTITLE_MIME = mapOf(
 private val SUBTITLE_EXTENSIONS = SUBTITLE_MIME.keys + setOf("smi", "sami")
 
 /**
- * Every subtitle file in [video]'s own folder, in name order, for choosing one
- * by hand from within the player. Nearly every external subtitle sits beside
- * its film, so this covers the oddly named ones without sending the reader out
- * to the system's file chooser, which opens in its own orientation.
+ * The subtitle files in [video]'s own folder that are named nearly the same as
+ * it -- and so belong to it -- but not so exactly that they were attached
+ * already, in name order, for choosing one by hand. A folder holding several
+ * films' subtitles no longer offers one film the others': a subtitle shows only
+ * when its name all but matches the film's.
  */
 private fun folderSubtitleFiles(video: File?): List<File> {
     val dir = video?.parentFile ?: return emptyList()
-    return (dir.listFiles()?.filter { it.isFile && it.extension.lowercase() in SUBTITLE_EXTENSIONS } ?: emptyList())
-        .sortedWith(org.filezilla.android.files.NaturalOrder.by { it.name })
+    val base = video.nameWithoutExtension.lowercase()
+    return (
+        dir.listFiles()?.filter { file ->
+            file.isFile &&
+                file.extension.lowercase() in SUBTITLE_EXTENSIONS &&
+                file.nameWithoutExtension.lowercase().let { stem ->
+                    subtitleNameMatches(base, stem) && !strictSidecarName(base, stem)
+                }
+        } ?: emptyList()
+        ).sortedWith(org.filezilla.android.files.NaturalOrder.by { it.name })
+}
+
+/**
+ * Whether a subtitle's name is the film's exactly, or the film's with a tag on
+ * the end -- "movie.srt", "movie.ko.srt", "movie_en.srt". These are attached to
+ * the film without asking.
+ */
+private fun strictSidecarName(videoBase: String, subtitleStem: String): Boolean =
+    subtitleStem == videoBase ||
+        subtitleStem.startsWith("$videoBase.") ||
+        subtitleStem.startsWith("${videoBase}_") ||
+        subtitleStem.startsWith("$videoBase-")
+
+/**
+ * Whether a subtitle's name is near enough the film's to be the film's. The two
+ * are reduced to their letters and digits, and one has to be a leading run of
+ * the other -- so a subtitle that is the film's title, or the title with a
+ * language on the end, matches, while a different film in the same folder does
+ * not.
+ */
+private fun subtitleNameMatches(videoBase: String, subtitleStem: String): Boolean {
+    fun letters(text: String) = text.lowercase().filter { it.isLetterOrDigit() }
+    val a = letters(videoBase)
+    val b = letters(subtitleStem)
+    if (a.length < 4 || b.length < 4) return a == b
+    val (shorter, longer) = if (a.length <= b.length) a to b else b to a
+    return longer.startsWith(shorter)
 }
 
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -1188,11 +1224,7 @@ private fun sidecarSubtitles(video: File, cacheDir: File): List<MediaItem.Subtit
         val stem = file.nameWithoutExtension.lowercase()
         // The subtitle belongs to this film if its name is the film's, or the
         // film's followed by a tag ("movie", "movie.ko", "movie_en").
-        if (stem != base && !stem.startsWith("$base.") &&
-            !stem.startsWith("${base}_") && !stem.startsWith("$base-")
-        ) {
-            return@mapNotNull null
-        }
+        if (!strictSidecarName(base, stem)) return@mapNotNull null
         // SAMI is rewritten to a .vtt the player can read; the rest are used as
         // they are. A .smi that will not convert is dropped rather than shown
         // blank.
