@@ -33,6 +33,16 @@ data class ArchiveSession(
      * and the chain of them is what the breadcrumb and the back gesture walk.
      */
     val parent: ArchiveSession? = null,
+    /**
+     * The entry in [parent] this archive was extracted from, or null at the top.
+     *
+     * The extracted copy sits in the cache under a digest name, so its own file
+     * no longer carries the volume's real name -- which is what a run of volumes
+     * bundled as sub-archives ("1권.cbz", "2권.cbz") is matched by to find the
+     * next. Kept here so the next volume can be found, and so the breadcrumb
+     * reads the volume's name rather than the cache's.
+     */
+    val origin: String? = null,
 )
 
 /**

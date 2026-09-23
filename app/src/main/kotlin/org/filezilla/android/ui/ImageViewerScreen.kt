@@ -245,8 +245,8 @@ private fun PagedReader(
                 )
             } else {
                 ReaderEndCard(
-                    nextComic = viewer.nextComic,
-                    onOpenNext = { viewer.nextComic?.let(model::openComicFile) },
+                    nextVolume = viewer.nextVolume,
+                    onOpenNext = { viewer.nextVolume?.let(model::openNextVolume) },
                     onClose = model::closeImageViewer,
                 )
             }
@@ -387,8 +387,8 @@ private fun WebtoonReader(
                 }
                 viewer.book -> item(key = "end") {
                     ReaderEndCard(
-                        nextComic = viewer.nextComic,
-                        onOpenNext = { viewer.nextComic?.let(model::openComicFile) },
+                        nextVolume = viewer.nextVolume,
+                        onOpenNext = { viewer.nextVolume?.let(model::openNextVolume) },
                         onClose = model::closeImageViewer,
                     )
                 }
@@ -601,7 +601,7 @@ private fun ReaderBottomBar(firstPage: Int, lastPage: Int, count: Int, rtl: Bool
  */
 @Composable
 private fun ReaderEndCard(
-    nextComic: java.io.File?,
+    nextVolume: MainViewModel.NextVolume?,
     onOpenNext: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -610,14 +610,14 @@ private fun ReaderEndCard(
         verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (nextComic != null) {
+        if (nextVolume != null) {
             Text(
                 stringResource(R.string.reader_next_volume),
                 style = MaterialTheme.typography.labelLarge,
                 color = Color.White.copy(alpha = 0.7f),
             )
             Text(
-                nextComic.nameWithoutExtension,
+                nextVolume.label,
                 style = MaterialTheme.typography.titleMedium,
                 color = Color.White,
                 maxLines = 2,

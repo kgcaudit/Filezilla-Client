@@ -44,6 +44,7 @@ import org.filezilla.android.files.localParent
 import org.filezilla.android.files.StorageRoot
 import org.filezilla.android.transfer.ActiveProgress
 import org.filezilla.android.transfer.LogLine
+import org.filezilla.android.viewer.ComicSeries
 import org.filezilla.android.viewer.ImageFiles
 import org.filezilla.android.viewer.TextFiles
 import org.filezilla.ftp.journal.TransferRecord
@@ -1360,7 +1361,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             // The base is the real folder the outermost archive sits in.
             val out = folderCrumbs(state, chain.first().home).toMutableList()
             chain.forEachIndexed { depth, link ->
-                out += Crumb(link.name, ArchiveNav.crumb(depth, ""))
+                out += Crumb(link.origin ?: link.name, ArchiveNav.crumb(depth, ""))
                 var walked = ""
                 for (segment in link.at.split('/').filter { it.isNotEmpty() }) {
                     walked = if (walked.isEmpty()) segment else "$walked/$segment"
@@ -1690,12 +1691,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * The next volume to run on to when a comic ends, wherever it lives.
+     *
+     * A series is a run of volumes, and a volume is a file beside this one, a
+     * folder beside this one inside an archive, or another archive beside this
+     * one inside an outer archive -- a whole collection bundled into a single
+     * file. One card, one "continue", three ways of being the next book.
+     */
+    sealed interface NextVolume {
+        /** The volume's name, without its extension, for the end card. */
+        val label: String
+
+        /** A sibling archive file on the phone. */
+        data class LocalFile(val file: java.io.File) : NextVolume {
+            override val label: String get() = file.nameWithoutExtension
+        }
+
+        /** A sibling folder inside the same archive: volumes as sub-folders. */
+        data class InArchiveFolder(val session: ArchiveSession, val at: String) : NextVolume {
+            override val label: String get() = at.substringAfterLast('/')
+        }
+
+        /** A sibling archive inside the outer one: volumes as sub-archives. */
+        data class InArchiveEntry(val outer: ArchiveSession, val name: String) : NextVolume {
+            override val label: String get() = name.substringBeforeLast('.')
+        }
+    }
+
+    /**
      * The images the viewer can swipe through, which one is on screen, and --
      * for a comic, whose pages are worth remembering -- the key its place is
      * saved under. Null [comicKey] is a one-off view that keeps no place.
      *
      * [book] marks a comic archive rather than a loose folder of pictures, so
-     * the reader can offer an end and a next; [nextComic] is the following
+     * the reader can offer an end and a next; [nextVolume] is the following
      * volume in the same series, when there is one to go on to.
      */
     data class ImageViewer(
@@ -1703,7 +1732,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val index: Int,
         val comicKey: String?,
         val book: Boolean = false,
-        val nextComic: java.io.File? = null,
+        val nextVolume: NextVolume? = null,
     )
 
     var imageViewer by mutableStateOf<ImageViewer?>(null)
@@ -1766,11 +1795,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         index: Int,
         comicKey: String?,
         book: Boolean = false,
-        nextComic: java.io.File? = null,
+        nextVolume: NextVolume? = null,
     ) {
         if (images.isEmpty()) return
         val start = comicKey?.let { graph.preferences.comicPage(it) } ?: index
-        imageViewer = ImageViewer(images, start.coerceIn(0, images.size - 1), comicKey, book, nextComic)
+        imageViewer = ImageViewer(images, start.coerceIn(0, images.size - 1), comicKey, book, nextVolume)
     }
 
     /**
@@ -1799,15 +1828,76 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * The next comic in the same series as [file], sitting beside it, or null.
      *
      * Only a real file on the phone has a "beside": a comic unpacked into the
-     * viewing cache has none, so it never runs on to a next.
+     * viewing cache has none, so it never runs on to a next this way.
      */
     private fun nextComicAfter(file: java.io.File): java.io.File? {
         if (graph.viewCache.holds(file)) return null
         val folder = file.parentFile ?: return null
         val names = folder.list()?.toList() ?: return null
-        return org.filezilla.android.viewer.ComicSeries.nextVolume(file.name, names)
-            ?.let { java.io.File(folder, it) }
+        return ComicSeries.nextVolume(file.name, names)?.let { java.io.File(folder, it) }
     }
+
+    /**
+     * The next volume after the comic [session] is reading, wherever it lives.
+     *
+     * A collection is bundled in one of three shapes, and each is looked for in
+     * turn: a folder of the series sitting beside this one inside the same
+     * archive, an archive of the series sitting beside this one inside the outer
+     * archive, or -- for a comic that is its own file -- another file beside it
+     * on the phone. The first that has a next in the series answers.
+     */
+    private fun nextVolumeAfter(session: ArchiveSession): NextVolume? {
+        folderVolumeAfter(session)?.let { return it }
+        val parent = session.parent
+        val origin = session.origin
+        if (parent != null && origin != null) archiveVolumeAfter(parent, origin)?.let { return it }
+        if (parent == null) nextComicAfter(session.file)?.let { return NextVolume.LocalFile(it) }
+        return null
+    }
+
+    /** The sibling folder that continues the one [session] is reading, or null. */
+    private fun folderVolumeAfter(session: ArchiveSession): NextVolume? {
+        val at = session.at
+        if (at.isEmpty()) return null
+        val here = at.substringAfterLast('/')
+        val parent = ArchiveBrowsing.upFrom(at).orEmpty()
+        // Sibling folders that actually hold pages, so an empty or stray folder
+        // is not offered as the next book.
+        val siblings = ArchiveBrowsing.rowsIn(session.entries, parent)
+            .filter { it.isDirectory }
+            .map { it.name }
+            .filter { name ->
+                val folder = if (parent.isEmpty()) name else "$parent/$name"
+                session.entries.any { !it.isDirectory && it.parent == folder && ImageFiles.looksImage(it.name) }
+            }
+        val next = ComicSeries.nextVolume(here, siblings) ?: return null
+        return NextVolume.InArchiveFolder(session, if (parent.isEmpty()) next else "$parent/$next")
+    }
+
+    /** The sibling sub-archive that continues [origin] inside [outer], or null. */
+    private fun archiveVolumeAfter(outer: ArchiveSession, origin: String): NextVolume? {
+        val siblings = ArchiveNav.rows(outer)
+            .filter { !it.isDirectory && ArchiveNav.browsable(it.name) }
+            .map { it.name }
+        val next = ComicSeries.nextVolume(origin, siblings) ?: return null
+        return NextVolume.InArchiveEntry(outer, next)
+    }
+
+    /** Runs on to [next] when a comic ends, whichever shape of volume it is. */
+    fun openNextVolume(next: NextVolume) {
+        when (next) {
+            is NextVolume.LocalFile -> openComicFile(next.file)
+            is NextVolume.InArchiveFolder -> openArchiveFolderComic(next.session, next.at)
+            is NextVolume.InArchiveEntry -> openNestedArchiveComic(next.outer, next.name)
+        }
+    }
+
+    /** The image entries directly inside [at] of [session], in reading order. */
+    private fun pagesUnder(session: ArchiveSession, at: String): List<ImageRef> =
+        session.entries
+            .filter { !it.isDirectory && it.parent == at && ImageFiles.looksImage(it.name) }
+            .sortedWith(org.filezilla.android.files.NaturalOrder.by { it.path })
+            .map { ImageRef.InArchive(session, it) }
 
     /**
      * Opens a comic archive straight into the reader, at its first page or
@@ -1825,21 +1915,78 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
             val session = ArchiveSession(file, file.name, file.parent ?: "", entries)
-            val pages = entries.asSequence()
-                .filter { !it.isDirectory && ImageFiles.looksImage(it.name) }
-                .sortedWith(compareBy(org.filezilla.android.viewer.ComicSeries.NATURAL) { it.path })
-                .map { ImageRef.InArchive(session, it) }
-                .toList()
+            val pages = pagesUnder(session, "")
             if (pages.isEmpty()) {
                 archiveOutcome = ArchiveOutcome(R.string.archive_not_readable)
                 return@launch
             }
+            val next = withContext(Dispatchers.IO) { nextVolumeAfter(session) }
             openImageViewer(
                 images = pages,
                 index = 0,
                 comicKey = "arc\u0000${file.path}\u0000",
                 book = true,
-                nextComic = nextComicAfter(file),
+                nextVolume = next,
+            )
+        }
+    }
+
+    /** Opens the sub-folder [at] of [session] into the reader, as the next volume. */
+    private fun openArchiveFolderComic(session: ArchiveSession, at: String) {
+        val pages = pagesUnder(session, at)
+        if (pages.isEmpty()) {
+            archiveOutcome = ArchiveOutcome(R.string.archive_not_readable)
+            return
+        }
+        val next = nextVolumeAfter(session.copy(at = at))
+        openImageViewer(
+            images = pages,
+            index = 0,
+            comicKey = "arc\u0000${session.file.path}\u0000$at",
+            book = true,
+            nextVolume = next,
+        )
+    }
+
+    /**
+     * Extracts the sub-archive [name] from [outer] and opens it in the reader.
+     *
+     * The next volume when a bundle is a folder of archives. A locked one is
+     * handed to the ordinary open-and-browse path, which knows how to ask for a
+     * password; there is nowhere to put that question mid-read.
+     */
+    private fun openNestedArchiveComic(outer: ArchiveSession, name: String) {
+        val entry = ArchiveNav.entryFor(outer, name) ?: return
+        if (entry.encrypted) {
+            openArchiveEntry(activePane, outer, name, password = null)
+            return
+        }
+        archiveOpening = name
+        viewModelScope.launch {
+            val held = withContext(Dispatchers.IO) {
+                runCatching { cachedArchiveEntry(outer, entry, null) }.getOrNull()
+            }
+            val entries = held?.let {
+                withContext(Dispatchers.IO) { runCatching { Archives.open(it).use { a -> a.entries } }.getOrNull() }
+            }
+            archiveOpening = null
+            if (held == null || entries == null) {
+                archiveOutcome = ArchiveOutcome(R.string.archive_open_failed, listOf(name, ""))
+                return@launch
+            }
+            val inner = ArchiveSession(held, name, held.parent ?: "", entries, parent = outer, origin = name)
+            val pages = pagesUnder(inner, "")
+            if (pages.isEmpty()) {
+                archiveOutcome = ArchiveOutcome(R.string.archive_not_readable)
+                return@launch
+            }
+            val next = withContext(Dispatchers.IO) { nextVolumeAfter(inner) }
+            openImageViewer(
+                images = pages,
+                index = 0,
+                comicKey = "arc\u0000${held.path}\u0000",
+                book = true,
+                nextVolume = next,
             )
         }
     }
@@ -2115,6 +2262,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private var pendingPassword: PendingPassword? = null
 
+    /**
+     * A just-extracted nested archive and the entry name it came from.
+     *
+     * The extracted copy is named by a digest, so [openArchive] reads the real
+     * volume name from here (matched by the exact file) when the copy is opened
+     * to browse -- for the breadcrumb, and to find the next volume in a bundle
+     * of sub-archives. Set when the copy is handed on, consumed once.
+     */
+    private var nestedOrigin: Pair<java.io.File, String>? = null
+
     fun archiveOutcomeShown() {
         archiveOutcome = null
     }
@@ -2134,7 +2291,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * server to be looked at, so this one path serves both.
      */
     fun openArchive(id: PaneId, file: java.io.File, home: String) {
-        archiveOpening = file.name
+        // The entry name this file was extracted from, when it is a nested
+        // archive: the cache file is named by a digest, so its real volume name
+        // is only knowable from what asked for it. Consumed once, here.
+        val origin = nestedOrigin?.takeIf { it.first == file }?.second
+        nestedOrigin = null
+        archiveOpening = origin ?: file.name
         viewModelScope.launch {
             val opened = withContext(Dispatchers.IO) {
                 runCatching { Archives.open(file).use { it.entries } }
@@ -2145,7 +2307,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 // outer one -- keep it as this one's parent so backing out
                 // returns to it rather than to the cache the copy sits in.
                 val parent = pane(id).archive
-                val session = ArchiveSession(file, file.name, home, entries, parent = parent)
+                val session = ArchiveSession(file, origin ?: file.name, home, entries, parent = parent, origin = origin)
                 update(id) {
                     it.copy(
                         archive = session,
@@ -2218,13 +2380,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val index = images.indexOfFirst { it.name == name }
                 val comicKey = "arc\u0000${session.file.path}\u0000${session.at}"
                 viewModelScope.launch {
-                    val next = withContext(Dispatchers.IO) { nextComicAfter(session.file) }
+                    val next = withContext(Dispatchers.IO) { nextVolumeAfter(session) }
                     openImageViewer(
                         images = refs,
                         index = index,
                         comicKey = comicKey,
                         book = true,
-                        nextComic = next,
+                        nextVolume = next,
                     )
                 }
             }
@@ -2328,6 +2490,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // opening files out of archives cannot quietly fill the phone.
         graph.viewCache.readyFile(archiveEntryKey(session, entry))?.let { held ->
             graph.viewCache.touch(held)
+            if (ArchiveNav.browsable(name)) nestedOrigin = held to name
             readyToOpen = held
             return
         }
@@ -2340,7 +2503,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 runCatching { cachedArchiveEntry(session, entry, password) }
             }
             archiveBusy = null
-            opened.onSuccess { held -> readyToOpen = held }
+            opened.onSuccess { held ->
+                if (ArchiveNav.browsable(name)) nestedOrigin = held to name
+                readyToOpen = held
+            }
                 .onFailure { failure ->
                     if (failure is WrongPassword) {
                         pendingPassword = PendingPassword.Open(id, session, name)

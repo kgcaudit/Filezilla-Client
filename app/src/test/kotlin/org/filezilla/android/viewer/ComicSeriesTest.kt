@@ -59,4 +59,23 @@ class ComicSeriesTest {
         assertEquals(listOf("p1.jpg", "p2.jpg", "p10.jpg"), sorted)
         assertTrue(ComicSeries.naturalCompare("2", "10") < 0)
     }
+
+    // The bundle cases: a collection is one archive holding a volume per
+    // sub-folder, or a volume per sub-archive. The next volume is found by the
+    // same rule either way -- these lock the shapes the viewer relies on.
+
+    @Test
+    fun `volumes bundled as sub-folders continue by number`() {
+        val folders = listOf("1권", "2권", "10권")
+        assertEquals("2권", ComicSeries.nextVolume("1권", folders))
+        assertEquals("10권", ComicSeries.nextVolume("2권", folders))
+        assertNull(ComicSeries.nextVolume("10권", folders))
+    }
+
+    @Test
+    fun `volumes bundled as sub-archives continue by number`() {
+        val archives = listOf("만화 1.cbz", "만화 2.cbz", "만화 3.cbz")
+        assertEquals("만화 2.cbz", ComicSeries.nextVolume("만화 1.cbz", archives))
+        assertEquals("만화 3.cbz", ComicSeries.nextVolume("만화 2.cbz", archives))
+    }
 }
