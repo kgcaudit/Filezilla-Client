@@ -43,7 +43,6 @@ import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.ScreenLockRotation
 import androidx.compose.material.icons.filled.ScreenRotation
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -558,6 +557,17 @@ private fun MediaPlayer(
                             controlsVisible = visibility == View.VISIBLE
                         },
                     )
+                    // Media3 draws its own settings gear in the control bar; that
+                    // one opens our subtitle sheet, rather than a second gear
+                    // being laid over it. Its built-in popup (speed and track
+                    // menus) is stood down for the sheet, which covers the same
+                    // ground. The listener is set the once and media3 leaves it.
+                    playerView.findViewById<View?>(
+                        androidx.media3.ui.R.id.exo_settings,
+                    )?.let { settings ->
+                        settings.contentDescription = ctx.getString(R.string.action_settings)
+                        settings.setOnClickListener { showSubtitleSheet = true }
+                    }
                     playerViewRef = playerView
 
                     // All touches on the picture are ours, so the controls show
@@ -744,26 +754,6 @@ private fun MediaPlayer(
                             )
                         }
                     }
-                }
-            }
-            // The settings gear, low on the right over the player's controls,
-            // opens the subtitle sheet. Shown with the controls, like the top
-            // bar, so the picture is otherwise clear.
-            AnimatedVisibility(
-                visible = controlsVisible,
-                modifier = Modifier.align(Alignment.BottomEnd),
-            ) {
-                IconButton(
-                    onClick = { showSubtitleSheet = true },
-                    modifier = Modifier
-                        .navigationBarsPadding()
-                        .padding(8.dp),
-                ) {
-                    Icon(
-                        Icons.Filled.Settings,
-                        contentDescription = stringResource(R.string.action_settings),
-                        tint = Color.White,
-                    )
                 }
             }
             // Where the scrub would land, shown only while a drag is in hand.
