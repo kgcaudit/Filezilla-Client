@@ -1721,6 +1721,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var readerWebtoonNarrow by mutableStateOf(graph.preferences.readerWebtoonNarrow)
         private set
 
+    /** That column's width, as a percent of the screen, remembered across books. */
+    var readerWebtoonWidthPercent by mutableStateOf(graph.preferences.readerWebtoonWidthPercent)
+        private set
+
     fun applyReaderRtl(value: Boolean) {
         readerRtl = value
         graph.preferences.readerRtl = value
@@ -1734,6 +1738,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun applyReaderWebtoonNarrow(value: Boolean) {
         readerWebtoonNarrow = value
         graph.preferences.readerWebtoonNarrow = value
+    }
+
+    fun applyReaderWebtoonWidthPercent(value: Int) {
+        val clamped = value.coerceIn(
+            org.filezilla.android.data.AppPreferences.MIN_WEBTOON_WIDTH,
+            org.filezilla.android.data.AppPreferences.MAX_WEBTOON_WIDTH,
+        )
+        readerWebtoonWidthPercent = clamped
+        graph.preferences.readerWebtoonWidthPercent = clamped
     }
 
     fun openTextViewer(file: java.io.File, editable: Boolean) {

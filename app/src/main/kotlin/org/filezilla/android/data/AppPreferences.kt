@@ -236,6 +236,19 @@ class AppPreferences(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_READER_WEBTOON_NARROW, value).apply()
 
     /**
+     * The narrow column's width as a percent of the screen, so a webtoon whose
+     * lettering is small can be widened and one whose lettering is large pulled
+     * in. Kept within a readable band rather than allowed to vanish or to fill
+     * the screen, which would make the setting itself pointless.
+     */
+    var readerWebtoonWidthPercent: Int
+        get() = prefs.getInt(KEY_READER_WEBTOON_WIDTH, DEFAULT_WEBTOON_WIDTH)
+            .coerceIn(MIN_WEBTOON_WIDTH, MAX_WEBTOON_WIDTH)
+        set(value) = prefs.edit()
+            .putInt(KEY_READER_WEBTOON_WIDTH, value.coerceIn(MIN_WEBTOON_WIDTH, MAX_WEBTOON_WIDTH))
+            .apply()
+
+    /**
      * The page a comic was last left on, so it reopens where it was put down.
      *
      * Keyed by the book, capped the same way folder settings are: a reader
@@ -292,6 +305,11 @@ class AppPreferences(context: Context) {
         const val KEY_READER_RTL = "reader_rtl"
         const val KEY_READER_TWO_PAGE = "reader_two_page"
         const val KEY_READER_WEBTOON_NARROW = "reader_webtoon_narrow"
+        const val KEY_READER_WEBTOON_WIDTH = "reader_webtoon_width"
+
+        const val MIN_WEBTOON_WIDTH = 40
+        const val MAX_WEBTOON_WIDTH = 100
+        const val DEFAULT_WEBTOON_WIDTH = 68
         const val KEY_COMIC_PAGE = "comic_page_"
         const val KEY_COMIC_KEYS = "comic_page_keys"
 

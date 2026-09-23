@@ -70,9 +70,6 @@ import org.filezilla.android.R
 import org.filezilla.android.viewer.Spreads
 import org.filezilla.android.viewer.Webtoon
 
-/** The share of the screen a narrow webtoon column takes, centred, when chosen. */
-private const val NARROW_COLUMN = 0.68f
-
 /**
  * A comic reader over a set of images, in one of two shapes.
  *
@@ -149,6 +146,8 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
                     onWebtoon = { webtoonOverride = it },
                     narrow = model.readerWebtoonNarrow,
                     onNarrow = model::applyReaderWebtoonNarrow,
+                    widthPercent = model.readerWebtoonWidthPercent,
+                    onWidthPercent = model::applyReaderWebtoonWidthPercent,
                 )
             } else {
                 PagedReader(
@@ -264,10 +263,12 @@ private fun PagedReader(
                 rtl = rtl,
                 twoPage = model.readerTwoPage,
                 narrow = false,
+                widthPercent = 100,
                 onWebtoon = onWebtoon,
                 onRtl = model::applyReaderRtl,
                 onTwoPage = model::applyReaderTwoPage,
                 onNarrow = {},
+                onWidthPercent = {},
                 onClose = model::closeImageViewer,
             )
         }
@@ -307,6 +308,8 @@ private fun WebtoonReader(
     onWebtoon: (Boolean) -> Unit,
     narrow: Boolean,
     onNarrow: (Boolean) -> Unit,
+    widthPercent: Int,
+    onWidthPercent: (Int) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val images = viewer.images
@@ -324,10 +327,13 @@ private fun WebtoonReader(
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         // The strip runs the whole screen width, or a narrow centred column of
-        // it -- narrower panels put more of the strip on screen at once, which
-        // reads more like a webtoon than one screen-filling panel at a time.
+        // it -- narrower panels put more of the strip on screen at once, and
+        // shrink the lettering baked into the art, which reads more like a
+        // webtoon than one screen-filling panel at a time. The width is set by
+        // hand, since how small the lettering is differs from strip to strip.
         val screenWidth = constraints.maxWidth
-        val columnWidth = if (narrow) (screenWidth * NARROW_COLUMN).toInt().coerceAtLeast(1) else screenWidth
+        val columnWidth =
+            if (narrow) (screenWidth * widthPercent / 100).coerceAtLeast(1) else screenWidth
         val columnWidthDp = with(LocalDensity.current) { columnWidth.toDp() }
 
         // Only the pages known so far, from the top without a gap: the strip is
@@ -407,10 +413,12 @@ private fun WebtoonReader(
                 rtl = false,
                 twoPage = model.readerTwoPage,
                 narrow = narrow,
+                widthPercent = widthPercent,
                 onWebtoon = onWebtoon,
                 onRtl = model::applyReaderRtl,
                 onTwoPage = model::applyReaderTwoPage,
                 onNarrow = onNarrow,
+                onWidthPercent = onWidthPercent,
                 onClose = model::closeImageViewer,
             )
         }
@@ -475,10 +483,12 @@ private fun ReaderTopBar(
     rtl: Boolean,
     twoPage: Boolean,
     narrow: Boolean,
+    widthPercent: Int,
     onWebtoon: (Boolean) -> Unit,
     onRtl: (Boolean) -> Unit,
     onTwoPage: (Boolean) -> Unit,
     onNarrow: (Boolean) -> Unit,
+    onWidthPercent: (Int) -> Unit,
     onClose: () -> Unit,
 ) {
     Row(
@@ -520,6 +530,23 @@ private fun ReaderTopBar(
                         trailingIcon = { Switch(checked = narrow, onCheckedChange = { onNarrow(it) }) },
                         onClick = { onNarrow(!narrow) },
                     )
+                    // A slider for the exact width, so a strip with small
+                    // lettering can be widened and one with large pulled in.
+                    // Shown only once the narrow column is on, since at full
+                    // width there is nothing to slide.
+                    if (narrow) {
+                        Column(Modifier.width(240.dp).padding(horizontal = 16.dp)) {
+                            Text(
+                                stringResource(R.string.reader_webtoon_width, widthPercent),
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                            Slider(
+                                value = widthPercent.toFloat(),
+                                onValueChange = { onWidthPercent(it.toInt()) },
+                                valueRange = 40f..100f,
+                            )
+                        }
+                    }
                 }
                 if (!webtoon) {
                     DropdownMenuItem(
