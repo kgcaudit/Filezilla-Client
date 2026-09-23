@@ -26,7 +26,17 @@ object SamiSubtitles {
     fun toVttFile(cacheDir: File, sami: File): File? = runCatching {
         val vtt = toVtt(decodeBytes(sami.readBytes())) ?: return null
         val out = File(cacheDir, "sami_" + keyOf(sami.path + ":" + sami.length()) + ".vtt")
-        if (!out.exists()) out.writeText(vtt)
+        // Written to a temp file and moved into place, so a conversion cut short
+        // by a crash or a kill leaves no half-written .vtt to be reused as-is and
+        // shown as broken captions on the next open.
+        if (!out.exists()) {
+            val tmp = File.createTempFile("sami_", ".vtt.tmp", cacheDir)
+            tmp.writeText(vtt)
+            if (!tmp.renameTo(out)) {
+                tmp.delete()
+                out.writeText(vtt)
+            }
+        }
         out
     }.getOrNull()
 

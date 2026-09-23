@@ -94,6 +94,8 @@ import androidx.media3.ui.PlayerView
 import java.io.File
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.filezilla.android.R
 import org.filezilla.android.data.AppPreferences
 import org.filezilla.android.playback.PlaybackService
@@ -288,16 +290,25 @@ private fun MediaPlayer(
     // whatever subtitle files were found beside it.
     LaunchedEffect(player, viewer.items, viewer.index) {
         val wantUris = viewer.items.map { Uri.fromFile(it) }
+        // A controller strips a MediaItem's localConfiguration crossing to the
+        // service, so localConfiguration.uri is always null here; the uri that
+        // survives is the one stashed in the request metadata. Comparing against
+        // that is what lets the guard recognise the same playlist -- comparing
+        // localConfiguration made it always differ, restarting playback and
+        // throwing the reader back to the opened file on every rotation.
         val haveUris = (0 until player.mediaItemCount).map {
-            player.getMediaItemAt(it).localConfiguration?.uri
+            player.getMediaItemAt(it).requestMetadata.mediaUri
         }
         if (haveUris != wantUris) {
-            val start = model.mediaPosition(viewer.items[viewer.index])
-            player.setMediaItems(
-                viewer.items.map { mediaItemFor(it, context.cacheDir) },
-                viewer.index,
-                start,
-            )
+            val startFile = viewer.items.getOrNull(viewer.index) ?: return@LaunchedEffect
+            val start = model.mediaPosition(startFile)
+            // Finding the subtitle files beside each film reads the directory and
+            // rewrites any SAMI to WebVTT, so it is done off the main thread; the
+            // player is only touched once the items are built.
+            val items = withContext(Dispatchers.IO) {
+                viewer.items.map { mediaItemFor(it, context.cacheDir) }
+            }
+            player.setMediaItems(items, viewer.index, start)
             player.prepare()
             player.playWhenReady = true
         } else {
@@ -407,7 +418,11 @@ private fun MediaPlayer(
     val density = LocalDensity.current
     val statusTop = WindowInsets.statusBars.getTop(density)
     val cutoutTop = WindowInsets.displayCutout.getTop(density)
-    var reservedTopPx by rememberSaveable { mutableStateOf(0) }
+    // Latched with a plain remember, not saved across configuration change: the
+    // largest inset seen this orientation is held (the status bar's drops to zero
+    // once the bar hides), but a rotation starts the latch over, so a portrait
+    // notch does not leave an over-tall bar in landscape.
+    var reservedTopPx by remember { mutableIntStateOf(0) }
     val reservedTop = maxOf(reservedTopPx, statusTop, cutoutTop)
     LaunchedEffect(reservedTop) { reservedTopPx = reservedTop }
     val reservedTopDp = with(density) { reservedTop.toDp() }
@@ -461,29 +476,20 @@ private fun MediaPlayer(
     // format and its language. Rebuilt whenever the tracks change.
     val undLabel = stringResource(R.string.subtitle_language_unknown)
     val textTracks = remember(tracksVersion, player, undLabel) {
-        buildList {
-            var number = 0
-            for (group in player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }) {
-                for (i in 0 until group.length) {
-                    if (!group.isTrackSupported(i)) continue
-                    val format = group.getTrackFormat(i)
-                    number++
-                    val external = isExternalSubtitle(format)
-                    val language = format.language?.takeIf { it.isNotBlank() }
-                    add(
-                        TextTrack(
-                            group = group,
-                            trackIndex = i,
-                            number = number,
-                            external = external,
-                            format = subtitleFormat(external, format),
-                            language = trackLanguageName(language) ?: language ?: undLabel,
-                            token = subtitleToken(external, format, number),
-                            selected = group.isTrackSelected(i),
-                        ),
-                    )
-                }
-            }
+        mapTracksOfType(player, C.TRACK_TYPE_TEXT) { group, i, number ->
+            val format = group.getTrackFormat(i)
+            val external = isExternalSubtitle(format)
+            val language = format.language?.takeIf { it.isNotBlank() }
+            TextTrack(
+                group = group,
+                trackIndex = i,
+                number = number,
+                external = external,
+                format = subtitleFormat(external, format),
+                language = trackLanguageName(language) ?: language ?: undLabel,
+                token = subtitleToken(external, format, number),
+                selected = group.isTrackSelected(i),
+            )
         }
     }
     val subtitleOn = textTracks.any { it.selected }
@@ -508,26 +514,17 @@ private fun MediaPlayer(
     // The audio tracks the film carries, for choosing between them when it has
     // more than one. Rebuilt with the tracks, the way the subtitles are.
     val audioTracks = remember(tracksVersion, player, undLabel) {
-        buildList {
-            var number = 0
-            for (group in player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }) {
-                for (i in 0 until group.length) {
-                    if (!group.isTrackSupported(i)) continue
-                    val format = group.getTrackFormat(i)
-                    number++
-                    val language = format.language?.takeIf { it.isNotBlank() }
-                    add(
-                        AudioTrack(
-                            group = group,
-                            trackIndex = i,
-                            number = number,
-                            language = trackLanguageName(language) ?: language ?: undLabel,
-                            detail = audioDetail(format),
-                            selected = group.isTrackSelected(i),
-                        ),
-                    )
-                }
-            }
+        mapTracksOfType(player, C.TRACK_TYPE_AUDIO) { group, i, number ->
+            val format = group.getTrackFormat(i)
+            val language = format.language?.takeIf { it.isNotBlank() }
+            AudioTrack(
+                group = group,
+                trackIndex = i,
+                number = number,
+                language = trackLanguageName(language) ?: language ?: undLabel,
+                detail = audioDetail(format),
+                selected = group.isTrackSelected(i),
+            )
         }
     }
     val onSelectAudio: (AudioTrack) -> Unit = { track -> applyAudioTrack(player, track) }
@@ -732,6 +729,11 @@ private fun MediaPlayer(
                     }
                     playerView
                 },
+                // Let go of the controller when the view goes, so a released
+                // controller is not left referenced and still fed callbacks. The
+                // controller itself outlives this (it is the service's) and is
+                // released separately.
+                onRelease = { it.player = null },
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
@@ -1122,6 +1124,27 @@ private fun EdgeLevelBar(level: Float, icon: ImageVector, modifier: Modifier) {
 }
 
 /**
+ * Every supported track of [type] in the player's current selection, numbered
+ * from one and turned into a row by [row]. Both the subtitle and the audio
+ * pickers are built from this, so the walk over the track groups -- skipping the
+ * unsupported ones and counting the rest -- is written once, not twice.
+ */
+private inline fun <T> mapTracksOfType(
+    player: Player,
+    type: Int,
+    row: (group: Tracks.Group, trackIndex: Int, number: Int) -> T,
+): List<T> = buildList {
+    var number = 0
+    for (group in player.currentTracks.groups.filter { it.type == type }) {
+        for (i in 0 until group.length) {
+            if (!group.isTrackSupported(i)) continue
+            number++
+            add(row(group, i, number))
+        }
+    }
+}
+
+/**
  * A subtitle track as the picker shows it: its place in the list, whether it
  * came from a file or from inside the film, its format and language, whether it
  * is the one showing, and a token that names it in the saved-choice memory.
@@ -1257,13 +1280,18 @@ private fun audioDetail(format: androidx.media3.common.Format): String {
 // The speeds a film can play at, normal in the middle.
 private val PLAYBACK_SPEEDS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
 
-/** A stable key for a track, for remembering which one a file was watched with. */
+/**
+ * A stable key for a track, for remembering which one a file was watched with.
+ * The track's number is folded in so two internal tracks of the same language --
+ * two English, say -- do not share a key and re-select each other's first match.
+ */
 @androidx.annotation.OptIn(UnstableApi::class)
 private fun subtitleToken(external: Boolean, format: androidx.media3.common.Format, number: Int): String =
     if (external) {
         format.id ?: "ext$number"
     } else {
-        format.language?.takeIf { it.isNotBlank() } ?: format.label ?: format.id ?: "int$number"
+        val name = format.language?.takeIf { it.isNotBlank() } ?: format.label ?: format.id ?: "int"
+        "$name#$number"
     }
 
 // The colours the subtitle can be, white first: the caption colours people
