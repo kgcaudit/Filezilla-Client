@@ -4,10 +4,14 @@ import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.CommandButton
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 
@@ -60,6 +64,31 @@ class PlaybackService : MediaSessionService() {
         session = MediaSession.Builder(this, player)
             .setCallback(RestoringCallback())
             .build()
+        // The playback notification carries play/pause alone. media3's default
+        // draws a skip-to-previous and a skip-to-next around it, but the side
+        // buttons here move within one film, not between films, so between-file
+        // skips have no place on the notification -- only the previous button was
+        // showing anyway, and it did nothing a listener would expect.
+        setMediaNotificationProvider(PlayPauseOnlyNotificationProvider(this))
+    }
+
+    /**
+     * media3's notification with only its play/pause button kept -- the
+     * skip-to-previous and skip-to-next it adds are dropped.
+     */
+    @UnstableApi
+    private class PlayPauseOnlyNotificationProvider(context: android.content.Context) :
+        DefaultMediaNotificationProvider(context) {
+        override fun getMediaButtons(
+            session: MediaSession,
+            playerCommands: Player.Commands,
+            customLayout: ImmutableList<CommandButton>,
+            showPauseButton: Boolean,
+        ): ImmutableList<CommandButton> =
+            ImmutableList.copyOf(
+                super.getMediaButtons(session, playerCommands, customLayout, showPauseButton)
+                    .filter { it.playerCommand == Player.COMMAND_PLAY_PAUSE },
+            )
     }
 
     /**

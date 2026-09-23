@@ -900,7 +900,13 @@ private fun PlayerSettingsSheet(
     // The picture is dark, so the panel takes the app's own dark palette whatever
     // the system theme -- clay on warm near-black, not Material's default lavender
     // -- its components readable on it; it is kept short of the screen and scrolls.
-    val maxPanelHeight = (LocalConfiguration.current.screenHeightDp * 0.9f).dp
+    val configuration = LocalConfiguration.current
+    val maxPanelHeight = (configuration.screenHeightDp * 0.9f).dp
+    // Half the width in landscape -- where the film is wide and the panel should
+    // stay out of it -- but most of the width in portrait, where half a phone is
+    // too narrow to hold the speed pills without their text wrapping.
+    val landscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    val widthFraction = if (landscape) 0.5f else 0.9f
     val backdrop = remember { MutableInteractionSource() }
     val panel = remember { MutableInteractionSource() }
     MaterialTheme(colorScheme = DarkColors) {
@@ -914,8 +920,8 @@ private fun PlayerSettingsSheet(
         ) {
             Column(
                 Modifier
-                    .fillMaxWidth(0.5f)
-                    .widthIn(min = 300.dp, max = 560.dp)
+                    .fillMaxWidth(widthFraction)
+                    .widthIn(max = 560.dp)
                     .heightIn(max = maxPanelHeight)
                     .clip(RoundedCornerShape(16.dp))
                     .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f))
@@ -995,6 +1001,8 @@ private fun PlayerSettingsSheet(
                         Text(
                             label,
                             style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1,
+                            softWrap = false,
                             color = if (chosen) {
                                 MaterialTheme.colorScheme.onPrimary
                             } else {
