@@ -489,7 +489,10 @@ private fun AppScreen(
                     // "open with" still hands the file to another app.
                     when {
                         ArchiveNav.browsable(file.name) && Archives.kindOf(file) != null ->
-                            model.openArchive(id, file, file.parent ?: model.pane(id).path)
+                            // A zip that holds nothing but images is a comic, so
+                            // it opens in the reader; any other archive opens to
+                            // be browsed. See openArchiveOrComic.
+                            model.openArchiveOrComic(id, file, file.parent ?: model.pane(id).path)
                         InstallApk.isPackage(file.name) && !InstallApk.allowed(context) ->
                             installBlockedFor = file
                         // The phone's own text and images open in the app's
@@ -807,7 +810,7 @@ private fun AppScreen(
             // inside one does come back through here, and opens in the pane.
             when {
                 ArchiveNav.browsable(ready.name) && Archives.kindOf(ready) != null ->
-                    model.openArchive(model.activePane, ready, ready.parent ?: "")
+                    model.openArchiveOrComic(model.activePane, ready, ready.parent ?: "")
                 InstallApk.isPackage(ready.name) && !InstallApk.allowed(context) ->
                     installBlockedFor = ready
                 // A file fetched from a server, or unpacked from an archive, is

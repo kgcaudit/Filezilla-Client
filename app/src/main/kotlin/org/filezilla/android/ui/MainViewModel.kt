@@ -2000,7 +2000,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 null
             }
             FileKind.ARCHIVE -> {
-                openArchive(pane, file, file.parent ?: FilePath.ROOT)
+                // An image-only zip opens the reader over this screen; a real
+                // archive opens in a pane, so the files screen is brought up to
+                // show it. openArchiveOrComic decides between the two.
+                openArchiveOrComic(pane, file, file.parent ?: FilePath.ROOT)
                 Screen.FILES
             }
             else -> {
@@ -2181,6 +2184,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 initialWebtoonExplicit = inheritWebtoonExplicit,
             )
         }
+    }
+
+    /**
+     * Opens [file] as a comic when it holds nothing but pictures, and as an
+     * archive to browse otherwise -- so a zip full of images (a comic in all but
+     * its extension) lands straight in the reader, the way a .cbz does, rather
+     * than in a list of its pages. The peek reads the archive's index only, on
+     * the IO thread; the real open follows on the answer.
+     */
+    fun openArchiveOrComic(id: PaneId, file: java.io.File, home: String) {
+        archiveOpening = file.name
+        viewModelScope.launch {
+            val entries = withContext(Dispatchers.IO) {
+                runCatching { Archives.open(file).use { it.entries } }.getOrNull()
+            }
+            archiveOpening = null
+            if (entries != null && isImageOnlyArchive(entries)) {
+                openComicFile(file)
+            } else {
+                openArchive(id, file, home)
+            }
+        }
+    }
+
+    /**
+     * Whether an archive is a comic: it holds at least one picture and nothing
+     * but pictures, bar the odd system file a zipper leaves behind. Directories
+     * do not count -- a comic's pages often sit in a folder inside the zip.
+     */
+    private fun isImageOnlyArchive(entries: List<ArchiveEntry>): Boolean {
+        val files = entries.filterNot { it.isDirectory || isArchiveJunk(it.name) }
+        return files.isNotEmpty() && files.all { ImageFiles.looksImage(it.name) }
+    }
+
+    private fun isArchiveJunk(name: String): Boolean {
+        val leaf = name.substringAfterLast('/').substringAfterLast('\\').lowercase()
+        return leaf == "thumbs.db" || leaf == ".ds_store" || leaf == "desktop.ini" ||
+            leaf.startsWith("._")
     }
 
     /** Opens the sub-folder [at] of [session] into the reader, as the next volume. */
