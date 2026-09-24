@@ -1,13 +1,16 @@
 package org.filezilla.android.ui
 
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
@@ -33,7 +36,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -171,12 +175,8 @@ fun TextViewerScreen(viewer: MainViewModel.TextViewer, model: MainViewModel) {
                     }
                     val monospace = lang != Syntax.Lang.PLAIN
                     val scroll = rememberScrollState()
-                    val scrollbarColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .verticalScrollbar(scroll, scrollbarColor),
-                    ) {
+                    val scrollbarColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    Box(Modifier.fillMaxSize()) {
                         BasicTextField(
                             value = value,
                             onValueChange = { value = it; saved = false },
@@ -192,6 +192,15 @@ fun TextViewerScreen(viewer: MainViewModel.TextViewer, model: MainViewModel) {
                                 .verticalScroll(scroll)
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
                         )
+                        // Only while the file overruns the screen: a grip to seize
+                        // and drag, for moving through a long file at a stroke.
+                        if (scroll.maxValue > 0) {
+                            ScrollGrip(
+                                state = scroll,
+                                color = scrollbarColor,
+                                modifier = Modifier.align(Alignment.CenterEnd),
+                            )
+                        }
                     }
                 }
             }
@@ -200,34 +209,62 @@ fun TextViewerScreen(viewer: MainViewModel.TextViewer, model: MainViewModel) {
 }
 
 /**
- * A thin scrollbar down the right edge, tracking [state].
+ * A grip down the right edge that both shows and moves the scroll.
  *
  * Compose has no scrollbar of its own on a phone, so a reader had no sign of
- * where it was in a long file or how much was left. This draws a thumb sized to
- * the share of the file on screen and placed by how far down it is scrolled;
- * nothing is drawn when the whole file fits, so a short file has no stray bar.
+ * where it was in a long file, and no way to skim it but to swipe the text over
+ * and over. This draws a thumb -- sized to the share of the file on screen and
+ * placed by how far down it is scrolled -- and takes a drag anywhere down its
+ * strip, moving the file by the same share of its length, so a long file is
+ * crossed in one stroke. It is shown only while the file overruns the screen.
  */
-private fun Modifier.verticalScrollbar(
+@Composable
+private fun ScrollGrip(
     state: androidx.compose.foundation.ScrollState,
     color: androidx.compose.ui.graphics.Color,
+    modifier: Modifier,
     width: androidx.compose.ui.unit.Dp = 4.dp,
-): Modifier = drawWithContent {
-    drawContent()
-    val max = state.maxValue
-    if (max <= 0 || max == Int.MAX_VALUE) return@drawWithContent
-    val viewport = size.height
-    val total = viewport + max
-    val minThumb = 24.dp.toPx()
-    val thumbHeight = (viewport / total * viewport).coerceAtLeast(minThumb)
-    val travel = viewport - thumbHeight
-    val thumbTop = travel * (state.value.toFloat() / max)
-    val widthPx = width.toPx()
-    val inset = 2.dp.toPx()
-    drawRoundRect(
-        color = color,
-        topLeft = androidx.compose.ui.geometry.Offset(size.width - widthPx - inset, thumbTop),
-        size = androidx.compose.ui.geometry.Size(widthPx, thumbHeight),
-        cornerRadius = androidx.compose.ui.geometry.CornerRadius(widthPx / 2, widthPx / 2),
+) {
+    // How far a thumb of [thumbHeight] can travel in a [viewport], and the height
+    // of that thumb -- the same maths for the draw and for the drag, so the thumb
+    // stays under the finger.
+    fun thumbHeight(viewport: Float, max: Int, minThumb: Float): Float =
+        (viewport / (viewport + max) * viewport).coerceAtLeast(minThumb)
+
+    Box(
+        modifier
+            .fillMaxHeight()
+            .width(28.dp)
+            .pointerInput(Unit) {
+                detectVerticalDragGestures { change, dragAmount ->
+                    change.consume()
+                    val max = state.maxValue
+                    if (max <= 0) return@detectVerticalDragGestures
+                    val viewport = size.height.toFloat()
+                    val thumb = thumbHeight(viewport, max, 24.dp.toPx())
+                    val travel = (viewport - thumb).coerceAtLeast(1f)
+                    // A drag down the strip moves the scroll by the file's length
+                    // in the same proportion, so the thumb keeps pace with the
+                    // finger. dispatchRawDelta clamps to the file's ends.
+                    state.dispatchRawDelta(dragAmount * (max / travel))
+                }
+            }
+            .drawBehind {
+                val max = state.maxValue
+                if (max <= 0) return@drawBehind
+                val viewport = size.height
+                val thumb = thumbHeight(viewport, max, 24.dp.toPx())
+                val travel = viewport - thumb
+                val top = travel * (state.value.toFloat() / max)
+                val widthPx = width.toPx()
+                val inset = 2.dp.toPx()
+                drawRoundRect(
+                    color = color,
+                    topLeft = androidx.compose.ui.geometry.Offset(size.width - widthPx - inset, top),
+                    size = androidx.compose.ui.geometry.Size(widthPx, thumb),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(widthPx / 2, widthPx / 2),
+                )
+            },
     )
 }
 
