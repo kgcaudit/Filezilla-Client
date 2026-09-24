@@ -99,7 +99,6 @@ import org.filezilla.android.R
 import org.filezilla.android.data.AppPreferences
 import org.filezilla.android.playback.PlaybackService
 import org.filezilla.android.playback.SubtitleBundle
-import org.filezilla.android.ui.theme.DarkColors
 
 /**
  * The app's own player for a video or a sound.
@@ -896,9 +895,9 @@ private fun PlayerSettingsSheet(
     onColor: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    // The picture is dark, so the panel takes the app's own dark palette whatever
-    // the system theme -- clay on warm near-black, not Material's default lavender
-    // -- its components readable on it; it is kept short of the screen and scrolls.
+    // The panel takes the app's own theme -- ivory and clay in the light theme,
+    // the warm dark in the dark one -- rather than a palette of its own, so it
+    // matches the rest of the app. It is kept short of the screen and scrolls.
     val configuration = LocalConfiguration.current
     // Half the width in landscape -- where the film is wide and the panel should
     // stay out of it -- but most of the width in portrait, where half a phone is
@@ -912,22 +911,23 @@ private fun PlayerSettingsSheet(
     val panelHeight = (configuration.screenHeightDp * (if (landscape) 0.86f else 0.6f)).dp
     val backdrop = remember { MutableInteractionSource() }
     val panel = remember { MutableInteractionSource() }
-    MaterialTheme(colorScheme = DarkColors) {
-        // The backdrop dims nothing of its own -- it is only a way to tap outside
-        // and put the panel away -- so nothing but the panel is laid over the film.
-        Box(
+    // The backdrop dims nothing of its own -- it is only a way to tap outside
+    // and put the panel away -- so nothing but the panel is laid over the film.
+    Box(
+        Modifier
+            .fillMaxSize()
+            .clickable(interactionSource = backdrop, indication = null, onClick = onDismiss),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
             Modifier
-                .fillMaxSize()
-                .clickable(interactionSource = backdrop, indication = null, onClick = onDismiss),
-            contentAlignment = Alignment.Center,
-        ) {
-            Column(
-                Modifier
-                    .fillMaxWidth(widthFraction)
-                    .widthIn(max = 560.dp)
-                    .height(panelHeight)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f))
+                .fillMaxWidth(widthFraction)
+                .widthIn(max = 560.dp)
+                .height(panelHeight)
+                .clip(RoundedCornerShape(16.dp))
+                // A touch translucent so the film shows through, but mostly opaque
+                // so the app's surface colour reads true in either theme.
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))
                     // Taps on the panel do their own work and never reach the
                     // backdrop, so touching it does not put it away.
                     .clickable(interactionSource = panel, indication = null, onClick = {})
@@ -1066,7 +1066,6 @@ private fun PlayerSettingsSheet(
                 }
             }
         }
-    }
     }
 }
 
