@@ -35,6 +35,9 @@ import org.filezilla.android.ui.theme.status
 import org.filezilla.android.ui.theme.tiles
 import org.filezilla.android.files.StorageRoot
 
+/** Samsung's "My Files" app, where a volume is ejected on a Galaxy device. */
+private const val SAMSUNG_MY_FILES = "com.sec.android.app.myfiles"
+
 /**
  * Everywhere one pane could be pointed, in one list.
  *
@@ -88,9 +91,20 @@ fun StoragePlaces(
     val context = LocalContext.current
     val ejectHint = stringResource(R.string.storage_eject_hint)
     // Android gives an ordinary app no way to unmount a volume itself -- that
-    // permission is the system's alone -- so "eject" opens the system storage
-    // settings, where the volume can be taken out safely, and says as much.
+    // permission is the system's alone. On a Samsung phone or tablet the "My
+    // Files" app is where a volume is ejected, so "eject" opens it. Where it is
+    // not present -- another maker's device -- the system storage settings are
+    // opened instead, the other place a volume can be taken out safely, and a
+    // note says so.
     fun eject() {
+        val myFiles = context.packageManager.getLaunchIntentForPackage(SAMSUNG_MY_FILES)
+        if (myFiles != null &&
+            runCatching {
+                context.startActivity(myFiles.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            }.isSuccess
+        ) {
+            return
+        }
         val opened = runCatching {
             context.startActivity(
                 android.content.Intent(android.provider.Settings.ACTION_INTERNAL_STORAGE_SETTINGS)
