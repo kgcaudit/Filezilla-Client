@@ -8,8 +8,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Eject
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -20,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -80,6 +85,28 @@ fun StoragePlaces(
     onDismiss: () -> Unit,
 ) {
     val sites by model.sites.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val ejectHint = stringResource(R.string.storage_eject_hint)
+    // Android gives an ordinary app no way to unmount a volume itself -- that
+    // permission is the system's alone -- so "eject" opens the system storage
+    // settings, where the volume can be taken out safely, and says as much.
+    fun eject() {
+        val opened = runCatching {
+            context.startActivity(
+                android.content.Intent(android.provider.Settings.ACTION_INTERNAL_STORAGE_SETTINGS)
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }.isSuccess
+        if (!opened) {
+            runCatching {
+                context.startActivity(
+                    android.content.Intent(android.provider.Settings.ACTION_SETTINGS)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }
+        }
+        android.widget.Toast.makeText(context, ejectHint, android.widget.Toast.LENGTH_LONG).show()
+    }
 
     Column(
             modifier = Modifier
@@ -135,6 +162,13 @@ fun StoragePlaces(
                     onClick = {
                         model.showLocalAt(id, root.path)
                         onDismiss()
+                    },
+                    // Only a removable volume can be taken out; the phone's own
+                    // storage and the Downloads shortcut have nothing to eject.
+                    onEject = if (root.kind == StorageRoot.Kind.SD_CARD) {
+                        { eject() }
+                    } else {
+                        null
                     },
                 ) {
                     capacity?.let {
@@ -240,13 +274,14 @@ private fun PlaceRow(
     title: String,
     subtitle: String?,
     onClick: () -> Unit,
+    onEject: (() -> Unit)? = null,
     extra: @Composable () -> Unit = {},
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 10.dp),
+            .padding(start = 20.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TileIcon(glyph, colour, contentDescription = null, size = 38.dp, cornerRadius = 11.dp)
@@ -268,6 +303,17 @@ private fun PlaceRow(
                 )
             }
             extra()
+        }
+        // The eject button sits at the row's end, its own tap target, so
+        // reaching for it does not open the volume the row otherwise does.
+        onEject?.let {
+            IconButton(onClick = it) {
+                Icon(
+                    Icons.Filled.Eject,
+                    contentDescription = stringResource(R.string.storage_eject),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

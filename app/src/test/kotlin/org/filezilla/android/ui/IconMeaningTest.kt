@@ -133,6 +133,8 @@ class IconMeaningTest {
         "Unarchive" to setOf("archive_extract_all", "archive_extract_picked"),
         "KeyboardArrowUp" to setOf("sites_move_up"),
         "KeyboardArrowDown" to setOf("sites_move_down"),
+        // Taking a removable volume out.
+        "Eject" to setOf("storage_eject"),
     )
 
     @Test
