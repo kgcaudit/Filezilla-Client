@@ -22,6 +22,22 @@
     <string name="title_sites">Servers</string>
     <string name="title_queue">Transfers</string>
     <string name="title_log">Message log</string>
+    <string name="title_recents">Recent</string>
+    <string name="recents_open">Recently opened</string>
+    <string name="recents_clear">Clear history</string>
+    <string name="recents_empty">Nothing opened yet</string>
+    <string name="recents_empty_detail">Files you open in a viewer show up here.</string>
+    <string name="recents_group_today">Today</string>
+    <string name="recents_group_yesterday">Yesterday</string>
+    <string name="recents_group_earlier">Earlier</string>
+    <string name="recents_filter_all">All</string>
+    <string name="recents_filter_video">Video</string>
+    <string name="recents_filter_audio">Audio</string>
+    <string name="recents_filter_image">Images</string>
+    <string name="recents_filter_text">Docs</string>
+    <string name="recents_filter_archive">Archives</string>
+    <string name="recents_kind_comic">Comic</string>
+    <string name="recents_remove">Remove from history</string>
 
     <!-- Sites -->
     <string name="sites_empty_title">No servers yet</string>

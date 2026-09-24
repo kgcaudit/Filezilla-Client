@@ -419,6 +419,14 @@ private fun AppScreen(
                             )
                         }
 
+                        // The same broom, clearing the recents list.
+                        Screen.RECENTS -> IconButton(onClick = { model.clearRecents() }) {
+                            Icon(
+                                Icons.Filled.DeleteSweep,
+                                contentDescription = stringResource(R.string.recents_clear),
+                            )
+                        }
+
                             Screen.SITES, Screen.FILES -> Unit
                         }
                     },
@@ -567,6 +575,16 @@ private fun AppScreen(
             )
 
             Screen.LOG -> LogScreen(lines = logLines, modifier = Modifier.padding(padding))
+
+            Screen.RECENTS -> RecentsScreen(
+                model = model,
+                onOpen = { entry ->
+                    // An archive opens in a pane and takes the screen with it; a
+                    // viewer opens over the top and leaves the screen where it is.
+                    model.openRecent(entry, PaneId.entries.first())?.let { screen = it }
+                },
+                modifier = Modifier.padding(padding),
+            )
         }
     }
 
@@ -931,6 +949,7 @@ private fun titleFor(screen: Screen): String = when (screen) {
     Screen.SITES -> stringResource(R.string.title_sites)
     Screen.QUEUE -> stringResource(R.string.title_queue)
     Screen.LOG -> stringResource(R.string.title_log)
+    Screen.RECENTS -> stringResource(R.string.title_recents)
     // Never asked for: the files screen carries no bar. Named rather than
     // left to an else, so adding a screen is a compile error here.
     Screen.FILES -> ""

@@ -10,7 +10,7 @@ package org.filezilla.android.ui
  * diagnostic log. None of them earned a permanent seat, so none of them has
  * one: they open over the files screen and close again.
  */
-enum class Screen { FILES, SITES, QUEUE, LOG }
+enum class Screen { FILES, SITES, QUEUE, LOG, RECENTS }
 
 /** Where the app opens, and where back finally lands. */
 val HOME = Screen.FILES

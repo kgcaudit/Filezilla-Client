@@ -31,6 +31,7 @@ import org.filezilla.android.archive.Archives
 import org.filezilla.android.archive.RarNative
 import org.filezilla.android.archive.SevenZipNative
 import org.filezilla.android.archive.ExtractResult
+import org.filezilla.android.data.RecentEntry
 import org.filezilla.android.data.SiteEntity
 import org.filezilla.android.files.FileMode
 import org.filezilla.ftp.transfer.TransferAbort
@@ -1743,6 +1744,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val items = siblings.map { java.io.File(folder, it.name) }
         val index = items.indexOfFirst { it.name == file.name }.coerceAtLeast(0)
         if (items.isEmpty()) return
+        recordRecent(file)
         mediaViewer = MediaViewer(items, index)
     }
 
@@ -1918,11 +1920,94 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun openTextViewer(file: java.io.File, editable: Boolean) {
+        recordRecent(file)
         textViewer = TextViewer(file, file.name, editable)
     }
 
     fun closeTextViewer() {
         textViewer = null
+    }
+
+    /**
+     * The files opened in a viewer, most recent first -- what the recents screen
+     * shows. Held as state so the screen redraws when a file is opened, removed,
+     * or the list is cleared; the stored list is the source of truth.
+     */
+    var recents by mutableStateOf<List<RecentEntry>>(emptyList())
+        private set
+
+    /** Re-reads the recents list from storage, for when the screen opens. */
+    fun refreshRecents() {
+        recents = graph.preferences.recents()
+    }
+
+    /**
+     * Notes that [file] was opened in a viewer, but only when it is a file on the
+     * phone -- a server file fetched to the cache is not on any volume and is
+     * left out, which is what "local files only" means for the recents list.
+     */
+    private fun recordRecent(file: java.io.File) {
+        val onVolume = graph.volumes.volumePaths().any { FilePath.isWithin(file.path, it) }
+        if (!onVolume) return
+        graph.preferences.addRecent(file.path, System.currentTimeMillis())
+        recents = graph.preferences.recents()
+    }
+
+    /** Drops one file from the recents list. */
+    fun removeRecent(path: String) {
+        graph.preferences.removeRecent(path)
+        recents = graph.preferences.recents()
+    }
+
+    /** Forgets the whole recents list. */
+    fun clearRecents() {
+        graph.preferences.clearRecents()
+        recents = emptyList()
+    }
+
+    /** The volume a recent file sits on, named the way the storage list names it. */
+    fun recentSource(path: String): String =
+        graph.volumes.roots()
+            .filter { it.kind != StorageRoot.Kind.SHORTCUT }
+            .firstOrNull { FilePath.isWithin(path, it.path) }
+            ?.label
+            .orEmpty()
+
+    /**
+     * Reopens a recents entry in the viewer its kind calls for. Returns the
+     * screen to move to -- the files screen for an archive, which opens in a
+     * pane [pane] -- or null to stay put while a viewer opens over the top. A
+     * file that has since gone is dropped from the list and nothing opens.
+     */
+    fun openRecent(entry: RecentEntry, pane: PaneId): Screen? {
+        val file = java.io.File(entry.path)
+        if (!file.exists()) {
+            removeRecent(entry.path)
+            return null
+        }
+        recordRecent(file)
+        return when (kindOf(file.name, false)) {
+            FileKind.VIDEO, FileKind.AUDIO -> {
+                openCachedMedia(file)
+                null
+            }
+            FileKind.IMAGE -> {
+                openImageViewer(listOf(ImageRef.OnDisk(file)), index = 0, comicKey = null)
+                null
+            }
+            FileKind.COMIC -> {
+                openComicFile(file)
+                null
+            }
+            FileKind.ARCHIVE -> {
+                openArchive(pane, file, file.parent ?: FilePath.ROOT)
+                Screen.FILES
+            }
+            else -> {
+                openTextViewer(file, editable = true)
+                null
+            }
+        }
     }
 
     /**
@@ -1956,6 +2041,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * so a folder of photos swipes through like the pages of a comic does.
      */
     fun openLocalImage(id: PaneId, file: java.io.File) {
+        recordRecent(file)
         val folder = pane(id).path
         // Ordered for reading, not by whatever the browser is sorted by: a
         // folder shown newest-first would otherwise open its pictures in that
@@ -2068,6 +2154,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * ends, so it lands in the reader rather than in a list of its pages.
      */
     fun openComicFile(file: java.io.File) {
+        recordRecent(file)
         archiveOpening = file.name
         viewModelScope.launch {
             val opened = withContext(Dispatchers.IO) { runCatching { Archives.open(file).use { it.entries } } }
@@ -2465,6 +2552,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // is only knowable from what asked for it. Consumed once, here.
         val origin = nestedOrigin?.takeIf { it.first == file }?.second
         nestedOrigin = null
+        recordRecent(file)
         archiveOpening = origin ?: file.name
         viewModelScope.launch {
             val opened = withContext(Dispatchers.IO) {

@@ -171,6 +171,9 @@ class WordingTest {
             "prompt_name", "prompt_new_name", "prompt_rename_title", "props_unknown",
             "queue_speed_remaining", "rename_detail", "side_local", "sites_empty_detail",
             "title_log", "title_queue",
+            // The recents screen's name, on its bar and on the storage row
+            // that opens it -- the row answers the screen, same as above.
+            "title_recents",
             // "%1$d of %2$d", said by the delete-from-server dialog and by
             // the unpack and compress bars. One sentence with one meaning:
             // how far through a run of things the app is. Three ways of

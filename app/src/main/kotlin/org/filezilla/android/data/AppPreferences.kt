@@ -39,6 +39,29 @@ data class MovedFolder(val siteId: String?, val path: String) {
     }
 }
 
+/**
+ * A file opened in one of the app's viewers, for the recents list.
+ *
+ * Only the path and when it was opened are kept; the kind, the icon, the name
+ * and the volume it is on are all read back from the path when the list is
+ * shown, so nothing stored here can fall out of step with the file it names.
+ */
+data class RecentEntry(val path: String, val time: Long) {
+
+    fun encode(): String = "$time\u0000$path"
+
+    companion object {
+        fun decode(stored: String): RecentEntry? {
+            val cut = stored.indexOf('\u0000')
+            if (cut <= 0) return null
+            val time = stored.take(cut).toLongOrNull() ?: return null
+            val path = stored.substring(cut + 1)
+            if (path.isEmpty()) return null
+            return RecentEntry(path, time)
+        }
+    }
+}
+
 class AppPreferences(context: Context) {
 
     private val prefs = context.getSharedPreferences("filezilla", Context.MODE_PRIVATE)
@@ -368,6 +391,41 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
+    /**
+     * The files opened in a viewer, most recent first -- the recents list.
+     *
+     * One delimited string rather than a set, because the order is the whole
+     * point and a set gives it back scrambled. Bad rows are skipped rather than
+     * throwing, so a half-written or older-format entry cannot empty the list.
+     */
+    fun recents(): List<RecentEntry> =
+        prefs.getString(KEY_RECENTS, null)
+            ?.split(KEY_SEPARATOR)
+            ?.filter { it.isNotEmpty() }
+            ?.mapNotNull(RecentEntry::decode)
+            .orEmpty()
+
+    /**
+     * Records that [path] was just opened: it moves to the front, and the oldest
+     * is dropped once the list is longer than [MAX_RECENTS], so the list is the
+     * last hundred files opened, newest first.
+     */
+    fun addRecent(path: String, time: Long) {
+        val kept = recents().filterNot { it.path == path }.toMutableList()
+        kept.add(0, RecentEntry(path, time))
+        while (kept.size > MAX_RECENTS) kept.removeAt(kept.size - 1)
+        writeRecents(kept)
+    }
+
+    /** Drops one file from the recents list, leaving the rest in order. */
+    fun removeRecent(path: String) = writeRecents(recents().filterNot { it.path == path })
+
+    /** Forgets the whole recents list. */
+    fun clearRecents() = prefs.edit().remove(KEY_RECENTS).apply()
+
+    private fun writeRecents(entries: List<RecentEntry>) =
+        prefs.edit().putString(KEY_RECENTS, entries.joinToString(KEY_SEPARATOR) { it.encode() }).apply()
+
     private fun comicKeys(): List<String> =
         prefs.getString(KEY_COMIC_KEYS, null)
             ?.split(KEY_SEPARATOR)
@@ -432,6 +490,10 @@ class AppPreferences(context: Context) {
         const val KEY_READER_WEBTOON_WIDTH = "reader_webtoon_width"
         const val KEY_COMPRESS_SEPARATE = "compress_separate"
         const val KEY_COMPRESS_FLAT = "compress_flat"
+        const val KEY_RECENTS = "recents"
+
+        /** How many files the recents list keeps; the oldest goes first. */
+        internal const val MAX_RECENTS = 100
 
         const val MIN_WEBTOON_WIDTH = 40
         const val MAX_WEBTOON_WIDTH = 100

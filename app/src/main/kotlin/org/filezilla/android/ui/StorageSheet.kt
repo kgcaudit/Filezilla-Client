@@ -258,6 +258,16 @@ fun StoragePlaces(
                     onDismiss()
                 },
             )
+            PlaceRow(
+                glyph = R.drawable.ic_tile_recents,
+                colour = MaterialTheme.colorScheme.primary,
+                title = stringResource(R.string.title_recents),
+                subtitle = stringResource(R.string.recents_open),
+                onClick = {
+                    onOpenScreen(Screen.RECENTS)
+                    onDismiss()
+                },
+            )
 
             TextButton(
                 onClick = {
