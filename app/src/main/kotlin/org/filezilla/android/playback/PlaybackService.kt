@@ -104,6 +104,30 @@ class PlaybackService : MediaSessionService() {
      */
     @UnstableApi
     private class RestoringCallback : MediaSession.Callback {
+        // The system's own media controls -- the lock screen and the notification
+        // panel's player on Samsung and Android 13+ -- draw their buttons from the
+        // commands the session advertises, not from the notification layout. So
+        // the skip-to-previous and skip-to-next commands are withheld here: the
+        // side controls move ten seconds within one film, not between files, and a
+        // between-file skip has no place there. Rewind and fast-forward are their
+        // own commands (seek back and forward) and are untouched, and a film still
+        // runs on to the next on its own -- that is the player's doing, not a
+        // command a controller sends.
+        override fun onConnect(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+        ): MediaSession.ConnectionResult {
+            val playerCommands = MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS.buildUpon()
+                .remove(Player.COMMAND_SEEK_TO_PREVIOUS)
+                .remove(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+                .remove(Player.COMMAND_SEEK_TO_NEXT)
+                .remove(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+                .build()
+            return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                .setAvailablePlayerCommands(playerCommands)
+                .build()
+        }
+
         override fun onAddMediaItems(
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,
