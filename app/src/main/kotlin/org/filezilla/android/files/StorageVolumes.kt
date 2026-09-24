@@ -73,6 +73,23 @@ fun localParent(path: String, roots: List<String>): String? {
 }
 
 /**
+ * The mount path of a storage volume, or null when it cannot be had.
+ *
+ * getDirectory is the public way from API 30 on. Before that there is none, so
+ * the mount path is read by reflection of getPath -- a method the platform has
+ * carried on StorageVolume unchanged for years, and the fallback every file
+ * manager uses to reach a removable volume on those versions.
+ */
+private fun volumePath(volume: android.os.storage.StorageVolume): String? =
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+        volume.directory?.absolutePath
+    } else {
+        runCatching {
+            android.os.storage.StorageVolume::class.java.getMethod("getPath").invoke(volume) as? String
+        }.getOrNull()?.takeIf { it.isNotBlank() }
+    }
+
+/**
  * Where the panes can begin.
  *
  * The device's own storage, whatever removable volumes it has, and a shortcut
@@ -124,6 +141,24 @@ class StorageVolumes(private val context: Context) {
             val root = dir?.absolutePath?.let(::volumeRootOf) ?: continue
             if (!seen.add(root)) continue
             roots += StorageRoot(root, File(root).name, StorageRoot.Kind.SD_CARD)
+        }
+
+        // A card in a USB reader, or a USB drive, plugged in through OTG. The
+        // system makes no app-specific directory on it, so the loop above never
+        // sees it -- but the StorageManager lists every mounted volume, so it is
+        // found here instead. Only mounted, non-primary volumes are taken; the
+        // primary one is the internal storage already above.
+        val manager = runCatching {
+            context.getSystemService(Context.STORAGE_SERVICE) as android.os.storage.StorageManager
+        }.getOrNull()
+        for (volume in runCatching { manager?.storageVolumes }.getOrNull().orEmpty()) {
+            if (volume.isPrimary) continue
+            if (runCatching { volume.state }.getOrNull() != Environment.MEDIA_MOUNTED) continue
+            val path = volumePath(volume) ?: continue
+            if (!seen.add(path)) continue
+            val label = runCatching { volume.getDescription(context) }.getOrNull()
+                ?.takeIf { it.isNotBlank() } ?: File(path).name
+            roots += StorageRoot(path, label, StorageRoot.Kind.SD_CARD)
         }
 
         val downloads = runCatching {
