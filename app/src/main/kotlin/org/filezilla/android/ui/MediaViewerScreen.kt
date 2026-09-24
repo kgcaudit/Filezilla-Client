@@ -1105,6 +1105,10 @@ private fun TrackRow(selected: Boolean, onClick: () -> Unit, title: String, deta
             Text(
                 title,
                 style = MaterialTheme.typography.bodyMedium,
+                // Set explicitly: the panel is a Box, not a Material Surface, so
+                // an unset text colour falls back to black and vanishes on the
+                // dark panel -- which is why the track name could not be read.
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
