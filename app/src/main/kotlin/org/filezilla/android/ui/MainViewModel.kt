@@ -1403,6 +1403,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         graph.volumes.forget()
         storageGranted = graph.storageAccess.isGranted()
         storageRoute = graph.storageAccess.route
+        if (storageGranted) {
+            // A volume a pane was on may have been ejected while the app was
+            // away. Its path is gone, so the pane is dropped to the storage list
+            // now, before it is asked to list and raises "no longer there".
+            val live = graph.volumes.volumePaths()
+            for (id in PaneId.entries) {
+                val p = pane(id)
+                if (p.isLocal && p.path.isNotEmpty() && live.none { FilePath.isWithin(p.path, it) }) {
+                    showEmpty(id)
+                }
+            }
+        }
         if (storageGranted && !was) {
             // Only the panes actually pointed at the phone, and only once the
             // answer has changed: re-listing a server every time the screen
@@ -1449,17 +1461,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
             }.onFailure { failure ->
-                // Back to where the pane was. The rows already on screen are
-                // kept -- losing someone's place because one folder would not
-                // open is the worse answer -- but the path has to go back with
-                // them, or the header names a folder the rows did not come
-                // from and the screen is telling two different stories.
-                update(id) {
-                    it.copy(path = cameFrom, loading = false, error = describeLocalFailure(failure))
+                if (volumeIsGone(target)) {
+                    // The whole volume is gone, not one folder on it -- a card
+                    // ejected from the system files app, a reader unplugged. There
+                    // is nothing to go back to, so the pane drops to the storage
+                    // list rather than showing "no longer there" over stale rows.
+                    showEmpty(id)
+                } else {
+                    // Back to where the pane was. The rows already on screen are
+                    // kept -- losing someone's place because one folder would not
+                    // open is the worse answer -- but the path has to go back with
+                    // them, or the header names a folder the rows did not come
+                    // from and the screen is telling two different stories.
+                    update(id) {
+                        it.copy(path = cameFrom, loading = false, error = describeLocalFailure(failure))
+                    }
                 }
             }
         }
     }
+
+    /**
+     * Whether [target]'s volume is no longer mounted -- so listing it can only
+     * raise "no longer there". The volumes are re-read first, so a card ejected
+     * while the app was away is seen to be gone; a folder merely deleted from a
+     * volume that is still there does not count, and keeps the usual error.
+     */
+    private suspend fun volumeIsGone(target: String): Boolean =
+        withContext(Dispatchers.IO) {
+            graph.volumes.forget()
+            graph.volumes.volumePaths().none { FilePath.isWithin(target, it) }
+        }
 
     /** Where to send the user to grant access, or null when asking is the way. */
     fun storageSettingsIntent(): android.content.Intent? = graph.storageAccess.settingsIntent()
