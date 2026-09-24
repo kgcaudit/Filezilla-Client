@@ -2200,7 +2200,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 runCatching { Archives.open(file).use { it.entries } }.getOrNull()
             }
             archiveOpening = null
-            if (entries != null && isImageOnlyArchive(entries)) {
+            if (entries != null && isComicArchive(entries)) {
                 openComicFile(file)
             } else {
                 openArchive(id, file, home)
@@ -2209,14 +2209,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Whether an archive is a comic: it holds at least one picture and nothing
-     * but pictures, bar the odd system file a zipper leaves behind. Directories
-     * do not count -- a comic's pages often sit in a folder inside the zip.
+     * Whether an archive is a comic: it holds pictures and, beside them, nothing
+     * but the odd note or system file a comic is packed with -- a readme.txt, an
+     * info.nfo, a Thumbs.db. The pictures have to be the bulk of it, so a comic
+     * with a note beside it reads while a pack of text with one cover picture
+     * does not. Directories do not count -- a comic's pages often sit in a folder
+     * inside the zip.
      */
-    private fun isImageOnlyArchive(entries: List<ArchiveEntry>): Boolean {
+    private fun isComicArchive(entries: List<ArchiveEntry>): Boolean {
         val files = entries.filterNot { it.isDirectory || isArchiveJunk(it.name) }
-        return files.isNotEmpty() && files.all { ImageFiles.looksImage(it.name) }
+        val images = files.count { ImageFiles.looksImage(it.name) }
+        if (images == 0) return false
+        val notes = files.count { isComicNote(it.name) }
+        val others = files.size - images - notes
+        return others == 0 && images >= notes
     }
+
+    /** A note packed beside a comic's pages -- a readme or a scene-info file. */
+    private fun isComicNote(name: String): Boolean =
+        when (name.substringAfterLast('.', "").lowercase()) {
+            "txt", "nfo" -> true
+            else -> false
+        }
 
     private fun isArchiveJunk(name: String): Boolean {
         val leaf = name.substringAfterLast('/').substringAfterLast('\\').lowercase()

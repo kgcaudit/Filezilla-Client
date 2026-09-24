@@ -1,9 +1,8 @@
 package org.filezilla.android.ui
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,9 +30,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import org.filezilla.android.R
 import org.filezilla.android.data.RecentEntry
@@ -118,7 +121,6 @@ private fun GroupHeader(group: RecentGroup) {
     )
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun RecentRow(
     entry: RecentEntry,
@@ -130,20 +132,35 @@ private fun RecentRow(
     val gone = remember(entry.path, entry.time) { !file.exists() }
     val kind = remember(entry.path) { kindOf(file.name, false) }
     var menuOpen by remember { mutableStateOf(false) }
+    // Where the long press landed, so the menu opens under the finger rather
+    // than at the row's left edge, half a screen from where it was asked for.
+    var pressAt by remember { mutableStateOf(Offset.Zero) }
+    val density = LocalDensity.current
 
-    // The row and its menu share one Box, so the menu anchors to the row and
-    // opens under the long press rather than at the edge of the screen.
+    // The row and its menu share one Box, so the menu anchors to the row.
     Box {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .combinedClickable(onClick = onOpen, onLongClick = { menuOpen = true })
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onTap = { onOpen() },
+                        onLongPress = {
+                            pressAt = it
+                            menuOpen = true
+                        },
+                    )
+                }
                 .padding(horizontal = 20.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             RecentRowBody(file = file, kind = kind, source = source, time = entry.time, gone = gone)
         }
-        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+        DropdownMenu(
+            expanded = menuOpen,
+            onDismissRequest = { menuOpen = false },
+            offset = with(density) { DpOffset(pressAt.x.toDp(), pressAt.y.toDp()) },
+        ) {
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.recents_remove)) },
                 onClick = {
