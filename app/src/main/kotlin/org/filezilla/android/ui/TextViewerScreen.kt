@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -170,25 +171,64 @@ fun TextViewerScreen(viewer: MainViewModel.TextViewer, model: MainViewModel) {
                     }
                     val monospace = lang != Syntax.Lang.PLAIN
                     val scroll = rememberScrollState()
-                    BasicTextField(
-                        value = value,
-                        onValueChange = { value = it; saved = false },
-                        readOnly = !editing,
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontFamily = if (monospace) FontFamily.Monospace else FontFamily.Default,
-                        ),
-                        visualTransformation = transformation,
-                        cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
-                        modifier = Modifier
+                    val scrollbarColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    Box(
+                        Modifier
                             .fillMaxSize()
-                            .verticalScroll(scroll)
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                    )
+                            .verticalScrollbar(scroll, scrollbarColor),
+                    ) {
+                        BasicTextField(
+                            value = value,
+                            onValueChange = { value = it; saved = false },
+                            readOnly = !editing,
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontFamily = if (monospace) FontFamily.Monospace else FontFamily.Default,
+                            ),
+                            visualTransformation = transformation,
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(scroll)
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+/**
+ * A thin scrollbar down the right edge, tracking [state].
+ *
+ * Compose has no scrollbar of its own on a phone, so a reader had no sign of
+ * where it was in a long file or how much was left. This draws a thumb sized to
+ * the share of the file on screen and placed by how far down it is scrolled;
+ * nothing is drawn when the whole file fits, so a short file has no stray bar.
+ */
+private fun Modifier.verticalScrollbar(
+    state: androidx.compose.foundation.ScrollState,
+    color: androidx.compose.ui.graphics.Color,
+    width: androidx.compose.ui.unit.Dp = 4.dp,
+): Modifier = drawWithContent {
+    drawContent()
+    val max = state.maxValue
+    if (max <= 0 || max == Int.MAX_VALUE) return@drawWithContent
+    val viewport = size.height
+    val total = viewport + max
+    val minThumb = 24.dp.toPx()
+    val thumbHeight = (viewport / total * viewport).coerceAtLeast(minThumb)
+    val travel = viewport - thumbHeight
+    val thumbTop = travel * (state.value.toFloat() / max)
+    val widthPx = width.toPx()
+    val inset = 2.dp.toPx()
+    drawRoundRect(
+        color = color,
+        topLeft = androidx.compose.ui.geometry.Offset(size.width - widthPx - inset, thumbTop),
+        size = androidx.compose.ui.geometry.Size(widthPx, thumbHeight),
+        cornerRadius = androidx.compose.ui.geometry.CornerRadius(widthPx / 2, widthPx / 2),
+    )
 }
 
 /** The top bar shared by both viewers: a way back, the name, and actions. */
