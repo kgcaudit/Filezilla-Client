@@ -1750,12 +1750,14 @@ private fun MediaPlayer(
             }
             // A "back to 1x" chip, shown only once the picture has been pinched off
             // its own size, so a shrunk or blown-up film is one tap from normal
-            // without hunting for exactly 1x by hand.
+            // without hunting for exactly 1x by hand. It sits below the top bar's
+            // row, not on it, so it never lands on the filename when the controls
+            // are up.
             if (zoomed) {
                 Box(
                     Modifier
                         .align(Alignment.TopCenter)
-                        .padding(top = reservedTopDp + 12.dp)
+                        .padding(top = reservedTopDp + 64.dp)
                         .clip(RoundedCornerShape(50))
                         .background(Color.Black.copy(alpha = 0.55f))
                         .clickable { videoScale = 1f }
