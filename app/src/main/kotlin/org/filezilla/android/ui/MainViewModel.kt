@@ -505,19 +505,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun pasteKind(id: PaneId): PasteKind? = PasteRules.kind(clipboard, pane(id).source)
 
     /**
-     * Puts down what is held.
+     * Puts down what is held, as a transfer when the two sides differ.
      *
      * Each item is done in turn and the failures are collected rather than
      * thrown, because stopping at the first one leaves the user with half a
-     * paste and no idea which half. A move empties the clipboard afterwards;
-     * a copy keeps it, so the same thing can be put in several places.
-     */
-    /**
-     * Puts down what is held, as a transfer when the two sides differ.
-     *
-     * The same gesture either way, which is the point of the two panes: copy
-     * on one side, paste on the other, and whether that is a file operation
-     * or a transfer is the app's problem rather than the user's.
+     * paste and no idea which half. A move empties the clipboard afterwards; a
+     * copy keeps it, so the same thing can be put in several places. The same
+     * gesture works either way, which is the point of the two panes: copy on one
+     * side, paste on the other, and whether that is a file operation or a
+     * transfer is the app's problem rather than the user's.
      */
     fun pasteAcross(id: PaneId, onQueued: (Int) -> Unit) {
         val held = clipboard ?: return
@@ -852,8 +848,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             paths.map { org.filezilla.android.data.MovedFolder(siteId, it) }
     }
 
-
-    /** Queues the held remote files into an ordinary folder on the phone. */
     /**
      * The listing a clipboard was taken from, as the panes still hold it.
      *
@@ -870,6 +864,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             ?.entries
             .orEmpty()
 
+    /** Queues the held remote files into an ordinary folder on the phone. */
     private fun downloadHeld(
         held: Clipboard,
         site: SiteEntity,
@@ -1737,15 +1732,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun openLocalMedia(id: PaneId, file: java.io.File) {
         val folder = pane(id).path
-        val wantVideo = looksVideo(file.name)
-        val siblings = pane(id).entries
-            .filter { !it.isDirectory && looksMedia(it.name) && looksVideo(it.name) == wantVideo }
-            .sortedWith(org.filezilla.android.files.NaturalOrder.by { it.name })
-        val items = siblings.map { java.io.File(folder, it.name) }
-        val index = items.indexOfFirst { it.name == file.name }.coerceAtLeast(0)
-        if (items.isEmpty()) return
+        val candidates = pane(id).entries
+            .filter { !it.isDirectory }
+            .map { java.io.File(folder, it.name) }
+        val viewer = mediaPlaylist(candidates, file)
+        // A pane tap that matches nothing opens nothing and is not a recent.
+        if (viewer.items.isEmpty()) return
         recordRecent(file)
-        mediaViewer = MediaViewer(items, index)
+        mediaViewer = viewer
+    }
+
+    /**
+     * A playlist of the media of [file]'s kind among [candidates], opened at
+     * [file]. Video with video, sound with sound -- a folder holding both a film
+     * and its soundtrack does not fold them into one playlist, and the tap says
+     * which kind was meant -- ordered for playing by natural name, like the pages
+     * of a comic. The two openers differ only in where the candidates come from
+     * (a pane's listing, or the disk), so the sift is written here once.
+     */
+    private fun mediaPlaylist(candidates: List<java.io.File>, file: java.io.File): MediaViewer {
+        val wantVideo = looksVideo(file.name)
+        val items = candidates
+            .filter { looksMedia(it.name) && looksVideo(it.name) == wantVideo }
+            .sortedWith(org.filezilla.android.files.NaturalOrder.by { it.name })
+        val index = items.indexOfFirst { it.name == file.name }.coerceAtLeast(0)
+        return MediaViewer(items, index)
     }
 
     /**
@@ -1757,22 +1768,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Opens [file] with the other media of its kind sitting beside it on disk,
-     * as a playlist -- the way [openLocalMedia] does from a pane, but reading the
+     * Opens [file] with the other media of its kind sitting beside it on disk, as
+     * a playlist -- the way [openLocalMedia] does from a pane, but reading the
      * folder from disk rather than a listing, for a file reopened from recents
-     * whose pane may be long gone. Song with song, film with film, in natural
-     * name order, so a music player's previous and next move through the folder.
+     * whose pane may be long gone. Always opens at least the file itself, since a
+     * recents reopen must open something.
      */
     fun openMediaFolder(file: java.io.File) {
-        val wantVideo = looksVideo(file.name)
-        val siblings = file.parentFile?.listFiles()
-            ?.filter { it.isFile && looksMedia(it.name) && looksVideo(it.name) == wantVideo }
-            ?.sortedWith(org.filezilla.android.files.NaturalOrder.by { it.name })
-            .orEmpty()
-        val items = if (siblings.isEmpty()) listOf(file) else siblings
-        val index = items.indexOfFirst { it.path == file.path }.coerceAtLeast(0)
+        val candidates = file.parentFile?.listFiles()?.filter { it.isFile }.orEmpty()
+        val viewer = mediaPlaylist(candidates, file)
         recordRecent(file)
-        mediaViewer = MediaViewer(items, index)
+        mediaViewer = if (viewer.items.isEmpty()) MediaViewer(listOf(file), 0) else viewer
     }
 
     fun closeMediaViewer() {

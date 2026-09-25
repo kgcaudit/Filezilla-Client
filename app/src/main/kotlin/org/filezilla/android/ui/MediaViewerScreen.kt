@@ -311,22 +311,17 @@ private fun MusicPlayer(
         }
     }
 
-    // Load the queue and start where the opened song was left, unless the service
-    // is already on this very queue (after a rotation), when resetting it would
-    // jerk the song back to the start.
+    // Load the queue and start where the opened song was left. audioMediaItem does
+    // no directory scan, so the items are built in hand.
     LaunchedEffect(player, viewer.items, viewer.index) {
-        val wantUris = viewer.items.map { Uri.fromFile(it) }
-        val haveUris = (0 until player.mediaItemCount).map {
-            player.getMediaItemAt(it).requestMetadata.mediaUri
-        }
-        if (haveUris != wantUris) {
-            val startFile = viewer.items.getOrNull(viewer.index) ?: return@LaunchedEffect
-            val start = model.mediaPosition(startFile)
-            player.setMediaItems(viewer.items.map { audioMediaItem(it) }, viewer.index, start)
-            player.prepare()
-            player.playWhenReady = true
-        } else {
-            index = player.currentMediaItemIndex
+        loadQueue(
+            player,
+            viewer.items,
+            viewer.index,
+            model,
+            onSameQueue = { index = player.currentMediaItemIndex },
+        ) {
+            viewer.items.map { audioMediaItem(it) }
         }
     }
 
@@ -367,6 +362,12 @@ private fun MusicPlayer(
     val accent = Color(0xFFE8A183)
     val onDark = Color.White
     val dim = Color.White.copy(alpha = 0.6f)
+
+    // The title (the tag's, or the filename) and the artist·album line, shown on
+    // this screen and handed to the lyrics screen -- worked out once.
+    val displayTitle = tags?.title?.takeIf { it.isNotBlank() }
+        ?: currentFile?.nameWithoutExtension.orEmpty()
+    val displaySubtitle = musicSubtitle(tags, stringResource(R.string.music_unknown_artist))
 
     BackHandler(onBack = onClose)
 
@@ -452,7 +453,7 @@ private fun MusicPlayer(
 
                 // Title, then artist and album under it.
                 Text(
-                    tags?.title?.takeIf { it.isNotBlank() } ?: currentFile?.nameWithoutExtension.orEmpty(),
+                    displayTitle,
                     style = MaterialTheme.typography.headlineSmall,
                     color = onDark,
                     maxLines = 1,
@@ -462,7 +463,7 @@ private fun MusicPlayer(
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    musicSubtitle(tags, stringResource(R.string.music_unknown_artist)),
+                    displaySubtitle,
                     style = MaterialTheme.typography.bodyMedium,
                     color = dim,
                     maxLines = 1,
@@ -608,14 +609,8 @@ private fun MusicPlayer(
                             modifier = Modifier.weight(1f),
                         )
                     }
-                    val whole = playbackSpeed == playbackSpeed.toLong().toFloat()
-                    val speedLabel = if (whole) {
-                        playbackSpeed.toLong().toString()
-                    } else {
-                        playbackSpeed.toString()
-                    }
                     MusicPill(
-                        text = stringResource(R.string.music_speed, speedLabel),
+                        text = stringResource(R.string.music_speed, speedNumber(playbackSpeed)),
                         onClick = {
                             val at = PLAYBACK_SPEEDS.indexOfFirst {
                                 kotlin.math.abs(it - playbackSpeed) < 0.01f
@@ -650,8 +645,8 @@ private fun MusicPlayer(
         LyricsScreen(
             lines = lyrics.orEmpty(),
             positionMs = if (scrubbing) scrubMs else positionMs,
-            title = tags?.title?.takeIf { it.isNotBlank() } ?: currentFile?.nameWithoutExtension.orEmpty(),
-            subtitle = musicSubtitle(tags, stringResource(R.string.music_unknown_artist)),
+            title = displayTitle,
+            subtitle = displaySubtitle,
             background = tags?.background,
             onSeek = { player.seekTo(it) },
             onClose = { showLyrics = false },
@@ -996,6 +991,41 @@ private fun musicSubtitle(tags: MusicTags?, unknownArtist: String): String {
 private fun audioMediaItem(file: File): MediaItem = buildMediaItem(Uri.fromFile(file), emptyList())
 
 /**
+ * Sets the player's queue to [items] and starts at [index] where that file was
+ * last left -- unless the service is already on this very queue (as after a
+ * rotation), when resetting it would jerk playback back to the start and
+ * [onSameQueue] runs instead. The items are built by [build], which the caller
+ * supplies so a song builds them in hand while a film builds them off the main
+ * thread (its subtitle scan reads the directory).
+ *
+ * A controller strips a MediaItem's localConfiguration crossing to the service,
+ * so the uri that survives is the one in the request metadata; the guard compares
+ * against that, which is what lets it recognise the same queue rather than
+ * restarting playback on every rotation.
+ */
+private suspend fun loadQueue(
+    player: MediaController,
+    items: List<File>,
+    index: Int,
+    model: MainViewModel,
+    onSameQueue: () -> Unit,
+    build: suspend () -> List<MediaItem>,
+) {
+    val wantUris = items.map { Uri.fromFile(it) }
+    val haveUris = (0 until player.mediaItemCount).map {
+        player.getMediaItemAt(it).requestMetadata.mediaUri
+    }
+    if (haveUris != wantUris) {
+        val startFile = items.getOrNull(index) ?: return
+        player.setMediaItems(build(), index, model.mediaPosition(startFile))
+        player.prepare()
+        player.playWhenReady = true
+    } else {
+        onSameQueue()
+    }
+}
+
+/**
  * The sleep-timer button, for both players.
  *
  * The timer itself lives in the playback service, so it stops the sound even with
@@ -1246,35 +1276,18 @@ private fun MediaPlayer(
         }
     }
 
-    // Load the playlist and start where the opened file was left -- unless the
-    // service is already on this very playlist, as after a rotation, when
-    // resetting it would jerk playback back to the start. Each entry carries
-    // whatever subtitle files were found beside it.
+    // Load the playlist and start where the opened film was left. Finding each
+    // film's sidecar subtitles reads the directory and rewrites any SAMI, so the
+    // items are built off the main thread.
     LaunchedEffect(player, viewer.items, viewer.index) {
-        val wantUris = viewer.items.map { Uri.fromFile(it) }
-        // A controller strips a MediaItem's localConfiguration crossing to the
-        // service, so localConfiguration.uri is always null here; the uri that
-        // survives is the one stashed in the request metadata. Comparing against
-        // that is what lets the guard recognise the same playlist -- comparing
-        // localConfiguration made it always differ, restarting playback and
-        // throwing the reader back to the opened file on every rotation.
-        val haveUris = (0 until player.mediaItemCount).map {
-            player.getMediaItemAt(it).requestMetadata.mediaUri
-        }
-        if (haveUris != wantUris) {
-            val startFile = viewer.items.getOrNull(viewer.index) ?: return@LaunchedEffect
-            val start = model.mediaPosition(startFile)
-            // Finding the subtitle files beside each film reads the directory and
-            // rewrites any SAMI to WebVTT, so it is done off the main thread; the
-            // player is only touched once the items are built.
-            val items = withContext(Dispatchers.IO) {
-                viewer.items.map { mediaItemFor(it, context.cacheDir) }
-            }
-            player.setMediaItems(items, viewer.index, start)
-            player.prepare()
-            player.playWhenReady = true
-        } else {
-            index = player.currentMediaItemIndex
+        loadQueue(
+            player,
+            viewer.items,
+            viewer.index,
+            model,
+            onSameQueue = { index = player.currentMediaItemIndex },
+        ) {
+            withContext(Dispatchers.IO) { viewer.items.map { mediaItemFor(it, context.cacheDir) } }
         }
     }
 
@@ -1948,8 +1961,7 @@ private fun PlayerSettingsSheet(
             ) {
                 for (option in PLAYBACK_SPEEDS) {
                     val chosen = kotlin.math.abs(option - speed) < 0.01f
-                    val whole = option == option.toLong().toFloat()
-                    val label = (if (whole) option.toLong().toString() else option.toString()) + "x"
+                    val label = speedNumber(option) + "x"
                     Box(
                         Modifier
                             .weight(1f)
@@ -2278,6 +2290,10 @@ private fun audioDetail(format: androidx.media3.common.Format): String {
 // The speeds a film can play at, normal in the middle.
 private val PLAYBACK_SPEEDS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
 
+/** A speed as a label, dropping the ".0" on a whole one: "1", "1.5". */
+private fun speedNumber(speed: Float): String =
+    if (speed == speed.toLong().toFloat()) speed.toLong().toString() else speed.toString()
+
 /**
  * A stable key for a track, for remembering which one a file was watched with.
  * The track's number is folded in so two internal tracks of the same language --
@@ -2479,7 +2495,7 @@ private fun sidecarSubtitles(video: File, cacheDir: File): List<MediaItem.Subtit
 // A subtitle track the app added from a file, rather than one carried inside
 // the film, is marked by an id starting with this, so the picker can say which
 // is which and show the file's own extension as the format.
-const val EXTERNAL_SUB_ID_PREFIX = "olo-ext:"
+private const val EXTERNAL_SUB_ID_PREFIX = "olo-ext:"
 
 private data class SidecarSub(
     val uri: Uri,
