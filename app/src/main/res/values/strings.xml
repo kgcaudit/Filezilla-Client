@@ -300,6 +300,9 @@
     <string name="sleep_timer_off">Off</string>
     <string name="sleep_timer_minutes">%1$d min</string>
     <string name="sleep_timer_left">%1$s left</string>
+    <!-- Time-synced lyrics from an .lrc file beside the song. -->
+    <string name="lyrics">Lyrics</string>
+    <string name="lyrics_none">No lyrics</string>
     <string name="transfers_running">%1$d transferring</string>
     <string name="transfers_waiting">%1$d waiting to transfer</string>
     <string name="transfers_percent">%1$d%%</string>

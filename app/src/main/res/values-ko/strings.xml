@@ -297,6 +297,9 @@
     <string name="sleep_timer_off">끄기</string>
     <string name="sleep_timer_minutes">%1$d분</string>
     <string name="sleep_timer_left">%1$s 남음</string>
+    <!-- 곡 옆 .lrc 파일의 시간 동기화 가사 -->
+    <string name="lyrics">가사</string>
+    <string name="lyrics_none">가사가 없습니다</string>
     <string name="transfers_running">%1$d개 전송 중</string>
     <string name="transfers_waiting">%1$d개 전송 대기 중</string>
     <string name="transfers_percent">%1$d%%</string>

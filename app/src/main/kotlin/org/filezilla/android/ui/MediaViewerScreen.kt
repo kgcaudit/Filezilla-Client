@@ -24,6 +24,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -37,6 +38,7 @@ import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -96,6 +98,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -124,6 +127,7 @@ import org.filezilla.android.R
 import org.filezilla.android.data.AppPreferences
 import org.filezilla.android.playback.PlaybackService
 import org.filezilla.android.playback.SubtitleBundle
+import org.filezilla.android.viewer.TextFiles
 
 /**
  * The app's own player for a video or a sound.
@@ -347,6 +351,17 @@ private fun MusicPlayer(
         tags = null
         val file = currentFile ?: return@LaunchedEffect
         tags = withContext(Dispatchers.IO) { readMusicTags(file) }
+    }
+
+    // The song's time-synced lyrics, from an .lrc file beside it, read off the
+    // main thread and refreshed with the song. Null when there is none, which is
+    // what hides the lyrics pill.
+    var lyrics by remember { mutableStateOf<List<LrcLine>?>(null) }
+    var showLyrics by remember { mutableStateOf(false) }
+    LaunchedEffect(currentFile?.path) {
+        lyrics = null
+        val file = currentFile ?: return@LaunchedEffect
+        lyrics = withContext(Dispatchers.IO) { loadLyrics(file) }
     }
 
     val accent = Color(0xFFE8A183)
@@ -586,6 +601,13 @@ private fun MusicPlayer(
                         onClick = { showQueue = true },
                         modifier = Modifier.weight(1f),
                     )
+                    if (!lyrics.isNullOrEmpty()) {
+                        MusicPill(
+                            text = stringResource(R.string.lyrics),
+                            onClick = { showLyrics = true },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                     val whole = playbackSpeed == playbackSpeed.toLong().toFloat()
                     val speedLabel = if (whole) {
                         playbackSpeed.toLong().toString()
@@ -621,6 +643,18 @@ private fun MusicPlayer(
                 showQueue = false
             },
             onDismiss = { showQueue = false },
+        )
+    }
+
+    if (showLyrics) {
+        LyricsScreen(
+            lines = lyrics.orEmpty(),
+            positionMs = if (scrubbing) scrubMs else positionMs,
+            title = tags?.title?.takeIf { it.isNotBlank() } ?: currentFile?.nameWithoutExtension.orEmpty(),
+            subtitle = musicSubtitle(tags, stringResource(R.string.music_unknown_artist)),
+            background = tags?.background,
+            onSeek = { player.seekTo(it) },
+            onClose = { showLyrics = false },
         )
     }
 }
@@ -714,6 +748,192 @@ private fun MusicQueueSheet(
             }
         }
     }
+}
+
+/**
+ * The lyrics screen: the song's words, scrolling with it.
+ *
+ * The line that is due now is picked out -- larger, in the accent colour -- and
+ * the list keeps it near the middle as the song runs, so the eye stays put. A
+ * line tapped jumps the song to it, which turns the lyrics into a way to move
+ * about the song. A song with no words shows a plain note.
+ */
+@Composable
+private fun LyricsScreen(
+    lines: List<LrcLine>,
+    positionMs: Long,
+    title: String,
+    subtitle: String,
+    background: ImageBitmap?,
+    onSeek: (Long) -> Unit,
+    onClose: () -> Unit,
+) {
+    BackHandler(onBack = onClose)
+    val accent = Color(0xFFE8A183)
+    val listState = rememberLazyListState()
+    // The line due now is the last one whose time has passed; -1 before the first.
+    val current = remember(lines, positionMs) { lines.indexOfLast { it.timeMs <= positionMs } }
+    // Keep the current line near the middle rather than at the top.
+    val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
+    val centerPx = with(density) { (configuration.screenHeightDp.dp / 2).toPx() }.toInt()
+    LaunchedEffect(current) {
+        if (current >= 0) {
+            runCatching { listState.animateScrollToItem(current, -centerPx + 160) }
+        }
+    }
+    Surface(Modifier.fillMaxSize(), color = Color(0xFF12100E)) {
+        Box(Modifier.fillMaxSize()) {
+            background?.let {
+                Image(
+                    bitmap = it,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.66f)),
+            )
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding(),
+            ) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = onClose) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back),
+                            tint = Color.White,
+                        )
+                    }
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .padding(start = 4.dp),
+                    ) {
+                        Text(
+                            title,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            subtitle,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White.copy(alpha = 0.6f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                if (lines.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            stringResource(R.string.lyrics_none),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color.White.copy(alpha = 0.6f),
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 28.dp, vertical = 48.dp),
+                    ) {
+                        itemsIndexed(lines) { i, line ->
+                            val on = i == current
+                            Text(
+                                line.text.ifBlank { "♪" },
+                                style = if (on) {
+                                    MaterialTheme.typography.titleLarge
+                                } else {
+                                    MaterialTheme.typography.titleMedium
+                                },
+                                fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
+                                color = if (on) accent else Color.White.copy(alpha = 0.5f),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onSeek(line.timeMs) }
+                                    .padding(vertical = 10.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** One timed line of an LRC file: when it is sung, and the words. */
+private data class LrcLine(val timeMs: Long, val text: String)
+
+/**
+ * Loads the lyrics beside [audio] -- a file of the same name with an .lrc
+ * extension -- or null when there is none or it holds no timed lines. The bytes
+ * are decoded the way the text viewer decodes a file, so a CP949 lyric sheet (the
+ * common Korean case) reads rather than turning to mojibake.
+ */
+private fun loadLyrics(audio: File): List<LrcLine>? {
+    val dir = audio.parentFile ?: return null
+    val base = audio.nameWithoutExtension
+    val lrc = File(dir, "$base.lrc").takeIf { it.isFile }
+        ?: dir.listFiles()?.firstOrNull { file ->
+            file.isFile && file.extension.equals("lrc", ignoreCase = true) &&
+                file.nameWithoutExtension.equals(base, ignoreCase = true)
+        }
+        ?: return null
+    return runCatching { parseLrc(TextFiles.decode(lrc.readBytes()).text) }
+        .getOrNull()
+        ?.takeIf { it.isNotEmpty() }
+}
+
+// A timestamp tag, [mm:ss] or [mm:ss.xx] (or with a colon before the fraction),
+// and the whole-file offset tag that shifts every line.
+private val LRC_TIME = Regex("""\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?]""")
+private val LRC_OFFSET = Regex("""\[offset:\s*([+-]?\d+)]""", RegexOption.IGNORE_CASE)
+
+/**
+ * Parses LRC text into timed lines, sorted by time.
+ *
+ * A line may carry more than one timestamp -- a repeated chorus is written once
+ * with each of its times -- so each becomes its own entry. The metadata tags
+ * ([ar:], [ti:], ...) have no timestamp and fall away; the [offset:] tag shifts
+ * every time, positive bringing the words earlier.
+ */
+private fun parseLrc(text: String): List<LrcLine> {
+    var offset = 0L
+    val out = mutableListOf<LrcLine>()
+    for (raw in text.lineSequence()) {
+        LRC_OFFSET.find(raw)?.let { offset = it.groupValues[1].toLongOrNull() ?: 0L }
+        val stamps = LRC_TIME.findAll(raw).toList()
+        if (stamps.isEmpty()) continue
+        val words = raw.substring(stamps.last().range.last + 1).trim()
+        for (stamp in stamps) {
+            val minutes = stamp.groupValues[1].toLong()
+            val seconds = stamp.groupValues[2].toLong()
+            val fraction = stamp.groupValues[3]
+            val fractionMs = when (fraction.length) {
+                1 -> fraction.toLong() * 100
+                2 -> fraction.toLong() * 10
+                3 -> fraction.toLong()
+                else -> 0L
+            }
+            val time = minutes * 60_000L + seconds * 1_000L + fractionMs - offset
+            out.add(LrcLine(time.coerceAtLeast(0L), words))
+        }
+    }
+    return out.sortedBy { it.timeMs }
 }
 
 /** A song's tags and cover, as the music player shows them. */
