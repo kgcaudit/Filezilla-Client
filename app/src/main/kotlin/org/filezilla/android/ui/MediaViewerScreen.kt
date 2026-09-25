@@ -93,7 +93,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -1547,6 +1546,15 @@ private fun MediaPlayer(
     val onScaleDelta: (Float) -> Unit = { factor ->
         videoScale = (videoScale * factor).coerceIn(MIN_VIDEO_SCALE, MAX_VIDEO_SCALE)
     }
+    // The zoom scales the video surface itself, not the whole player view, so the
+    // built-in controls keep their place at the screen's edges while the picture
+    // grows or shrinks -- enlarging no longer pushes the seek bar off the bottom.
+    LaunchedEffect(playerViewRef, videoScale) {
+        playerViewRef?.videoSurfaceView?.let { surface ->
+            surface.scaleX = videoScale
+            surface.scaleY = videoScale
+        }
+    }
     // Whether the picture has been zoomed off its own size, so the "back to 1x"
     // chip is offered -- pinching to exactly 1x by hand is not something to ask of
     // anyone.
@@ -1610,12 +1618,7 @@ private fun MediaPlayer(
                 // controller itself outlives this (it is the service's) and is
                 // released separately.
                 onRelease = { it.player = null },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        scaleX = videoScale
-                        scaleY = videoScale
-                    },
+                modifier = Modifier.fillMaxSize(),
             )
             // The gesture layer: a full-screen sheet over the picture that reads
             // every touch, so shrinking the picture never shrinks where a gesture
