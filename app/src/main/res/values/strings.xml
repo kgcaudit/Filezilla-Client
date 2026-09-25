@@ -271,6 +271,8 @@
     <string name="action_rotate">Rotate screen</string>
     <string name="action_rotate_lock">Lock rotation</string>
     <string name="action_aspect">Aspect ratio</string>
+    <!-- Puts a pinch-zoomed picture back to its own size. -->
+    <string name="video_zoom_reset">1×</string>
     <string name="action_settings">Settings</string>
     <string name="section_subtitle">Subtitles</string>
     <string name="section_audio">Audio</string>

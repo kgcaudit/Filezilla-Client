@@ -1537,11 +1537,17 @@ private fun MediaPlayer(
     LaunchedEffect(playerViewRef, resizeMode) { playerViewRef?.resizeMode = resizeMode }
 
     // Two fingers pinched apart or together zoom the picture in or out, held
-    // between its own size and four times it.
+    // between a fraction of its size and four times it. Zooming out below its own
+    // size shrinks the picture to the middle with black around it -- which is how
+    // a film that a camera notch cuts into is pulled clear of the notch.
     var videoScale by rememberSaveable { mutableFloatStateOf(1f) }
     val onScaleDelta: (Float) -> Unit = { factor ->
-        videoScale = (videoScale * factor).coerceIn(1f, 4f)
+        videoScale = (videoScale * factor).coerceIn(MIN_VIDEO_SCALE, MAX_VIDEO_SCALE)
     }
+    // Whether the picture has been zoomed off its own size, so the "back to 1x"
+    // chip is offered -- pinching to exactly 1x by hand is not something to ask of
+    // anyone.
+    val zoomed = kotlin.math.abs(videoScale - 1f) > 0.01f
 
     Surface(Modifier.fillMaxSize(), color = Color.Black) {
         Box(Modifier.fillMaxSize()) {
@@ -1751,6 +1757,10 @@ private fun MediaPlayer(
                     SleepTimerButton(player = player, tint = Color.White)
                     IconButton(
                         onClick = {
+                            // Changing the fit also puts a pinch zoom back to 1x,
+                            // so the two ways of sizing the picture do not stack up
+                            // into a state that is hard to read or undo.
+                            videoScale = 1f
                             resizeMode = when (resizeMode) {
                                 AspectRatioFrameLayout.RESIZE_MODE_FIT ->
                                     AspectRatioFrameLayout.RESIZE_MODE_ZOOM
@@ -1820,6 +1830,26 @@ private fun MediaPlayer(
                     icon = Icons.AutoMirrored.Filled.VolumeUp,
                     modifier = Modifier.align(Alignment.CenterEnd),
                 )
+            }
+            // A "back to 1x" chip, shown only once the picture has been pinched off
+            // its own size, so a shrunk or blown-up film is one tap from normal
+            // without hunting for exactly 1x by hand.
+            if (zoomed) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = reservedTopDp + 12.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .clickable { videoScale = 1f }
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    Text(
+                        stringResource(R.string.video_zoom_reset),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Color.White,
+                    )
+                }
             }
         }
     }
@@ -2286,6 +2316,12 @@ private fun audioDetail(format: androidx.media3.common.Format): String {
     }
     return listOfNotNull(codec, channels).joinToString(" · ").ifEmpty { "AUDIO" }
 }
+
+// How far a pinch can size the picture: down to a fraction of its own size, so a
+// film a camera notch cuts into can be shrunk clear of the notch, and up to four
+// times it. One (its own size) sits between the two.
+private const val MIN_VIDEO_SCALE = 0.4f
+private const val MAX_VIDEO_SCALE = 4f
 
 // The speeds a film can play at, normal in the middle.
 private val PLAYBACK_SPEEDS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
