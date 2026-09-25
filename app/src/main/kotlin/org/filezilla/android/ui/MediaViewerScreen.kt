@@ -1748,12 +1748,12 @@ private fun MediaPlayer(
                     modifier = Modifier.align(Alignment.CenterEnd),
                 )
             }
-            // A "back to 1x" chip, shown only once the picture has been pinched off
-            // its own size, so a shrunk or blown-up film is one tap from normal
-            // without hunting for exactly 1x by hand. It sits below the top bar's
-            // row, not on it, so it never lands on the filename when the controls
-            // are up.
-            if (zoomed) {
+            // A "back to 1x" chip: one tap from a shrunk or blown-up picture back
+            // to normal, without hunting for exactly 1x by hand. It rides with the
+            // controls -- shown only while they are, so a film watched shrunk (to
+            // clear a notch) is not saddled with a chip the whole way through -- and
+            // sits below the top bar's row so it never lands on the filename.
+            if (zoomed && controlsVisible) {
                 Box(
                     Modifier
                         .align(Alignment.TopCenter)
