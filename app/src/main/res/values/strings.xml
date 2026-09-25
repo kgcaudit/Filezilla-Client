@@ -282,6 +282,19 @@
     <string name="subtitle_language_unknown">Unknown</string>
     <string name="subtitle_size">Size</string>
     <string name="subtitle_color">Colour</string>
+    <!-- The music (Now Playing) player, for a sound rather than a film. -->
+    <string name="music_now_playing">Now playing</string>
+    <string name="music_shuffle">Shuffle</string>
+    <string name="music_repeat">Repeat off</string>
+    <string name="music_repeat_all">Repeat all</string>
+    <string name="music_repeat_one">Repeat one</string>
+    <string name="music_prev">Previous track</string>
+    <string name="music_next">Next track</string>
+    <string name="music_play">Play</string>
+    <string name="music_pause">Pause</string>
+    <string name="music_queue">Playlist</string>
+    <string name="music_speed">%1$s× speed</string>
+    <string name="music_unknown_artist">Unknown artist</string>
     <string name="transfers_running">%1$d transferring</string>
     <string name="transfers_waiting">%1$d waiting to transfer</string>
     <string name="transfers_percent">%1$d%%</string>

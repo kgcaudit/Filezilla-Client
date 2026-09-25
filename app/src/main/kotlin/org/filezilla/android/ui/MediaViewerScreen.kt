@@ -4,6 +4,9 @@ import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.ActivityInfo
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.view.GestureDetector
 import android.view.MotionEvent
@@ -12,10 +15,13 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +30,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -42,13 +49,23 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOn
+import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.ScreenLockRotation
 import androidx.compose.material.icons.filled.ScreenRotation
+import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -67,12 +84,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -123,6 +144,15 @@ import org.filezilla.android.playback.SubtitleBundle
 fun MediaViewerScreen(viewer: MainViewModel.MediaViewer, model: MainViewModel) {
     val context = LocalContext.current
 
+    // A sound gets the music player, a film gets the video player. The playlist
+    // is one kind throughout (song with song, film with film), so the opened file
+    // decides -- and the choice is made up here because a film hides the system
+    // bars for its picture while a song leaves them, for the clock and battery.
+    val isAudio = remember(viewer) {
+        viewer.items.getOrNull(viewer.index)?.let { kindOf(it.name, false) == FileKind.AUDIO }
+            ?: false
+    }
+
     // Playback lives in a service so it carries on once the app is in the
     // background; this connects to it from the front, and is null until it has.
     val player = rememberMediaController(context)
@@ -157,15 +187,18 @@ fun MediaViewerScreen(viewer: MainViewModel.MediaViewer, model: MainViewModel) {
         model.closeMediaViewer()
     }
 
-    // While the player is up, the phone's bars go away so a video has the whole
-    // screen; leaving restores them.
+    // While a film is up, the phone's bars go away so it has the whole screen;
+    // leaving restores them. A song keeps the bars -- there is no picture to give
+    // the screen to, and the clock is worth having while listening.
     val view = androidx.compose.ui.platform.LocalView.current
-    DisposableEffect(view) {
+    DisposableEffect(view, isAudio) {
         val window = (view.context as? android.app.Activity)?.window
         val controller = window?.let { androidx.core.view.WindowCompat.getInsetsController(it, view) }
-        controller?.systemBarsBehavior =
-            androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        controller?.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        if (!isAudio) {
+            controller?.systemBarsBehavior =
+                androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller?.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        }
         onDispose { controller?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars()) }
     }
 
@@ -188,8 +221,556 @@ fun MediaViewerScreen(viewer: MainViewModel.MediaViewer, model: MainViewModel) {
         return
     }
 
-    MediaPlayer(player = player, viewer = viewer, model = model, onClose = close)
+    if (isAudio) {
+        MusicPlayer(player = player, viewer = viewer, model = model, onClose = close)
+    } else {
+        MediaPlayer(player = player, viewer = viewer, model = model, onClose = close)
+    }
 }
+
+/**
+ * The music player -- the Now Playing screen for a sound.
+ *
+ * A film fills the black screen with a picture; a song has nothing to look at, so
+ * this draws the album's own cover instead -- large and square, over a blurred
+ * blow-up of the same cover -- and gives the transport a music player's shape:
+ * shuffle, previous, play, next and repeat, with the folder's other songs a tap
+ * away in a queue. The engine is the same service player the film uses, so the
+ * song carries on in the background with its notification, and its place is kept
+ * between openings the same way.
+ */
+@androidx.annotation.OptIn(UnstableApi::class)
+@Composable
+private fun MusicPlayer(
+    player: MediaController,
+    viewer: MainViewModel.MediaViewer,
+    model: MainViewModel,
+    onClose: () -> Unit,
+) {
+    var index by remember { mutableIntStateOf(viewer.index) }
+    var isPlaying by remember { mutableStateOf(player.isPlaying) }
+    var shuffle by remember { mutableStateOf(player.shuffleModeEnabled) }
+    var repeatMode by remember { mutableIntStateOf(player.repeatMode) }
+    var playbackSpeed by remember { mutableFloatStateOf(player.playbackParameters.speed) }
+    var durationMs by remember { mutableLongStateOf(0L) }
+    var positionMs by remember { mutableLongStateOf(0L) }
+    // While a finger is on the seek bar the ticking read-out is held back, so the
+    // thumb follows the finger rather than jumping back to where the song is.
+    var scrubbing by remember { mutableStateOf(false) }
+    var scrubMs by remember { mutableLongStateOf(0L) }
+    var showQueue by remember { mutableStateOf(false) }
+
+    // Keep the place, mirror the player's state, and put a song the player runs on
+    // from back to its start -- the same bookkeeping the film player does.
+    DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                    viewer.items.getOrNull(index)?.let { model.setMediaPosition(it, 0L) }
+                }
+                index = player.currentMediaItemIndex
+            }
+
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_ENDED) {
+                    viewer.items.getOrNull(player.currentMediaItemIndex)
+                        ?.let { model.setMediaPosition(it, 0L) }
+                }
+            }
+
+            override fun onIsPlayingChanged(playing: Boolean) {
+                isPlaying = playing
+            }
+
+            override fun onShuffleModeEnabledChanged(enabled: Boolean) {
+                shuffle = enabled
+            }
+
+            override fun onRepeatModeChanged(mode: Int) {
+                repeatMode = mode
+            }
+
+            override fun onPlaybackParametersChanged(
+                parameters: androidx.media3.common.PlaybackParameters,
+            ) {
+                playbackSpeed = parameters.speed
+            }
+        }
+        player.addListener(listener)
+        onDispose {
+            savePlaybackPosition(player, viewer.items, model)
+            player.removeListener(listener)
+        }
+    }
+
+    // Load the queue and start where the opened song was left, unless the service
+    // is already on this very queue (after a rotation), when resetting it would
+    // jerk the song back to the start.
+    LaunchedEffect(player, viewer.items, viewer.index) {
+        val wantUris = viewer.items.map { Uri.fromFile(it) }
+        val haveUris = (0 until player.mediaItemCount).map {
+            player.getMediaItemAt(it).requestMetadata.mediaUri
+        }
+        if (haveUris != wantUris) {
+            val startFile = viewer.items.getOrNull(viewer.index) ?: return@LaunchedEffect
+            val start = model.mediaPosition(startFile)
+            player.setMediaItems(viewer.items.map { audioMediaItem(it) }, viewer.index, start)
+            player.prepare()
+            player.playWhenReady = true
+        } else {
+            index = player.currentMediaItemIndex
+        }
+    }
+
+    // The position ticks on a half-second while a song plays, for the seek bar and
+    // the elapsed read-out; held back while a finger is scrubbing.
+    LaunchedEffect(player) {
+        while (true) {
+            if (!scrubbing) {
+                positionMs = player.currentPosition.coerceAtLeast(0L)
+                durationMs = player.duration.coerceAtLeast(0L)
+            }
+            kotlinx.coroutines.delay(500)
+        }
+    }
+
+    val currentFile = viewer.items.getOrNull(index)
+    // The song's tags and cover, read off the main thread and refreshed each time
+    // the song changes. Null until read, and a song with no cover keeps it null --
+    // a note glyph stands in.
+    var tags by remember { mutableStateOf<MusicTags?>(null) }
+    LaunchedEffect(currentFile?.path) {
+        tags = null
+        val file = currentFile ?: return@LaunchedEffect
+        tags = withContext(Dispatchers.IO) { readMusicTags(file) }
+    }
+
+    val accent = Color(0xFFE8A183)
+    val onDark = Color.White
+    val dim = Color.White.copy(alpha = 0.6f)
+
+    BackHandler(onBack = onClose)
+
+    Surface(Modifier.fillMaxSize(), color = Color(0xFF12100E)) {
+        Box(Modifier.fillMaxSize()) {
+            // The blurred cover behind everything, with a dark wash over it so the
+            // white text and controls read against any album.
+            tags?.background?.let { bg ->
+                Image(
+                    bitmap = bg,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.55f)),
+            )
+
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .padding(horizontal = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                // Top bar: a way back, and the "now playing" label.
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = onClose) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back),
+                            tint = onDark,
+                        )
+                    }
+                    Text(
+                        stringResource(R.string.music_now_playing),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = dim,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.weight(1f),
+                    )
+                    // Balance the back button so the label sits centred.
+                    Spacer(Modifier.width(48.dp))
+                }
+
+                Spacer(Modifier.weight(1f))
+
+                // The cover, large and square.
+                Box(
+                    Modifier
+                        .fillMaxWidth(0.82f)
+                        .aspectRatio(1f)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color.White.copy(alpha = 0.06f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val art = tags?.art
+                    if (art != null) {
+                        Image(
+                            bitmap = art,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        Icon(
+                            Icons.Filled.MusicNote,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.35f),
+                            modifier = Modifier.size(96.dp),
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(28.dp))
+
+                // Title, then artist and album under it.
+                Text(
+                    tags?.title?.takeIf { it.isNotBlank() } ?: currentFile?.nameWithoutExtension.orEmpty(),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = onDark,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    musicSubtitle(tags, stringResource(R.string.music_unknown_artist)),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = dim,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Spacer(Modifier.height(24.dp))
+
+                // Seek bar and the elapsed / total read-out.
+                val shown = if (scrubbing) scrubMs else positionMs
+                val range = durationMs.coerceAtLeast(1L)
+                Slider(
+                    value = shown.coerceIn(0L, range).toFloat(),
+                    onValueChange = { value ->
+                        scrubbing = true
+                        scrubMs = value.toLong()
+                    },
+                    onValueChangeFinished = {
+                        player.seekTo(scrubMs.coerceIn(0L, durationMs))
+                        positionMs = scrubMs
+                        scrubbing = false
+                    },
+                    valueRange = 0f..range.toFloat(),
+                    colors = SliderDefaults.colors(
+                        thumbColor = accent,
+                        activeTrackColor = accent,
+                        inactiveTrackColor = Color.White.copy(alpha = 0.25f),
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(clock(shown), style = MaterialTheme.typography.labelMedium, color = dim)
+                    Text(clock(durationMs), style = MaterialTheme.typography.labelMedium, color = dim)
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // Transport: shuffle, previous, play/pause, next, repeat.
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = { player.shuffleModeEnabled = !player.shuffleModeEnabled }) {
+                        Icon(
+                            Icons.Filled.Shuffle,
+                            contentDescription = stringResource(R.string.music_shuffle),
+                            tint = if (shuffle) accent else dim,
+                        )
+                    }
+                    IconButton(onClick = { player.seekToPrevious() }) {
+                        Icon(
+                            Icons.Filled.SkipPrevious,
+                            contentDescription = stringResource(R.string.music_prev),
+                            tint = onDark,
+                            modifier = Modifier.size(40.dp),
+                        )
+                    }
+                    Box(
+                        Modifier
+                            .size(72.dp)
+                            .clip(CircleShape)
+                            .background(accent)
+                            .clickable { if (player.isPlaying) player.pause() else player.play() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (isPlaying) {
+                            Icon(
+                                Icons.Filled.Pause,
+                                contentDescription = stringResource(R.string.music_pause),
+                                tint = Color(0xFF12100E),
+                                modifier = Modifier.size(38.dp),
+                            )
+                        } else {
+                            Icon(
+                                Icons.Filled.PlayArrow,
+                                contentDescription = stringResource(R.string.music_play),
+                                tint = Color(0xFF12100E),
+                                modifier = Modifier.size(38.dp),
+                            )
+                        }
+                    }
+                    IconButton(onClick = { player.seekToNext() }) {
+                        Icon(
+                            Icons.Filled.SkipNext,
+                            contentDescription = stringResource(R.string.music_next),
+                            tint = onDark,
+                            modifier = Modifier.size(40.dp),
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            player.repeatMode = when (player.repeatMode) {
+                                Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                                Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                                else -> Player.REPEAT_MODE_OFF
+                            }
+                        },
+                    ) {
+                        when (repeatMode) {
+                            Player.REPEAT_MODE_ONE -> Icon(
+                                Icons.Filled.RepeatOne,
+                                contentDescription = stringResource(R.string.music_repeat_one),
+                                tint = accent,
+                            )
+                            Player.REPEAT_MODE_ALL -> Icon(
+                                Icons.Filled.RepeatOn,
+                                contentDescription = stringResource(R.string.music_repeat_all),
+                                tint = accent,
+                            )
+                            else -> Icon(
+                                Icons.Filled.Repeat,
+                                contentDescription = stringResource(R.string.music_repeat),
+                                tint = dim,
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // Playlist and speed, two pills.
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    MusicPill(
+                        text = stringResource(R.string.music_queue),
+                        onClick = { showQueue = true },
+                        modifier = Modifier.weight(1f),
+                    )
+                    val whole = playbackSpeed == playbackSpeed.toLong().toFloat()
+                    val speedLabel = if (whole) {
+                        playbackSpeed.toLong().toString()
+                    } else {
+                        playbackSpeed.toString()
+                    }
+                    MusicPill(
+                        text = stringResource(R.string.music_speed, speedLabel),
+                        onClick = {
+                            val at = PLAYBACK_SPEEDS.indexOfFirst {
+                                kotlin.math.abs(it - playbackSpeed) < 0.01f
+                            }.coerceAtLeast(0)
+                            val next = PLAYBACK_SPEEDS[(at + 1) % PLAYBACK_SPEEDS.size]
+                            player.setPlaybackSpeed(next)
+                            playbackSpeed = next
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+
+                Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+
+    if (showQueue) {
+        MusicQueueSheet(
+            items = viewer.items,
+            current = index,
+            onPick = { picked ->
+                player.seekTo(picked, 0L)
+                player.play()
+                showQueue = false
+            },
+            onDismiss = { showQueue = false },
+        )
+    }
+}
+
+/** A rounded, translucent pill button, for the playlist and speed under the transport. */
+@Composable
+private fun MusicPill(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .clip(RoundedCornerShape(22.dp))
+            .background(Color.White.copy(alpha = 0.12f))
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            color = Color.White,
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * The queue: the folder's songs in order, the playing one marked, tap to jump.
+ * A panel across the lower part of the screen over a dim backdrop; a tap outside
+ * puts it away.
+ */
+@Composable
+private fun MusicQueueSheet(
+    items: List<File>,
+    current: Int,
+    onPick: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val accent = Color(0xFFE8A183)
+    val backdrop = remember { MutableInteractionSource() }
+    val panel = remember { MutableInteractionSource() }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.6f))
+            .clickable(interactionSource = backdrop, indication = null, onClick = onDismiss),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.6f)
+                .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                .background(Color(0xFF1B1815))
+                .clickable(interactionSource = panel, indication = null, onClick = {})
+                .statusBarsPadding()
+                .padding(vertical = 12.dp),
+        ) {
+            Text(
+                stringResource(R.string.music_queue),
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.White,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            )
+            LazyColumn(Modifier.fillMaxWidth()) {
+                itemsIndexed(items) { i, file ->
+                    val playing = i == current
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onPick(i) }
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            (i + 1).toString(),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (playing) accent else Color.White.copy(alpha = 0.4f),
+                            modifier = Modifier.width(28.dp),
+                        )
+                        Text(
+                            file.nameWithoutExtension,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (playing) accent else Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 4.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A song's tags and cover, as the music player shows them. */
+private data class MusicTags(
+    val title: String?,
+    val artist: String?,
+    val album: String?,
+    val art: ImageBitmap?,
+    val background: ImageBitmap?,
+)
+
+/**
+ * Reads a song's title, artist, album and embedded cover from its file. The
+ * cover, when there is one, is kept both full-size for the square and shrunk for
+ * the blurred backdrop. Anything unreadable comes back null rather than throwing.
+ */
+private fun readMusicTags(file: File): MusicTags {
+    val retriever = MediaMetadataRetriever()
+    return try {
+        retriever.setDataSource(file.path)
+        val cover = retriever.embeddedPicture?.let {
+            runCatching { BitmapFactory.decodeByteArray(it, 0, it.size) }.getOrNull()
+        }
+        MusicTags(
+            title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE),
+            artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST),
+            album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM),
+            art = cover?.asImageBitmap(),
+            background = cover?.let { blurredCover(it) }?.asImageBitmap(),
+        )
+    } catch (_: Exception) {
+        MusicTags(null, null, null, null, null)
+    } finally {
+        runCatching { retriever.release() }
+    }
+}
+
+/**
+ * A soft, dark backdrop from a cover: shrunk to a few dozen pixels so it blows
+ * back up blurred, which reads as a blur on every Android version rather than
+ * only the newest (where Modifier.blur would work).
+ */
+private fun blurredCover(cover: Bitmap): Bitmap? = runCatching {
+    val target = 40
+    val ratio = cover.width.toFloat() / cover.height.coerceAtLeast(1)
+    val w = if (ratio >= 1f) target else (target * ratio).roundToInt().coerceAtLeast(1)
+    val h = if (ratio >= 1f) (target / ratio).roundToInt().coerceAtLeast(1) else target
+    Bitmap.createScaledBitmap(cover, w, h, true)
+}.getOrNull()
+
+/** The line under a song's title: artist, and album when the file names one. */
+private fun musicSubtitle(tags: MusicTags?, unknownArtist: String): String {
+    val artist = tags?.artist?.takeIf { it.isNotBlank() } ?: unknownArtist
+    val album = tags?.album?.takeIf { it.isNotBlank() }
+    return if (album != null) "$artist · $album" else artist
+}
+
+/** A playable for a song: a plain media item, no subtitle sidecars to look for. */
+@androidx.annotation.OptIn(UnstableApi::class)
+private fun audioMediaItem(file: File): MediaItem = buildMediaItem(Uri.fromFile(file), emptyList())
 
 /**
  * Connects to the playback service and hands back its controller, or null while

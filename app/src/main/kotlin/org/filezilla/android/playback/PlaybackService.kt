@@ -33,8 +33,61 @@ class PlaybackService : MediaSessionService() {
 
     private var session: MediaSession? = null
 
+    // Whether the file now playing is a sound rather than a film. It decides
+    // which controls the session offers: a film moves ten seconds at a time and
+    // withholds the between-file skip (see onConnect), a song is a music player
+    // and keeps skip-to-previous and skip-to-next so the notification and the
+    // lock screen carry them. Starts on the film's side -- the stricter one --
+    // until a loaded item says otherwise.
+    private var currentIsAudio = false
+
     private companion object {
         const val SEEK_STEP_MS = 10_000L
+
+        // The sound extensions, mirroring the file list's own (FileKind): what
+        // opens as a song rather than a film, and so gets the music controls.
+        val AUDIO_EXTENSIONS = setOf("mp3", "flac", "wav", "aac", "ogg", "m4a", "wma", "opus")
+    }
+
+    /** Whether [item] is a sound, read from its file extension. */
+    private fun isAudioItem(item: MediaItem?): Boolean {
+        val uri = item?.localConfiguration?.uri ?: item?.requestMetadata?.mediaUri ?: return false
+        val ext = (uri.lastPathSegment ?: "").substringAfterLast('.', "").lowercase()
+        return ext in AUDIO_EXTENSIONS
+    }
+
+    // The full set, and the film's set with the between-file skips taken out.
+    @UnstableApi
+    private fun fullPlayerCommands(): Player.Commands =
+        MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS
+
+    @UnstableApi
+    private fun videoPlayerCommands(): Player.Commands =
+        fullPlayerCommands().buildUpon()
+            .remove(Player.COMMAND_SEEK_TO_PREVIOUS)
+            .remove(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+            .remove(Player.COMMAND_SEEK_TO_NEXT)
+            .remove(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+            .build()
+
+    /**
+     * Grants or withholds the between-file skip to every connected controller --
+     * the app's own, and the internal one the notification draws from -- to match
+     * the kind of the item now playing. Called whenever the playing item changes,
+     * so opening a song turns the skip on and opening a film turns it off.
+     */
+    @UnstableApi
+    private fun applyCommandsFor(item: MediaItem?) {
+        currentIsAudio = isAudioItem(item)
+        val session = session ?: return
+        val commands = if (currentIsAudio) fullPlayerCommands() else videoPlayerCommands()
+        for (controller in session.connectedControllers) {
+            session.setAvailableCommands(
+                controller,
+                MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS,
+                commands,
+            )
+        }
     }
 
     @UnstableApi
@@ -64,6 +117,20 @@ class PlaybackService : MediaSessionService() {
         session = MediaSession.Builder(this, player)
             .setCallback(RestoringCallback())
             .build()
+        // The controls a song and a film offer differ, so the session watches
+        // which is playing and moves the between-file skip on and off to suit.
+        player.addListener(object : Player.Listener {
+            @UnstableApi
+            override fun onEvents(target: Player, events: Player.Events) {
+                if (events.containsAny(
+                        Player.EVENT_MEDIA_ITEM_TRANSITION,
+                        Player.EVENT_TIMELINE_CHANGED,
+                    )
+                ) {
+                    applyCommandsFor(target.currentMediaItem)
+                }
+            }
+        })
         // The playback notification carries play/pause alone. media3's default
         // draws a skip-to-previous and a skip-to-next around it, but the side
         // buttons here move within one film, not between films, so between-file
@@ -73,8 +140,15 @@ class PlaybackService : MediaSessionService() {
     }
 
     /**
-     * media3's notification with only its play/pause button kept -- the
-     * skip-to-previous and skip-to-next it adds are dropped.
+     * media3's notification, kept to the buttons that fit what is playing.
+     *
+     * A film carries play/pause alone: its side buttons move ten seconds, not
+     * between files, so a skip has no place on the notification. A song is a
+     * music player and keeps its skip-to-previous and skip-to-next around the
+     * play button. The two are told apart by the commands the session grants
+     * (see applyCommandsFor) -- a film has no skip command, so the skip buttons
+     * are never generated for it and the filter has nothing to drop; a song has
+     * them, and they are kept.
      */
     @UnstableApi
     private class PlayPauseOnlyNotificationProvider(context: android.content.Context) :
@@ -87,7 +161,11 @@ class PlaybackService : MediaSessionService() {
         ): ImmutableList<CommandButton> =
             ImmutableList.copyOf(
                 super.getMediaButtons(session, playerCommands, customLayout, showPauseButton)
-                    .filter { it.playerCommand == Player.COMMAND_PLAY_PAUSE },
+                    .filter {
+                        it.playerCommand == Player.COMMAND_PLAY_PAUSE ||
+                            it.playerCommand == Player.COMMAND_SEEK_TO_PREVIOUS ||
+                            it.playerCommand == Player.COMMAND_SEEK_TO_NEXT
+                    },
             )
     }
 
@@ -103,7 +181,7 @@ class PlaybackService : MediaSessionService() {
      * already there, which is how they came to vanish before.
      */
     @UnstableApi
-    private class RestoringCallback : MediaSession.Callback {
+    private inner class RestoringCallback : MediaSession.Callback {
         // The system's own media controls -- the lock screen and the notification
         // panel's player on Samsung and Android 13+ -- draw their buttons from the
         // commands the session advertises, not from the notification layout. So
@@ -117,12 +195,10 @@ class PlaybackService : MediaSessionService() {
             session: MediaSession,
             controller: MediaSession.ControllerInfo,
         ): MediaSession.ConnectionResult {
-            val playerCommands = MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS.buildUpon()
-                .remove(Player.COMMAND_SEEK_TO_PREVIOUS)
-                .remove(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
-                .remove(Player.COMMAND_SEEK_TO_NEXT)
-                .remove(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
-                .build()
+            // The song grants the skip, the film withholds it; a controller that
+            // connects before anything is loaded takes the film's stricter set,
+            // and applyCommandsFor moves it the moment an item begins.
+            val playerCommands = if (currentIsAudio) fullPlayerCommands() else videoPlayerCommands()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailablePlayerCommands(playerCommands)
                 .build()

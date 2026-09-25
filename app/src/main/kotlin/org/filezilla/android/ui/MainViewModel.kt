@@ -1756,6 +1756,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         mediaViewer = MediaViewer(listOf(file), 0)
     }
 
+    /**
+     * Opens [file] with the other media of its kind sitting beside it on disk,
+     * as a playlist -- the way [openLocalMedia] does from a pane, but reading the
+     * folder from disk rather than a listing, for a file reopened from recents
+     * whose pane may be long gone. Song with song, film with film, in natural
+     * name order, so a music player's previous and next move through the folder.
+     */
+    fun openMediaFolder(file: java.io.File) {
+        val wantVideo = looksVideo(file.name)
+        val siblings = file.parentFile?.listFiles()
+            ?.filter { it.isFile && looksMedia(it.name) && looksVideo(it.name) == wantVideo }
+            ?.sortedWith(org.filezilla.android.files.NaturalOrder.by { it.name })
+            .orEmpty()
+        val items = if (siblings.isEmpty()) listOf(file) else siblings
+        val index = items.indexOfFirst { it.path == file.path }.coerceAtLeast(0)
+        recordRecent(file)
+        mediaViewer = MediaViewer(items, index)
+    }
+
     fun closeMediaViewer() {
         mediaViewer = null
     }
@@ -1985,10 +2004,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             removeRecent(entry.path)
             return null
         }
-        recordRecent(file)
         return when (kindOf(file.name, false)) {
             FileKind.VIDEO, FileKind.AUDIO -> {
-                openCachedMedia(file)
+                // Reopen with the folder's other media beside it, so a song's
+                // previous and next -- and a film's run-on -- work from recents
+                // the same as from the files list. openMediaFolder records it.
+                openMediaFolder(file)
                 null
             }
             FileKind.IMAGE -> {

@@ -93,8 +93,17 @@ class IconMeaningTest {
         // would tell apart -- so the broom is the log screen's alone.
         "DeleteSweep" to setOf("log_clear", "recents_clear"),
         // Making transfers go, whether one of them or all of them.
-        "PlayArrow" to setOf("queue_resume", "queue_start_all"),
-        "Pause" to setOf("queue_pause", "queue_pause_all"),
+        "PlayArrow" to setOf("queue_resume", "queue_start_all", "music_play"),
+        "Pause" to setOf("queue_pause", "queue_pause_all", "music_pause"),
+        // The music player's own transport, distinct from the transfer verbs
+        // above: skipping between songs, shuffling the queue, and the repeat
+        // switch whose three states are three glyphs.
+        "SkipPrevious" to setOf("music_prev"),
+        "SkipNext" to setOf("music_next"),
+        "Shuffle" to setOf("music_shuffle"),
+        "Repeat" to setOf("music_repeat"),
+        "RepeatOn" to setOf("music_repeat_all"),
+        "RepeatOne" to setOf("music_repeat_one"),
         "Refresh" to setOf("queue_retry_now", "browse_refresh"),
         // A menu of choices. Not the settings sheet, which is a gear: a ⋮
         // that opens a panel with one switch in it is a promise unkept.
