@@ -10,8 +10,6 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
-import android.view.GestureDetector
-import android.view.MotionEvent
 import android.view.View
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -21,6 +19,10 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -93,6 +95,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -1565,7 +1568,10 @@ private fun MediaPlayer(
                     // only a tap in the middle brings them up and a stray tap on
                     // an edge does not.
                     playerView.controllerAutoShow = false
-                    playerView.controllerHideOnTouch = false
+                    // While the controls are up the gesture layer stands down, so
+                    // the built-in seek bar and buttons take touches; a tap on the
+                    // picture then hides the controls and hands gestures back.
+                    playerView.controllerHideOnTouch = true
                     playerView.controllerShowTimeoutMs = 3_000
                     // The centre is play, flanked by a ten-second rewind and
                     // fast-forward rather than the previous and next file: the
@@ -1593,121 +1599,10 @@ private fun MediaPlayer(
                         settings.setOnClickListener { showSubtitleSheet = true }
                     }
                     playerViewRef = playerView
-
-                    // Touches are read by what they are, not by where they land,
-                    // and each does one thing only -- so a dial never also scrubs
-                    // and no drag ever flashes the menu. A tap works the controls,
-                    // wherever it falls. A drag is sorted the moment it starts, by
-                    // which way it leans, and keeps that kind to the end: an
-                    // up-or-down drag is a dial -- brightness on the left half,
-                    // volume on the right -- and a sideways drag scrubs. The dials
-                    // sit on top: a drag that leans even slightly vertical is a
-                    // dial, so the whole picture raises brightness or volume rather
-                    // than a narrow edge. The control buttons are child views and
-                    // take their own presses before this runs.
-                    var seeking = false
-                    var base = 0L
-                    var dragMode = DRAG_NONE
-                    val detector = GestureDetector(
-                        ctx,
-                        object : GestureDetector.SimpleOnGestureListener() {
-                            override fun onDown(e: MotionEvent): Boolean {
-                                dragMode = DRAG_NONE
-                                return true
-                            }
-
-                            // A confirmed single tap (one that is not the start of
-                            // a double tap) works the controls; a double tap plays
-                            // or pauses. Single is confirmed rather than taken on
-                            // the way up so the first tap of a double tap does not
-                            // also flash the menu.
-                            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                                if (playerView.isControllerFullyVisible) {
-                                    playerView.hideController()
-                                } else {
-                                    playerView.showController()
-                                }
-                                return true
-                            }
-
-                            override fun onDoubleTap(e: MotionEvent): Boolean {
-                                if (player.isPlaying) player.pause() else player.play()
-                                return true
-                            }
-
-                            override fun onScroll(
-                                e1: MotionEvent?,
-                                e2: MotionEvent,
-                                distanceX: Float,
-                                distanceY: Float,
-                            ): Boolean {
-                                if (e1 == null) return false
-                                val width = playerView.width.takeIf { it > 0 } ?: return false
-                                val height = playerView.height.takeIf { it > 0 } ?: return false
-                                // Sort the drag once, on the first move, and hold
-                                // that kind to the end -- which is what keeps a dial
-                                // from turning into a scrub when the finger wanders.
-                                // A drag that leans vertical is a dial and the dials
-                                // win the tie, so they sit on top; left half is
-                                // brightness, right half volume. A clearly sideways
-                                // drag scrubs.
-                                if (dragMode == DRAG_NONE) {
-                                    val movedX = kotlin.math.abs(e2.x - e1.x)
-                                    val movedY = kotlin.math.abs(e2.y - e1.y)
-                                    dragMode = if (movedY >= movedX) {
-                                        if (e1.x < width / 2f) DRAG_BRIGHTNESS else DRAG_VOLUME
-                                    } else {
-                                        DRAG_SEEK
-                                    }
-                                }
-                                // distanceY is positive moving up, so up brightens
-                                // and raises.
-                                when (dragMode) {
-                                    DRAG_BRIGHTNESS ->
-                                        onBrightnessDelta(distanceY / height * DIAL_SENSITIVITY)
-                                    DRAG_VOLUME ->
-                                        onVolumeDelta(distanceY / height * DIAL_SENSITIVITY)
-                                    else -> {
-                                        val duration = player.duration.takeIf { it > 0 } ?: return false
-                                        if (!seeking) {
-                                            seeking = true
-                                            base = player.currentPosition
-                                        }
-                                        val movedX = e2.x - e1.x
-                                        val delta = (movedX / width * 120_000f).toLong()
-                                        onSeekPreview((base + delta).coerceIn(0L, duration))
-                                    }
-                                }
-                                return true
-                            }
-                        },
-                    )
-                    // Two-finger pinch to zoom, watched alongside the one-finger
-                    // gestures. While a pinch is in hand the one-finger detector
-                    // is left out, so a zoom is not also read as a scrub or dial.
-                    val scaleDetector = android.view.ScaleGestureDetector(
-                        ctx,
-                        object : android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
-                            override fun onScale(d: android.view.ScaleGestureDetector): Boolean {
-                                onScaleDelta(d.scaleFactor)
-                                return true
-                            }
-                        },
-                    )
-                    playerView.setOnTouchListener { _, event ->
-                        scaleDetector.onTouchEvent(event)
-                        if (!scaleDetector.isInProgress) detector.onTouchEvent(event)
-                        if (event.actionMasked == MotionEvent.ACTION_UP ||
-                            event.actionMasked == MotionEvent.ACTION_CANCEL
-                        ) {
-                            if (seeking) {
-                                onSeekCommit()
-                                seeking = false
-                            }
-                            onGestureEnd()
-                        }
-                        true
-                    }
+                    // Gestures are handled by a full-screen Compose layer over the
+                    // top (see below), not on the view itself -- so shrinking the
+                    // picture never shrinks the area that takes them, and the pinch
+                    // and the one-finger dials share one arbitrated pipeline.
                     playerView
                 },
                 // Let go of the controller when the view goes, so a released
@@ -1722,6 +1617,28 @@ private fun MediaPlayer(
                         scaleY = videoScale
                     },
             )
+            // The gesture layer: a full-screen sheet over the picture that reads
+            // every touch, so shrinking the picture never shrinks where a gesture
+            // lands. It stands down while the controls are up, letting the built-in
+            // seek bar and buttons take touches instead. See VideoGestures for the
+            // arbitration -- one finger dials or scrubs, two fingers zoom, and the
+            // two never leak into each other.
+            if (!controlsVisible) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .videoGestures(
+                            player = player,
+                            onShowControls = { playerViewRef?.showController() },
+                            onBrightnessDelta = onBrightnessDelta,
+                            onVolumeDelta = onVolumeDelta,
+                            onSeekPreview = onSeekPreview,
+                            onSeekCommit = onSeekCommit,
+                            onScaleDelta = onScaleDelta,
+                            onGestureEnd = onGestureEnd,
+                        ),
+                )
+            }
             // A way back, over the top-left, since the player's own controls
             // have no exit; the subtitle and turn buttons opposite it. Shown
             // only while the controls are, so the picture is otherwise clear.
@@ -2376,6 +2293,105 @@ private const val DRAG_SEEK = 3
 // How fast the brightness and volume dials move: a full sweep of either takes
 // about a third of the height, rather than the whole of it, which felt sluggish.
 private const val DIAL_SENSITIVITY = 3f
+
+// A full sideways sweep scrubs two minutes.
+private const val SEEK_SPAN_MS = 120_000f
+
+/**
+ * The video player's touch language, on one arbitrated pipeline over a full-screen
+ * layer -- so shrinking the picture never shrinks where a gesture lands.
+ *
+ * The number of fingers decides the family and nothing crosses over. Two fingers
+ * zoom; and once a second finger has touched down, the one-finger dials are held
+ * off until every finger lifts, so releasing a pinch never lurches the brightness
+ * or the scrub -- the interference that pinch-to-shrink brought. One finger, past a
+ * small dead-zone, is a dial or a scrub, fixed the moment it crosses the threshold
+ * and held to the end: a vertical drag is brightness on the left half and volume on
+ * the right, a sideways drag scrubs. A touch that never crosses the threshold is
+ * left unconsumed for [onShowControls]/play-pause -- the tap detector below.
+ */
+private fun Modifier.videoGestures(
+    player: MediaController,
+    onShowControls: () -> Unit,
+    onBrightnessDelta: (Float) -> Unit,
+    onVolumeDelta: (Float) -> Unit,
+    onSeekPreview: (Long) -> Unit,
+    onSeekCommit: () -> Unit,
+    onScaleDelta: (Float) -> Unit,
+    onGestureEnd: () -> Unit,
+): Modifier = this
+    .pointerInput(Unit) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            var mode = DRAG_NONE
+            var multiTouch = false
+            val start = down.position
+            var last = down.position
+            var seekBase = 0L
+            val slop = viewConfiguration.touchSlop
+            val width = size.width.toFloat().coerceAtLeast(1f)
+            val height = size.height.toFloat().coerceAtLeast(1f)
+            while (true) {
+                val event = awaitPointerEvent()
+                val pressed = event.changes.count { it.pressed }
+                if (pressed >= 2) {
+                    multiTouch = true
+                    val zoom = event.calculateZoom()
+                    if (zoom != 1f) onScaleDelta(zoom)
+                    event.changes.forEach { it.consume() }
+                } else if (multiTouch) {
+                    // One finger left after a pinch: swallow it so it starts no dial.
+                    event.changes.forEach { it.consume() }
+                } else {
+                    val change = event.changes.firstOrNull { it.pressed }
+                    if (change != null) {
+                        val pos = change.position
+                        if (mode == DRAG_NONE) {
+                            val movedX = kotlin.math.abs(pos.x - start.x)
+                            val movedY = kotlin.math.abs(pos.y - start.y)
+                            if (movedX > slop || movedY > slop) {
+                                mode = if (movedY >= movedX) {
+                                    if (start.x < width / 2f) DRAG_BRIGHTNESS else DRAG_VOLUME
+                                } else {
+                                    DRAG_SEEK
+                                }
+                                if (mode == DRAG_SEEK) seekBase = player.currentPosition
+                            }
+                        }
+                        when (mode) {
+                            DRAG_BRIGHTNESS -> {
+                                onBrightnessDelta((last.y - pos.y) / height * DIAL_SENSITIVITY)
+                                change.consume()
+                            }
+                            DRAG_VOLUME -> {
+                                onVolumeDelta((last.y - pos.y) / height * DIAL_SENSITIVITY)
+                                change.consume()
+                            }
+                            DRAG_SEEK -> {
+                                val duration = player.duration
+                                if (duration > 0) {
+                                    val delta = ((pos.x - start.x) / width * SEEK_SPAN_MS).toLong()
+                                    onSeekPreview((seekBase + delta).coerceIn(0L, duration))
+                                }
+                                change.consume()
+                            }
+                            else -> Unit
+                        }
+                        last = pos
+                    }
+                }
+                if (event.changes.all { !it.pressed }) break
+            }
+            if (mode == DRAG_SEEK) onSeekCommit()
+            onGestureEnd()
+        }
+    }
+    .pointerInput(Unit) {
+        detectTapGestures(
+            onTap = { onShowControls() },
+            onDoubleTap = { if (player.isPlaying) player.pause() else player.play() },
+        )
+    }
 
 /**
  * Saves where the playing file is now, so it reopens there. A file within a
