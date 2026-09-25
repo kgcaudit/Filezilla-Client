@@ -144,6 +144,8 @@ class IconMeaningTest {
         "KeyboardArrowDown" to setOf("sites_move_down"),
         // Taking a removable volume out.
         "Eject" to setOf("storage_eject"),
+        // The player's sleep timer: stop playing after a while.
+        "Bedtime" to setOf("sleep_timer"),
     )
 
     @Test

@@ -8,6 +8,8 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Bundle
+import android.os.SystemClock
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
@@ -48,6 +50,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
@@ -107,6 +110,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
+import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
@@ -397,8 +401,7 @@ private fun MusicPlayer(
                         textAlign = TextAlign.Center,
                         modifier = Modifier.weight(1f),
                     )
-                    // Balance the back button so the label sits centred.
-                    Spacer(Modifier.width(48.dp))
+                    SleepTimerButton(player = player, tint = onDark)
                 }
 
                 Spacer(Modifier.weight(1f))
@@ -771,6 +774,165 @@ private fun musicSubtitle(tags: MusicTags?, unknownArtist: String): String {
 /** A playable for a song: a plain media item, no subtitle sidecars to look for. */
 @androidx.annotation.OptIn(UnstableApi::class)
 private fun audioMediaItem(file: File): MediaItem = buildMediaItem(Uri.fromFile(file), emptyList())
+
+/**
+ * The sleep-timer button, for both players.
+ *
+ * The timer itself lives in the playback service, so it stops the sound even with
+ * the app in the background and the screen off. This is only its face: a moon that
+ * lights up while a timer is set, a sheet to choose the minutes, and a countdown
+ * kept in step with the service -- asked once on opening, then run down here.
+ */
+@androidx.annotation.OptIn(UnstableApi::class)
+@Composable
+private fun SleepTimerButton(player: MediaController, tint: Color) {
+    // When the pause is due, on the same elapsed-time clock the service uses, and
+    // the seconds left counted down from it. Held across a rotation so the moon
+    // stays lit and the count does not restart.
+    var dueElapsed by rememberSaveable { mutableLongStateOf(0L) }
+    var remainingMs by remember { mutableLongStateOf(0L) }
+    var showPicker by remember { mutableStateOf(false) }
+
+    // On opening, ask the service how long is left, so a timer set on one screen
+    // shows on the next and survives coming back from the background.
+    LaunchedEffect(player) {
+        val remaining = querySleepRemaining(player)
+        dueElapsed = if (remaining > 0L) SystemClock.elapsedRealtime() + remaining else 0L
+    }
+    // Count down while a timer is set; clear it when it runs out.
+    LaunchedEffect(dueElapsed) {
+        if (dueElapsed <= 0L) {
+            remainingMs = 0L
+            return@LaunchedEffect
+        }
+        while (true) {
+            val left = (dueElapsed - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+            remainingMs = left
+            if (left <= 0L) {
+                dueElapsed = 0L
+                break
+            }
+            kotlinx.coroutines.delay(1000)
+        }
+    }
+    val active = dueElapsed > 0L
+
+    IconButton(onClick = { showPicker = true }) {
+        Icon(
+            Icons.Filled.Bedtime,
+            contentDescription = stringResource(R.string.sleep_timer),
+            tint = if (active) Color(0xFFE8A183) else tint,
+        )
+    }
+
+    if (showPicker) {
+        SleepTimerSheet(
+            remainingMs = if (active) remainingMs else 0L,
+            onPick = { minutes ->
+                sendSleep(player, minutes)
+                dueElapsed = if (minutes > 0) {
+                    SystemClock.elapsedRealtime() + minutes * 60_000L
+                } else {
+                    0L
+                }
+                showPicker = false
+            },
+            onDismiss = { showPicker = false },
+        )
+    }
+}
+
+// The choices the sleep timer offers, in minutes; zero turns it off.
+private val SLEEP_TIMER_OPTIONS = listOf(0, 15, 30, 45, 60)
+
+/**
+ * The sleep-timer choices, in a small dark panel in the middle of the screen: how
+ * much is left if a timer is running, then off and the minute options. A tap
+ * outside puts it away.
+ */
+@Composable
+private fun SleepTimerSheet(
+    remainingMs: Long,
+    onPick: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val accent = Color(0xFFE8A183)
+    val backdrop = remember { MutableInteractionSource() }
+    val panel = remember { MutableInteractionSource() }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.6f))
+            .clickable(interactionSource = backdrop, indication = null, onClick = onDismiss),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth(0.72f)
+                .widthIn(max = 360.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xFF1B1815))
+                .clickable(interactionSource = panel, indication = null, onClick = {})
+                .padding(vertical = 14.dp),
+        ) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.sleep_timer),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                )
+                if (remainingMs > 0L) {
+                    Text(
+                        stringResource(R.string.sleep_timer_left, clock(remainingMs)),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = accent,
+                    )
+                }
+            }
+            for (minutes in SLEEP_TIMER_OPTIONS) {
+                val label = if (minutes == 0) {
+                    stringResource(R.string.sleep_timer_off)
+                } else {
+                    stringResource(R.string.sleep_timer_minutes, minutes)
+                }
+                Text(
+                    label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onPick(minutes) }
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                )
+            }
+        }
+    }
+}
+
+/** Sets or cancels the service's sleep timer; a non-positive minutes cancels it. */
+@androidx.annotation.OptIn(UnstableApi::class)
+private fun sendSleep(player: MediaController, minutes: Int) {
+    val action = if (minutes > 0) PlaybackService.CMD_SLEEP_SET else PlaybackService.CMD_SLEEP_CANCEL
+    val args = Bundle().apply {
+        if (minutes > 0) putInt(PlaybackService.EXTRA_SLEEP_MINUTES, minutes)
+    }
+    player.sendCustomCommand(SessionCommand(action, Bundle.EMPTY), args)
+}
+
+/** Asks the service how many milliseconds are left on the sleep timer, or zero. */
+@androidx.annotation.OptIn(UnstableApi::class)
+private suspend fun querySleepRemaining(player: MediaController): Long {
+    val future =
+        player.sendCustomCommand(SessionCommand(PlaybackService.CMD_SLEEP_QUERY, Bundle.EMPTY), Bundle.EMPTY)
+    val result = withContext(Dispatchers.IO) { runCatching { future.get() }.getOrNull() }
+    return result?.extras?.getLong(PlaybackService.EXTRA_SLEEP_REMAINING, 0L) ?: 0L
+}
 
 /**
  * Connects to the playback service and hands back its controller, or null while
@@ -1353,6 +1515,7 @@ private fun MediaPlayer(
                             .weight(1f)
                             .padding(horizontal = 4.dp),
                     )
+                    SleepTimerButton(player = player, tint = Color.White)
                     IconButton(
                         onClick = {
                             resizeMode = when (resizeMode) {

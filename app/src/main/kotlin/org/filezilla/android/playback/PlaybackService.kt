@@ -1,6 +1,10 @@
 package org.filezilla.android.playback
 
 import android.content.Intent
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -11,6 +15,9 @@ import androidx.media3.session.CommandButton
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionCommands
+import androidx.media3.session.SessionResult
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -41,13 +48,58 @@ class PlaybackService : MediaSessionService() {
     // until a loaded item says otherwise.
     private var currentIsAudio = false
 
-    private companion object {
-        const val SEEK_STEP_MS = 10_000L
+    companion object {
+        private const val SEEK_STEP_MS = 10_000L
 
         // The sound extensions, mirroring the file list's own (FileKind): what
         // opens as a song rather than a film, and so gets the music controls.
-        val AUDIO_EXTENSIONS = setOf("mp3", "flac", "wav", "aac", "ogg", "m4a", "wma", "opus")
+        private val AUDIO_EXTENSIONS =
+            setOf("mp3", "flac", "wav", "aac", "ogg", "m4a", "wma", "opus")
+
+        // The sleep timer, driven from the player screen: set it going for a
+        // number of minutes, cancel it, or ask how long is left. The work is done
+        // here, in the service, so the timer stops the sound even with the app in
+        // the background and the screen off -- which is the whole point of it.
+        const val CMD_SLEEP_SET = "org.filezilla.android.SLEEP_SET"
+        const val CMD_SLEEP_CANCEL = "org.filezilla.android.SLEEP_CANCEL"
+        const val CMD_SLEEP_QUERY = "org.filezilla.android.SLEEP_QUERY"
+        const val EXTRA_SLEEP_MINUTES = "minutes"
+        const val EXTRA_SLEEP_REMAINING = "remaining"
     }
+
+    // The pending sleep-timer pause, and when it is due, on the elapsed-time
+    // clock so a change of wall clock cannot move it. Zero means none set.
+    private val sleepHandler = Handler(Looper.getMainLooper())
+    private var sleepRunnable: Runnable? = null
+    private var sleepDueElapsed = 0L
+
+    private fun setSleepTimer(minutes: Int) {
+        cancelSleepTimer()
+        if (minutes <= 0) return
+        val delay = minutes * 60_000L
+        sleepDueElapsed = SystemClock.elapsedRealtime() + delay
+        val runnable = Runnable {
+            session?.player?.let { if (it.isPlaying) it.pause() }
+            sleepDueElapsed = 0L
+            sleepRunnable = null
+        }
+        sleepRunnable = runnable
+        sleepHandler.postDelayed(runnable, delay)
+    }
+
+    private fun cancelSleepTimer() {
+        sleepRunnable?.let { sleepHandler.removeCallbacks(it) }
+        sleepRunnable = null
+        sleepDueElapsed = 0L
+    }
+
+    /** Milliseconds left on the sleep timer, or zero when none is set. */
+    private fun sleepRemainingMs(): Long =
+        if (sleepDueElapsed > 0L) {
+            (sleepDueElapsed - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+        } else {
+            0L
+        }
 
     /** Whether [item] is a sound, read from its file extension. */
     private fun isAudioItem(item: MediaItem?): Boolean {
@@ -70,6 +122,18 @@ class PlaybackService : MediaSessionService() {
             .remove(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
             .build()
 
+    // The default session commands plus the app's own sleep-timer ones, so a
+    // controller may set, cancel and query the timer. Used both when a controller
+    // connects and whenever the player commands are refreshed, so the custom ones
+    // are never dropped in the refresh.
+    @UnstableApi
+    private fun sessionCommands(): SessionCommands =
+        MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+            .add(SessionCommand(CMD_SLEEP_SET, Bundle.EMPTY))
+            .add(SessionCommand(CMD_SLEEP_CANCEL, Bundle.EMPTY))
+            .add(SessionCommand(CMD_SLEEP_QUERY, Bundle.EMPTY))
+            .build()
+
     /**
      * Grants or withholds the between-file skip to every connected controller --
      * the app's own, and the internal one the notification draws from -- to match
@@ -82,11 +146,7 @@ class PlaybackService : MediaSessionService() {
         val session = session ?: return
         val commands = if (currentIsAudio) fullPlayerCommands() else videoPlayerCommands()
         for (controller in session.connectedControllers) {
-            session.setAvailableCommands(
-                controller,
-                MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS,
-                commands,
-            )
+            session.setAvailableCommands(controller, sessionCommands(), commands)
         }
     }
 
@@ -201,7 +261,30 @@ class PlaybackService : MediaSessionService() {
             val playerCommands = if (currentIsAudio) fullPlayerCommands() else videoPlayerCommands()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailablePlayerCommands(playerCommands)
+                .setAvailableSessionCommands(sessionCommands())
                 .build()
+        }
+
+        // The sleep-timer commands: set it for a number of minutes, cancel it, or
+        // ask how long is left. Each replies with the milliseconds remaining, so
+        // the screen that asked can show and count down the same figure the
+        // service is keeping.
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            customCommand: SessionCommand,
+            args: Bundle,
+        ): ListenableFuture<SessionResult> {
+            when (customCommand.customAction) {
+                CMD_SLEEP_SET -> setSleepTimer(args.getInt(EXTRA_SLEEP_MINUTES, 0))
+                CMD_SLEEP_CANCEL -> cancelSleepTimer()
+                CMD_SLEEP_QUERY -> Unit
+                else -> return Futures.immediateFuture(
+                    SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED),
+                )
+            }
+            val extras = Bundle().apply { putLong(EXTRA_SLEEP_REMAINING, sleepRemainingMs()) }
+            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS, extras))
         }
 
         override fun onAddMediaItems(
@@ -245,6 +328,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        cancelSleepTimer()
         session?.run {
             player.release()
             release()

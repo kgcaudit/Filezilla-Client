@@ -295,6 +295,11 @@
     <string name="music_queue">Playlist</string>
     <string name="music_speed">%1$s× speed</string>
     <string name="music_unknown_artist">Unknown artist</string>
+    <!-- Stops playback on its own after a while, for falling asleep to. -->
+    <string name="sleep_timer">Sleep timer</string>
+    <string name="sleep_timer_off">Off</string>
+    <string name="sleep_timer_minutes">%1$d min</string>
+    <string name="sleep_timer_left">%1$s left</string>
     <string name="transfers_running">%1$d transferring</string>
     <string name="transfers_waiting">%1$d waiting to transfer</string>
     <string name="transfers_percent">%1$d%%</string>
