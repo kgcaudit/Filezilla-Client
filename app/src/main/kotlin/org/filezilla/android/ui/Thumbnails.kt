@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.filezilla.android.viewer.ImageFiles
 
 /**
  * Small thumbnails for the file list -- a picture's own image, a film's first
@@ -72,7 +73,8 @@ object Thumbnails {
     }
 
     // Decoded at a sample rate that lands near the wanted size, so a full-size
-    // photo is never held in memory just to draw it at 40dp.
+    // photo is never held in memory just to draw it at 40dp, then turned upright
+    // by its EXIF tag so a portrait photo is not shown on its side.
     private fun decodeImage(file: File, sizePx: Int): Bitmap? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.path, bounds)
@@ -80,7 +82,8 @@ object Thumbnails {
         var sample = 1
         while (longest / (sample * 2) >= sizePx) sample *= 2
         val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-        return BitmapFactory.decodeFile(file.path, opts)
+        val bitmap = BitmapFactory.decodeFile(file.path, opts) ?: return null
+        return ImageFiles.oriented(bitmap, ImageFiles.orientationOf(file))
     }
 
     private fun decodeVideoFrame(file: File, sizePx: Int): Bitmap? =

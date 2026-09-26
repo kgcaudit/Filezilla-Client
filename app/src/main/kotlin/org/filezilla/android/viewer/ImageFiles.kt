@@ -3,8 +3,11 @@ package org.filezilla.android.viewer
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.BitmapRegionDecoder
+import android.graphics.Matrix
 import android.graphics.Rect
+import android.media.ExifInterface
 import android.util.Size
+import java.io.ByteArrayInputStream
 import java.io.File
 
 /**
@@ -45,7 +48,8 @@ object ImageFiles {
         val options = BitmapFactory.Options().apply {
             inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, reqWidth, reqHeight)
         }
-        return runCatching { BitmapFactory.decodeFile(file.path, options) }.getOrNull()
+        val bitmap = runCatching { BitmapFactory.decodeFile(file.path, options) }.getOrNull()
+        return bitmap?.let { oriented(it, orientationOf(file)) }
     }
 
     /**
@@ -64,8 +68,62 @@ object ImageFiles {
         val options = BitmapFactory.Options().apply {
             inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, reqWidth, reqHeight)
         }
-        return runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) }.getOrNull()
+        val bitmap = runCatching {
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+        }.getOrNull()
+        return bitmap?.let { oriented(it, orientationOf(bytes)) }
     }
+
+    /**
+     * A picture as it was taken, from its EXIF orientation tag.
+     *
+     * A phone camera writes the picture the way the sensor read it and records
+     * the turn to make it upright in a tag, rather than turning the pixels. A
+     * plain decode ignores the tag, so a photo taken in portrait comes out on its
+     * side. This turns (or flips) the decoded bitmap to match the tag; a picture
+     * with no tag, or an upright one, is returned unchanged. The pre-turn bitmap
+     * is freed, since it is this object's own and nothing else holds it.
+     */
+    fun oriented(bitmap: Bitmap, orientation: Int): Bitmap {
+        val matrix = Matrix()
+        when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
+            ExifInterface.ORIENTATION_TRANSPOSE -> {
+                matrix.postRotate(90f)
+                matrix.postScale(-1f, 1f)
+            }
+            ExifInterface.ORIENTATION_TRANSVERSE -> {
+                matrix.postRotate(270f)
+                matrix.postScale(-1f, 1f)
+            }
+            else -> return bitmap
+        }
+        val turned = runCatching {
+            Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        }.getOrNull() ?: return bitmap
+        if (turned != bitmap) bitmap.recycle()
+        return turned
+    }
+
+    /** The EXIF orientation tag of [file], or normal when there is none. */
+    fun orientationOf(file: File): Int = runCatching {
+        ExifInterface(file.path).getAttributeInt(
+            ExifInterface.TAG_ORIENTATION,
+            ExifInterface.ORIENTATION_NORMAL,
+        )
+    }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
+
+    /** The EXIF orientation tag read from image [bytes], or normal when there is none. */
+    private fun orientationOf(bytes: ByteArray): Int = runCatching {
+        ExifInterface(ByteArrayInputStream(bytes)).getAttributeInt(
+            ExifInterface.TAG_ORIENTATION,
+            ExifInterface.ORIENTATION_NORMAL,
+        )
+    }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
 
     /**
      * The largest power of two by which [width]x[height] can be halved and
