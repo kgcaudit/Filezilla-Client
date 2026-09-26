@@ -93,6 +93,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -1546,13 +1547,17 @@ private fun MediaPlayer(
     val onScaleDelta: (Float) -> Unit = { factor ->
         videoScale = (videoScale * factor).coerceIn(MIN_VIDEO_SCALE, MAX_VIDEO_SCALE)
     }
-    // The zoom scales the video surface itself, not the whole player view, so the
-    // built-in controls keep their place at the screen's edges while the picture
-    // grows or shrinks -- enlarging no longer pushes the seek bar off the bottom.
-    LaunchedEffect(playerViewRef, videoScale) {
-        playerViewRef?.videoSurfaceView?.let { surface ->
-            surface.scaleX = videoScale
-            surface.scaleY = videoScale
+    // The zoom scales the whole player view (see the graphicsLayer below), which
+    // is the only box that fills the screen -- the content frame sizes itself to
+    // the film's letterbox, so scaling that would confine the zoom to no effect.
+    // Scaling the whole view would carry the controls off with it, so the control
+    // box is scaled back by the inverse: both turn about the screen's centre, so
+    // the two cancel and the controls hold their size and place while the picture
+    // grows. Re-applied when the controls appear, in case showing them resets it.
+    LaunchedEffect(playerViewRef, videoScale, controlsVisible) {
+        playerViewRef?.findViewById<View?>(androidx.media3.ui.R.id.exo_controller)?.let { controls ->
+            controls.scaleX = 1f / videoScale
+            controls.scaleY = 1f / videoScale
         }
     }
     // Whether the picture has been zoomed off its own size, so the "back to 1x"
@@ -1618,7 +1623,12 @@ private fun MediaPlayer(
                 // controller itself outlives this (it is the service's) and is
                 // released separately.
                 onRelease = { it.player = null },
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = videoScale
+                        scaleY = videoScale
+                    },
             )
             // The gesture layer: a full-screen sheet over the picture that reads
             // every touch, so shrinking the picture never shrinks where a gesture
