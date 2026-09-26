@@ -466,6 +466,12 @@
     <string name="archive_open_failed">Could not open %1$s: %2$s</string>
     <string name="archive_folder_exists_title">A folder named "%1$s" already exists</string>
     <string name="archive_folder_exists_detail">Choose what to do with the files it unpacks. The same choice is used for every file.</string>
+    <string name="archive_extract_where_title">Unpack</string>
+    <string name="archive_extract_where_detail">Where should %1$s be unpacked?</string>
+    <string name="archive_extract_new_folder">Into a new folder</string>
+    <string name="archive_extract_new_folder_detail">Makes a folder named after the archive and unpacks into it.</string>
+    <string name="archive_extract_here">Into this folder</string>
+    <string name="archive_extract_here_detail">Unpacks straight into this folder, replacing same-name files.</string>
     <string name="action_search">Search</string>
     <string name="viewer_edit">Edit</string>
     <string name="viewer_done_editing">Done</string>

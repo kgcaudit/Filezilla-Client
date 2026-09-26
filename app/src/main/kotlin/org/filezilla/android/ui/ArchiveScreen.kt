@@ -214,6 +214,38 @@ fun ArchiveConflictDialog(
 }
 
 /**
+ * The question before an unpack: a new folder named for the archive, or straight
+ * into the folder the archive is in.
+ *
+ * The two are the same choice a desktop archiver offers -- "extract to
+ * name\\" or "extract here" -- worded plainly, each with a line saying what it
+ * does. The same answer covers the whole archive, or a batch of them.
+ */
+@Composable
+fun ExtractDestinationDialog(
+    archiveName: String,
+    onChoose: (MainViewModel.ExtractMode) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    OloDialog(
+        title = stringResource(R.string.archive_extract_where_title),
+        detail = stringResource(R.string.archive_extract_where_detail, archiveName),
+        onDismiss = onDismiss,
+        content = {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                ConflictRow(
+                    R.string.archive_extract_new_folder, R.string.archive_extract_new_folder_detail,
+                ) { onChoose(MainViewModel.ExtractMode.NEW_FOLDER) }
+                ConflictRow(
+                    R.string.archive_extract_here, R.string.archive_extract_here_detail,
+                ) { onChoose(MainViewModel.ExtractMode.HERE) }
+            }
+        },
+        action = {},
+    )
+}
+
+/**
  * How to compress several picked items: how they are bundled, and their shape.
  *
  * Bundling is one archive for all or one apiece -- a folder of chapters kept

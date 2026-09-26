@@ -89,6 +89,8 @@ class BatchExtractTest {
         }
 
         model.extractArchives(PaneId.LEFT, listOf("one.zip", "two.zip"))
+        // Unpacking now asks new-folder-or-here first; answer as the old flow did.
+        model.chooseExtractMode(MainViewModel.ExtractMode.NEW_FOLDER)
 
         // Each archive lands in its own folder beside it. The regression is the
         // second folder: on the old batch loop it never arrived.

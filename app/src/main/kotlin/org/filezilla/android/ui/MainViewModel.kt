@@ -2917,7 +2917,58 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val isFolder = session.entries.none { it.path == base && !it.isDirectory }
             if (isFolder) "$base/" else base
         }.let { ArchiveBrowsing.expand(session.entries, it) }
-        askDestination(id, session, picks)
+        extractModeAsk = PendingExtract.Opened(id, session, picks)
+    }
+
+    /** Whether an unpack makes a folder of the archive's name, or lands as-is. */
+    enum class ExtractMode { NEW_FOLDER, HERE }
+
+    /** An unpack waiting on the "new folder, or here" answer. */
+    sealed interface PendingExtract {
+        val archiveName: String
+
+        data class Opened(
+            val id: PaneId,
+            val session: ArchiveSession,
+            val picks: Set<String>,
+        ) : PendingExtract {
+            override val archiveName: String get() = session.name
+        }
+
+        data class Rows(val id: PaneId, val names: List<String>) : PendingExtract {
+            override val archiveName: String get() = names.firstOrNull().orEmpty()
+        }
+    }
+
+    var extractModeAsk by mutableStateOf<PendingExtract?>(null)
+        private set
+
+    fun dismissExtractMode() {
+        extractModeAsk = null
+    }
+
+    /**
+     * The answer to "unpack into a new folder, or straight into this one".
+     * New-folder keeps today's behaviour (a folder named for the archive, with
+     * the folder-exists question); here drops the files beside the archive,
+     * replacing any of the same name.
+     */
+    fun chooseExtractMode(mode: ExtractMode) {
+        val pending = extractModeAsk ?: return
+        extractModeAsk = null
+        when (pending) {
+            is PendingExtract.Opened -> when (mode) {
+                ExtractMode.NEW_FOLDER -> askDestination(pending.id, pending.session, pending.picks)
+                ExtractMode.HERE -> beginExtract(
+                    pending.id,
+                    pending.session,
+                    pending.picks,
+                    into = unpackInto(pending.session.file),
+                    overwrite = true,
+                )
+            }
+            is PendingExtract.Rows -> extractRows(pending.id, pending.names, mode)
+        }
     }
 
     /** An unpack whose destination folder already exists, awaiting an answer. */
@@ -2995,14 +3046,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * to compress -- into a new folder beside it.
      */
     fun extractArchives(id: PaneId, names: List<String>) {
+        if (names.isEmpty()) return
+        extractModeAsk = PendingExtract.Rows(id, names)
+    }
+
+    private fun extractRows(id: PaneId, names: List<String>, mode: ExtractMode) {
         val folder = pane(id).path.takeIf { it.isNotEmpty() && pane(id).isLocal } ?: return
         val files = names.map { java.io.File(folder, it) }.filter { ArchiveNav.browsable(it.name) }
         if (files.isEmpty()) return
         clearSelectionIn(id)
-        // One archive gets the same destination question as one opened and
-        // unpacked; several keep numbering, so a batch is not a wall of
-        // prompts.
-        if (files.size == 1) {
+        // One archive, unpacked into a new folder, gets the same destination
+        // question as one opened and unpacked; several keep numbering, so a
+        // batch is not a wall of prompts. Unpacking here needs no such question,
+        // so it goes straight through the batch path either way.
+        if (files.size == 1 && mode == ExtractMode.NEW_FOLDER) {
             val file = files.first()
             archiveOpening = file.name
             viewModelScope.launch {
@@ -3017,7 +3074,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         } else {
-            extractNext(id, files, 0)
+            extractNext(id, files, 0, mode)
         }
     }
 
@@ -3027,7 +3084,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * keeps numbering rather than a folder dialog per archive, which would be
      * a wall of prompts.
      */
-    private fun extractNext(id: PaneId, files: List<java.io.File>, index: Int) {
+    private fun extractNext(id: PaneId, files: List<java.io.File>, index: Int, mode: ExtractMode) {
         if (index >= files.size) {
             relistLocalPanes()
             return
@@ -3038,11 +3095,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val opened = withContext(Dispatchers.IO) { runCatching { Archives.open(file).use { it.entries } } }
             archiveOpening = null
             val session = opened.getOrNull()?.let { ArchiveSession(file, file.name, file.parent ?: "", it) }
-            val into = java.io.File(unpackInto(file), freeNameIn(file.parent ?: "", Archives.folderNameFor(file.name)))
+            // A new folder for each, numbered so several never collide; or the
+            // archive's own folder, files landing beside it and replacing any of
+            // the same name.
+            val into = when (mode) {
+                ExtractMode.NEW_FOLDER ->
+                    java.io.File(unpackInto(file), freeNameIn(file.parent ?: "", Archives.folderNameFor(file.name)))
+                ExtractMode.HERE -> unpackInto(file)
+            }
             when {
                 session == null -> {
                     archiveOutcome = ArchiveOutcome(R.string.archive_not_readable)
-                    extractNext(id, files, index + 1)
+                    extractNext(id, files, index + 1, mode)
                 }
                 // A locked one asks for its password; extracting it and going
                 // on is left to the answer, so the prompt is not racing the
@@ -3052,7 +3116,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     archivePasswordAsked = true
                 }
                 else -> runExtract(id, session, emptySet(), into, overwrite = true, null) {
-                    extractNext(id, files, index + 1)
+                    extractNext(id, files, index + 1, mode)
                 }
             }
         }

@@ -833,6 +833,14 @@ private fun AppScreen(
         }
     }
 
+    model.extractModeAsk?.let { pending ->
+        ExtractDestinationDialog(
+            archiveName = pending.archiveName,
+            onChoose = model::chooseExtractMode,
+            onDismiss = model::dismissExtractMode,
+        )
+    }
+
     model.archiveConflict?.let { conflict ->
         ArchiveConflictDialog(
             folderName = conflict.folderName,
