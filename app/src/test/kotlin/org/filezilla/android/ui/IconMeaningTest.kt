@@ -92,6 +92,9 @@ class IconMeaningTest {
         // this in words now -- three kinds of clearing no three pictures
         // would tell apart -- so the broom is the log screen's alone.
         "DeleteSweep" to setOf("log_clear", "recents_clear"),
+        // Emptying the trash: not a list being forgotten but files being
+        // erased for good, so the stronger bin-with-a-cross, not the broom.
+        "DeleteForever" to setOf("trash_empty"),
         // Making transfers go, whether one of them or all of them.
         "PlayArrow" to setOf("queue_resume", "queue_start_all", "music_play"),
         "Pause" to setOf("queue_pause", "queue_pause_all", "music_pause"),

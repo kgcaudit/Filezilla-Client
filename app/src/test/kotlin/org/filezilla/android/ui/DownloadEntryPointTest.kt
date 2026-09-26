@@ -150,14 +150,16 @@ class DownloadEntryPointTest {
      */
     @Test
     fun `only one place copies or moves what is held`() {
-        // The copy and the move themselves live in one pure function,
-        // pasteLocally, and only in the file that holds it -- so a second
-        // place writing files behind the paste would show up here.
+        // The copy and the move behind a paste live in one pure function,
+        // pasteLocally, and only in the file that holds it; the trash's own
+        // moves -- a delete that stashes and a restore that puts back -- live
+        // the same way in Trash.kt. Two named places, so a third one writing
+        // files behind a delete or a paste would show up here.
         val copyMoveFiles = uiSources()
             .filter { (_, source) -> "LocalOperations.copy(" in source || "LocalOperations.move(" in source }
             .map { it.first }
             .toSet()
-        assertEquals(setOf("PasteConflicts.kt"), copyMoveFiles)
+        assertEquals(setOf("PasteConflicts.kt", "Trash.kt"), copyMoveFiles)
         // And the view model reaches that one function through runPaste alone.
         assertEquals(setOf("runPaste"), membersContaining("pasteLocally("))
     }

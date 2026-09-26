@@ -32,6 +32,7 @@ import org.filezilla.android.archive.RarNative
 import org.filezilla.android.archive.SevenZipNative
 import org.filezilla.android.archive.ExtractResult
 import org.filezilla.android.data.RecentEntry
+import org.filezilla.android.data.TrashEntry
 import org.filezilla.android.data.SiteEntity
 import org.filezilla.android.files.FileMode
 import org.filezilla.ftp.transfer.TransferAbort
@@ -1294,7 +1295,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (names.isEmpty()) return
         update(id) { it.copy(selection = emptySet(), selecting = false) }
         writeThen(id) {
-            for (name in names) LocalOperations.delete(FilePath.child(pane(id).path, name))
+            for (name in names) trashLocal(FilePath.child(pane(id).path, name))
         }
     }
 
@@ -2037,6 +2038,104 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 openTextViewer(file, editable = true)
                 null
             }
+        }
+    }
+
+    // ------------------------------------------------------------ trash
+
+    /**
+     * Where deleted local files wait until the trash is emptied. It sits
+     * under the app's own external files, so it shares a volume with most
+     * user files and a delete becomes an instant rename rather than a copy.
+     */
+    private fun trashDir(): java.io.File {
+        val app = getApplication<Application>()
+        return java.io.File(app.getExternalFilesDir(null) ?: app.filesDir, "trash").also { it.mkdirs() }
+    }
+
+    /**
+     * Moves a local file into the trash rather than erasing it, keeping a
+     * note of where it came from so it can be put back. Runs on the write
+     * thread [deleteSelection]/[delete] already switched to, and touches no
+     * UI state -- the screen re-reads storage when it opens.
+     */
+    private fun trashLocal(path: String) {
+        val src = java.io.File(FilePath.normalize(path))
+        if (!src.exists()) return
+        val name = Trash.stash(trashDir(), src)
+        graph.preferences.addTrash(name, src.absolutePath, System.currentTimeMillis())
+    }
+
+    /**
+     * The trashed files, most recently deleted first -- what the trash screen
+     * shows. Held as state so the screen redraws as items are restored,
+     * removed, or the trash is emptied; the stored list is the source of truth.
+     */
+    var trash by mutableStateOf<List<TrashEntry>>(emptyList())
+        private set
+
+    /** Re-reads the trash from storage, for when the screen opens. */
+    fun refreshTrash() {
+        trash = graph.preferences.trash()
+    }
+
+    /** The file on disk that backs a trash entry, for its thumbnail. */
+    fun trashFile(entry: TrashEntry): java.io.File = java.io.File(trashDir(), entry.trashName)
+
+    /**
+     * The volume a trashed file originally sat on, named the way the storage
+     * list names it -- shown so a file can be told apart from its namesakes.
+     */
+    fun trashSource(originalPath: String): String = recentSource(originalPath)
+
+    /**
+     * Puts a trashed file back where it came from. If its old folder is gone
+     * it is recreated; if a file now sits at the old name the restored one is
+     * given a free name beside it, so nothing is overwritten. Re-lists the
+     * local panes when done, so a restore into the open folder shows at once.
+     */
+    fun restoreFromTrash(entry: TrashEntry) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val stored = java.io.File(trashDir(), entry.trashName)
+                    if (!stored.exists()) return@runCatching
+                    val original = java.io.File(entry.originalPath)
+                    val parent = original.parentFile
+                    if (parent != null && !parent.exists()) parent.mkdirs()
+                    val into = parent?.absolutePath ?: FilePath.ROOT
+                    Trash.restore(stored, into, original.name)
+                }
+                graph.preferences.removeTrash(entry.trashName)
+            }
+            trash = graph.preferences.trash()
+            relistLocalPanes()
+        }
+    }
+
+    /** Erases one trashed file for good and drops it from the list. */
+    fun deleteFromTrashForever(entry: TrashEntry) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching { LocalOperations.delete(java.io.File(trashDir(), entry.trashName).absolutePath) }
+                graph.preferences.removeTrash(entry.trashName)
+            }
+            trash = graph.preferences.trash()
+        }
+    }
+
+    /** Erases everything in the trash for good. */
+    fun emptyTrash() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    for (child in trashDir().listFiles().orEmpty()) {
+                        LocalOperations.delete(child.absolutePath)
+                    }
+                }
+                graph.preferences.clearTrash()
+            }
+            trash = emptyList()
         }
     }
 
@@ -4050,7 +4149,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun delete(entry: DirectoryEntry) {
         val id = activePane
         if (pane(id).isLocal) {
-            writeThen(id) { LocalOperations.delete(FilePath.child(pane(id).path, entry.name)) }
+            writeThen(id) { trashLocal(FilePath.child(pane(id).path, entry.name)) }
             return
         }
         removeRemotely(id, listOf(entry))

@@ -339,6 +339,7 @@ fun FilePanes(
     if (confirmingDelete) {
         ConfirmDelete(
             count = state.selection.size,
+            isLocal = state.isLocal,
             onDismiss = { confirmingDelete = false },
             onConfirm = {
                 model.deleteSelectionIn(active)
@@ -348,12 +349,20 @@ fun FilePanes(
     }
 }
 
-/** Deleting takes folders with everything in them, so it is asked about first. */
+/**
+ * Deleting takes folders with everything in them, so it is asked about first.
+ *
+ * A file on the phone goes to the trash and can be put back, so the warning
+ * says so; a file on a server has no trash to fall into and is gone for good,
+ * so there it keeps the sterner "cannot be undone".
+ */
 @Composable
-private fun ConfirmDelete(count: Int, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+private fun ConfirmDelete(count: Int, isLocal: Boolean, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     OloConfirmDialog(
         title = pluralStringResource(R.plurals.confirm_delete_selected, count, count),
-        detail = stringResource(R.string.confirm_delete_detail),
+        detail = stringResource(
+            if (isLocal) R.string.confirm_delete_detail_local else R.string.confirm_delete_detail,
+        ),
         confirmLabel = stringResource(R.string.action_delete),
         onDismiss = onDismiss,
         onConfirm = onConfirm,

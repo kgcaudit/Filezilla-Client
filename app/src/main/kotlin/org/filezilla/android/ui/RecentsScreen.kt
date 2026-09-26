@@ -283,7 +283,7 @@ enum class RecentGroup(val label: Int) {
     EARLIER(R.string.recents_group_earlier),
 }
 
-private object RecentDays {
+internal object RecentDays {
     fun today(): Long = startOfDay(0)
     fun yesterday(): Long = startOfDay(-1)
 

@@ -27,6 +27,13 @@
     <string name="recents_clear">Clear history</string>
     <string name="recents_empty">Nothing opened yet</string>
     <string name="recents_empty_detail">Files you open in a viewer show up here.</string>
+    <string name="title_trash">Trash</string>
+    <string name="trash_open">Deleted files</string>
+    <string name="trash_empty">Empty trash</string>
+    <string name="trash_restore">Restore</string>
+    <string name="trash_delete_forever">Delete permanently</string>
+    <string name="trash_empty_title">Trash is empty</string>
+    <string name="trash_empty_detail">Files you delete from the phone wait here until you empty the trash.</string>
     <string name="recents_group_today">Today</string>
     <string name="recents_group_yesterday">Yesterday</string>
     <string name="recents_group_earlier">Earlier</string>
@@ -252,6 +259,7 @@
     <string name="new_folder_title">New folder</string>
     <string name="new_file_title">New file</string>
     <string name="confirm_delete_detail">Folders go with everything in them. This cannot be undone.</string>
+    <string name="confirm_delete_detail_local">Folders go with everything in them. Deleted files move to the trash, where you can restore them.</string>
     <string name="confirm_delete_one">Delete \u0022%1$s\u0022?</string>
     <string name="paste_no_server_copy">FTP cannot copy within one server. Cut instead, or paste into My files.</string>
     <string name="paste_move_here">Move %1$d item(s) here</string>

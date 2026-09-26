@@ -111,7 +111,10 @@ class WordingTest {
         // Verbs and nouns with one meaning, plus the screen names and the
         // three questions the panes and the old browser both ask.
         val allowed = listOf(
-            "action_cancel", "action_delete", "confirm_delete_detail", "filter_clear",
+            "action_cancel", "action_delete", "confirm_delete_detail",
+            // Same warning, said on the panes and on the old browser, for a
+            // delete that lands in the trash rather than erasing outright.
+            "confirm_delete_detail_local", "filter_clear",
             // The way out of a full-screen viewer, read on the back arrow of the
             // text reader and the image reader and on the reader's end card:
             // one "close" for the one thing it does, wherever it is shown.
@@ -174,6 +177,9 @@ class WordingTest {
             // The recents screen's name, on its bar and on the storage row
             // that opens it -- the row answers the screen, same as above.
             "title_recents",
+            // The trash screen's name, on its bar and on the storage row that
+            // opens it -- the row answers the screen, same as recents.
+            "title_trash",
             // "%1$d of %2$d", said by the delete-from-server dialog and by
             // the unpack and compress bars. One sentence with one meaning:
             // how far through a run of things the app is. Three ways of

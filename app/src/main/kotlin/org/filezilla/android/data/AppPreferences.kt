@@ -62,6 +62,31 @@ data class RecentEntry(val path: String, val time: Long) {
     }
 }
 
+/**
+ * One file waiting in the trash: the unique name it was given inside the trash
+ * folder, where it came from, and when it was thrown away.
+ *
+ * The name and kind of the file, and its size, are read back from the file in
+ * the trash when the list is shown, so nothing stored here can fall out of step
+ * with it. The original path is what a restore puts it back to.
+ */
+data class TrashEntry(val trashName: String, val originalPath: String, val time: Long) {
+
+    fun encode(): String = "$time\u0000$trashName\u0000$originalPath"
+
+    companion object {
+        fun decode(stored: String): TrashEntry? {
+            val parts = stored.split('\u0000')
+            if (parts.size < 3) return null
+            val time = parts[0].toLongOrNull() ?: return null
+            val trashName = parts[1]
+            val originalPath = parts.subList(2, parts.size).joinToString("\u0000")
+            if (trashName.isEmpty() || originalPath.isEmpty()) return null
+            return TrashEntry(trashName, originalPath, time)
+        }
+    }
+}
+
 class AppPreferences(context: Context) {
 
     private val prefs = context.getSharedPreferences("filezilla", Context.MODE_PRIVATE)
@@ -426,6 +451,30 @@ class AppPreferences(context: Context) {
     private fun writeRecents(entries: List<RecentEntry>) =
         prefs.edit().putString(KEY_RECENTS, entries.joinToString(KEY_SEPARATOR) { it.encode() }).apply()
 
+    /** The files in the trash, newest first. Bad rows are skipped, as for recents. */
+    fun trash(): List<TrashEntry> =
+        prefs.getString(KEY_TRASH, null)
+            ?.split(KEY_SEPARATOR)
+            ?.filter { it.isNotEmpty() }
+            ?.mapNotNull(TrashEntry::decode)
+            .orEmpty()
+
+    /** Records a file just moved into the trash, at the front of the list. */
+    fun addTrash(trashName: String, originalPath: String, time: Long) {
+        val kept = trash().toMutableList()
+        kept.add(0, TrashEntry(trashName, originalPath, time))
+        writeTrash(kept)
+    }
+
+    /** Drops one entry from the trash list (the file itself is removed elsewhere). */
+    fun removeTrash(trashName: String) = writeTrash(trash().filterNot { it.trashName == trashName })
+
+    /** Forgets the whole trash list. */
+    fun clearTrash() = prefs.edit().remove(KEY_TRASH).apply()
+
+    private fun writeTrash(entries: List<TrashEntry>) =
+        prefs.edit().putString(KEY_TRASH, entries.joinToString(KEY_SEPARATOR) { it.encode() }).apply()
+
     private fun comicKeys(): List<String> =
         prefs.getString(KEY_COMIC_KEYS, null)
             ?.split(KEY_SEPARATOR)
@@ -491,6 +540,7 @@ class AppPreferences(context: Context) {
         const val KEY_COMPRESS_SEPARATE = "compress_separate"
         const val KEY_COMPRESS_FLAT = "compress_flat"
         const val KEY_RECENTS = "recents"
+        const val KEY_TRASH = "trash"
 
         /** How many files the recents list keeps; the oldest goes first. */
         internal const val MAX_RECENTS = 100

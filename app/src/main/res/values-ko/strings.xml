@@ -26,6 +26,13 @@
     <string name="recents_clear">기록 삭제</string>
     <string name="recents_empty">아직 연 항목이 없습니다</string>
     <string name="recents_empty_detail">뷰어로 연 파일이 여기에 모입니다.</string>
+    <string name="title_trash">휴지통</string>
+    <string name="trash_open">삭제한 파일</string>
+    <string name="trash_empty">휴지통 비우기</string>
+    <string name="trash_restore">복원</string>
+    <string name="trash_delete_forever">영구 삭제</string>
+    <string name="trash_empty_title">휴지통이 비어 있습니다</string>
+    <string name="trash_empty_detail">휴대폰에서 삭제한 파일은 휴지통을 비우기 전까지 여기에 보관됩니다.</string>
     <string name="recents_group_today">오늘</string>
     <string name="recents_group_yesterday">어제</string>
     <string name="recents_group_earlier">이전</string>
@@ -249,6 +256,7 @@
     <string name="new_folder_title">새 폴더</string>
     <string name="new_file_title">새 파일</string>
     <string name="confirm_delete_detail">폴더는 안에 든 것까지 함께 삭제됩니다. 되돌릴 수 없습니다.</string>
+    <string name="confirm_delete_detail_local">폴더는 안에 든 것까지 함께 삭제됩니다. 삭제한 파일은 휴지통으로 이동하며 복원할 수 있습니다.</string>
     <string name="confirm_delete_one">\u0022%1$s\u0022을(를) 삭제할까요?</string>
     <string name="paste_no_server_copy">FTP는 같은 서버 안에서 복사할 수 없습니다. 잘라내거나, 내 파일로 붙여넣으세요.</string>
     <string name="paste_move_here">%1$d개를 여기로 옮기기</string>

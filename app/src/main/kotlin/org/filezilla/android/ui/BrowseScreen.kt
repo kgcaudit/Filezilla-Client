@@ -318,7 +318,9 @@ fun BrowseScreen(
     deleting?.let { entry ->
         OloConfirmDialog(
             title = stringResource(R.string.confirm_delete_one, entry.name),
-            detail = stringResource(R.string.confirm_delete_detail),
+            detail = stringResource(
+                if (state.isLocal) R.string.confirm_delete_detail_local else R.string.confirm_delete_detail,
+            ),
             confirmLabel = stringResource(R.string.action_delete),
             onDismiss = { deleting = null },
             onConfirm = {

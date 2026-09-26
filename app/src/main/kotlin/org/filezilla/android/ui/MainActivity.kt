@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -427,6 +428,16 @@ private fun AppScreen(
                             )
                         }
 
+                        // Emptying the trash erases its files for good, so it
+                        // is the stronger glyph -- a bin with a cross, not the
+                        // broom that only forgets a list.
+                        Screen.TRASH -> IconButton(onClick = { model.emptyTrash() }) {
+                            Icon(
+                                Icons.Filled.DeleteForever,
+                                contentDescription = stringResource(R.string.trash_empty),
+                            )
+                        }
+
                             Screen.SITES, Screen.FILES -> Unit
                         }
                     },
@@ -588,6 +599,8 @@ private fun AppScreen(
                 },
                 modifier = Modifier.padding(padding),
             )
+
+            Screen.TRASH -> TrashScreen(model = model, modifier = Modifier.padding(padding))
         }
     }
 
@@ -961,6 +974,7 @@ private fun titleFor(screen: Screen): String = when (screen) {
     Screen.QUEUE -> stringResource(R.string.title_queue)
     Screen.LOG -> stringResource(R.string.title_log)
     Screen.RECENTS -> stringResource(R.string.title_recents)
+    Screen.TRASH -> stringResource(R.string.title_trash)
     // Never asked for: the files screen carries no bar. Named rather than
     // left to an else, so adding a screen is a compile error here.
     Screen.FILES -> ""
