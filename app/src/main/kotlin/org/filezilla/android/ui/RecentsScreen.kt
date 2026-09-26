@@ -182,7 +182,13 @@ private fun RowScope.RecentRowBody(
 ) {
     val fade = if (gone) 0.4f else 1f
     Box(Modifier.alpha(fade)) {
-        FileTile(kind = kind, colour = colourFor(kind), contentDescription = null, size = 40.dp)
+        // Recent files are on the phone, so a picture, film or song shows its own
+        // thumbnail; a file since gone falls back to its kind tile.
+        if (Thumbnails.handles(kind)) {
+            EntryThumb(file = file, kind = kind, contentDescription = null, size = 40.dp)
+        } else {
+            FileTile(kind = kind, colour = colourFor(kind), contentDescription = null, size = 40.dp)
+        }
     }
     Column(
         Modifier

@@ -185,7 +185,14 @@ fun BrowseScreen(
                     contentPadding = PaddingValues(8.dp),
                 ) {
                     items(rows, key = { it.name }) { entry ->
-                        GridTile(entry, entry.name in state.selection, state.selecting, actions)
+                        GridTile(
+                            entry,
+                            entry.name in state.selection,
+                            state.selecting,
+                            isLocal = state.isLocal,
+                            folder = state.path,
+                            actions,
+                        )
                     }
                 }
 
@@ -401,12 +408,31 @@ private fun EntryRow(
         val kind = remember(entry.name, entry.isDirectory) {
             kindOf(entry.name, entry.isDirectory)
         }
-        FileTile(
-            kind = kind,
-            colour = colourFor(kind),
-            contentDescription = stringResource(R.string.browse_select, entry.name),
-            modifier = Modifier.clickable { actions.onToggleSelected(entry) },
-        )
+        // A local picture, film or song shows its own thumbnail; everything else,
+        // and every server row (nothing to thumbnail without fetching it), keeps
+        // the kind tile.
+        val thumbFile = if (isLocal && !entry.isDirectory && Thumbnails.handles(kind)) {
+            remember(folder, entry.name) { java.io.File(folder, entry.name) }
+        } else {
+            null
+        }
+        val tileDescription = stringResource(R.string.browse_select, entry.name)
+        val tileModifier = Modifier.clickable { actions.onToggleSelected(entry) }
+        if (thumbFile != null) {
+            EntryThumb(
+                file = thumbFile,
+                kind = kind,
+                contentDescription = tileDescription,
+                modifier = tileModifier,
+            )
+        } else {
+            FileTile(
+                kind = kind,
+                colour = colourFor(kind),
+                contentDescription = tileDescription,
+                modifier = tileModifier,
+            )
+        }
         Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
             Text(
                 entry.name,
@@ -547,10 +573,17 @@ private fun GridTile(
     entry: DirectoryEntry,
     selected: Boolean,
     selecting: Boolean,
+    isLocal: Boolean,
+    folder: String,
     actions: EntryActions,
 ) {
     val kind = remember(entry.name, entry.isDirectory) { kindOf(entry.name, entry.isDirectory) }
     val chip = colourFor(kind)
+    val thumbFile = if (isLocal && !entry.isDirectory && Thumbnails.handles(kind)) {
+        remember(folder, entry.name) { java.io.File(folder, entry.name) }
+    } else {
+        null
+    }
     Column(
         modifier = Modifier
             .padding(4.dp)
@@ -570,25 +603,45 @@ private fun GridTile(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         // A tile has no room for a checkbox beside it, so the icon carries the
-        // state as well as the tap: selected, it becomes a filled check.
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(chip)
-                .clickable { actions.onToggleSelected(entry) },
-            contentAlignment = Alignment.Center,
-        ) {
-            if (selected) {
+        // state as well as the tap: selected, it becomes a filled check;
+        // otherwise a local picture, film or song shows its own thumbnail.
+        val selectDescription = stringResource(R.string.browse_select, entry.name)
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(chip)
+                    .clickable { actions.onToggleSelected(entry) },
+                contentAlignment = Alignment.Center,
+            ) {
                 Icon(
                     Icons.Filled.Check,
                     contentDescription = stringResource(R.string.browse_select, entry.name),
                     tint = Color.White,
                 )
-            } else {
+            }
+        } else if (thumbFile != null) {
+            EntryThumb(
+                file = thumbFile,
+                kind = kind,
+                contentDescription = selectDescription,
+                modifier = Modifier.clickable { actions.onToggleSelected(entry) },
+                size = 48.dp,
+                cornerRadius = 14.dp,
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(chip)
+                    .clickable { actions.onToggleSelected(entry) },
+                contentAlignment = Alignment.Center,
+            ) {
                 Icon(
                     painter = painterResource(kind.glyph),
-                    contentDescription = stringResource(R.string.browse_select, entry.name),
+                    contentDescription = selectDescription,
                     // Already white, and part of it white at reduced alpha,
                     // which is what keeps a page distinct from its lines.
                     tint = Color.Unspecified,
