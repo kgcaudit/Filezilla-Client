@@ -23,6 +23,8 @@ import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.ViewHeadline
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Tune
@@ -216,10 +218,20 @@ fun ViewOptionsDialog(
                         onClick = { onApply(options.copy(viewMode = ViewMode.GRID)) },
                         modifier = Modifier.weight(1f),
                     )
-                    // Two answers, four columns' worth of row: spacers so
-                    // the pictures sit under the ones above rather than
-                    // spreading to fill a row they do not need.
-                    Spacer(modifier = Modifier.weight(2f))
+                    OptionTile(
+                        label = stringResource(R.string.view_gallery),
+                        icon = Icons.Filled.PhotoLibrary,
+                        selected = options.viewMode == ViewMode.GALLERY,
+                        onClick = { onApply(options.copy(viewMode = ViewMode.GALLERY)) },
+                        modifier = Modifier.weight(1f),
+                    )
+                    OptionTile(
+                        label = stringResource(R.string.view_compact),
+                        icon = Icons.Filled.ViewHeadline,
+                        selected = options.viewMode == ViewMode.COMPACT,
+                        onClick = { onApply(options.copy(viewMode = ViewMode.COMPACT)) },
+                        modifier = Modifier.weight(1f),
+                    )
                 }
 
                 SectionLabel(R.string.sort_mode)

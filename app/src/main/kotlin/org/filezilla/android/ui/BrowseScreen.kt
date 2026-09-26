@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MoreVert
@@ -43,6 +47,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.res.pluralStringResource
@@ -196,6 +203,26 @@ fun BrowseScreen(
                     }
                 }
 
+                // The gallery: three big thumbnails across, each filling its
+                // square, no name -- for a folder of photos. A long press picks,
+                // the same as the tile does elsewhere.
+                options.viewMode == ViewMode.GALLERY -> LazyVerticalGrid(
+                    columns = GridCells.Fixed(3),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(2.dp),
+                ) {
+                    items(rows, key = { it.name }) { entry ->
+                        GalleryCell(
+                            entry = entry,
+                            selected = entry.name in state.selection,
+                            selecting = state.selecting,
+                            isLocal = state.isLocal,
+                            folder = state.path,
+                            actions = actions,
+                        )
+                    }
+                }
+
                 else -> Box(modifier = Modifier.fillMaxSize()) {
                     val listState = rememberLazyListState()
                     // Letters only when the rows are in an order letters
@@ -227,6 +254,9 @@ fun BrowseScreen(
                                 selecting = state.selecting,
                                 isLocal = state.isLocal,
                                 folder = state.path,
+                                // Compact draws the same row, tighter, with a
+                                // small thumbnail and the name alone.
+                                dense = options.viewMode == ViewMode.COMPACT,
                                 // Inside an archive the rows are read only: no
                                 // count from the phone (the path is inside the
                                 // archive, not on disk), no rename or delete,
@@ -365,6 +395,8 @@ private fun EntryRow(
     actions: EntryActions,
     onRename: () -> Unit,
     onDelete: () -> Unit,
+    /** The compact view: a smaller tile, tighter rows, and the name alone. */
+    dense: Boolean = false,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val chip = if (entry.isDirectory) {
@@ -392,7 +424,7 @@ private fun EntryRow(
                     else -> actions.onOpenFile(entry)
                 }
             }
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = if (dense) 5.dp else 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (selecting) {
@@ -418,12 +450,14 @@ private fun EntryRow(
         }
         val tileDescription = stringResource(R.string.browse_select, entry.name)
         val tileModifier = Modifier.clickable { actions.onToggleSelected(entry) }
+        val tileSize = if (dense) 30.dp else 40.dp
         if (thumbFile != null) {
             EntryThumb(
                 file = thumbFile,
                 kind = kind,
                 contentDescription = tileDescription,
                 modifier = tileModifier,
+                size = tileSize,
             )
         } else {
             FileTile(
@@ -431,6 +465,7 @@ private fun EntryRow(
                 colour = colourFor(kind),
                 contentDescription = tileDescription,
                 modifier = tileModifier,
+                size = tileSize,
             )
         }
         Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
@@ -474,7 +509,9 @@ private fun EntryRow(
                 if (entry.isDirectory) null else formatSize(entry.size).ifBlank { null }
             }
             val detail = listOfNotNull(size, held, when_).joinToString("  ·  ")
-            if (detail.isNotBlank()) {
+            // The compact view is the name alone -- the second line is what the
+            // roomy list adds and the compact one drops.
+            if (detail.isNotBlank() && !dense) {
                 Text(
                     detail,
                     style = MaterialTheme.typography.bodySmall,
@@ -565,6 +602,103 @@ private fun EntryRow(
                 }
             }
         }
+    }
+}
+
+// A gallery cell is about a third of the screen, so its thumbnail is decoded
+// larger than the list's small tile -- but still far under the full photo.
+private const val GALLERY_THUMB_PX = 320
+
+/**
+ * One square of the gallery: a big thumbnail filling the cell for a local
+ * picture or film, a coloured tile with the kind's glyph for anything else. A
+ * tap opens (or picks, in selection mode); a long press starts picking. A picked
+ * cell is dimmed with a check in the corner.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun GalleryCell(
+    entry: DirectoryEntry,
+    selected: Boolean,
+    selecting: Boolean,
+    isLocal: Boolean,
+    folder: String,
+    actions: EntryActions,
+) {
+    val kind = remember(entry.name, entry.isDirectory) { kindOf(entry.name, entry.isDirectory) }
+    val thumbFile = if (isLocal && !entry.isDirectory && Thumbnails.handles(kind)) {
+        remember(folder, entry.name) { java.io.File(folder, entry.name) }
+    } else {
+        null
+    }
+    val description = stringResource(R.string.browse_select, entry.name)
+    Box(
+        modifier = Modifier
+            .padding(2.dp)
+            .fillMaxWidth()
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (thumbFile != null) Color.Black else colourFor(kind))
+            .combinedClickable(
+                onClick = {
+                    when {
+                        selecting -> actions.onToggleSelected(entry)
+                        entry.isDirectory -> actions.onOpen(entry)
+                        else -> actions.onOpenFile(entry)
+                    }
+                },
+                onLongClick = { actions.onToggleSelected(entry) },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (thumbFile != null) {
+            GalleryThumb(thumbFile, kind, description)
+        } else {
+            Icon(
+                painter = painterResource(kind.glyph),
+                contentDescription = description,
+                tint = Color.Unspecified,
+                modifier = Modifier.fillMaxWidth(0.34f).aspectRatio(1f),
+            )
+        }
+        if (selected) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+            )
+            Icon(
+                Icons.Filled.CheckCircle,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp)
+                    .size(22.dp),
+            )
+        }
+    }
+}
+
+/** The gallery's thumbnail, loaded to fill the square, or the picture's own black. */
+@Composable
+private fun GalleryThumb(file: java.io.File, kind: FileKind, description: String?) {
+    val thumb = produceState<ImageBitmap?>(null, file.path, file.lastModified()) {
+        value = withContext(Dispatchers.IO) { Thumbnails.load(file, kind, GALLERY_THUMB_PX)?.asImageBitmap() }
+    }.value
+    val bitmap = thumb
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap,
+            contentDescription = description,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+    } else {
+        // While it loads (or if it has none), a muted wash of the kind's colour
+        // rather than a flash of black.
+        Box(Modifier.fillMaxSize().background(colourFor(kind).copy(alpha = 0.35f)))
     }
 }
 

@@ -91,6 +91,8 @@
     <string name="view_mode">보기 모드</string>
     <string name="view_list">목록</string>
     <string name="view_grid">격자</string>
+    <string name="view_gallery">갤러리</string>
+    <string name="view_compact">작게</string>
     <string name="sort_mode">정렬 모드</string>
     <string name="sort_name">이름</string>
     <string name="sort_size">크기</string>

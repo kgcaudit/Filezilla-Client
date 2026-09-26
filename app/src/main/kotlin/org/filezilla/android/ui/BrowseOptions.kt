@@ -6,8 +6,12 @@ import org.filezilla.ftp.listing.DirectoryEntry
 /** What the listing is ordered by. */
 enum class SortKey { NAME, SIZE, DATE, TYPE }
 
-/** How the listing is drawn. */
-enum class ViewMode { LIST, GRID }
+/**
+ * How the listing is drawn: a roomy list, a grid of tiles, a gallery of large
+ * three-across thumbnails (for a folder of photos), or a dense list with a small
+ * thumbnail and the name alone.
+ */
+enum class ViewMode { LIST, GRID, GALLERY, COMPACT }
 
 /**
  * The user's standing preferences for the file list.

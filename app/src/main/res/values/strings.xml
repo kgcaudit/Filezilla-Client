@@ -92,6 +92,8 @@
     <string name="view_mode">View</string>
     <string name="view_list">List</string>
     <string name="view_grid">Grid</string>
+    <string name="view_gallery">Gallery</string>
+    <string name="view_compact">Compact</string>
     <string name="sort_mode">Sort by</string>
     <string name="sort_name">Name</string>
     <string name="sort_size">Size</string>
