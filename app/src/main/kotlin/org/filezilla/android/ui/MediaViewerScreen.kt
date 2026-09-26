@@ -1319,16 +1319,22 @@ private fun MediaPlayer(
         }
     }
 
-    // The screen's own turning, a plain on/off: on, it follows the sensor and
-    // turns with the phone; off, it holds the way it is. Put back to the
-    // phone's own preference on the way out.
+    // The screen's own turning: on, it follows the sensor and turns with the
+    // phone; off, it holds the orientation it was in when locked. The locked one
+    // is stored as a concrete orientation (landscape, portrait, and which way up),
+    // not as "whatever it is now" -- SCREEN_ORIENTATION_LOCKED re-reads the current
+    // rotation, so a lock taken in landscape came back portrait after a trip to
+    // the background. Saved across a recreation so it survives that too.
     val activity = context as? android.app.Activity
     var autoRotate by rememberSaveable { mutableStateOf(true) }
-    LaunchedEffect(autoRotate) {
+    var lockedOrientation by rememberSaveable {
+        mutableIntStateOf(ActivityInfo.SCREEN_ORIENTATION_LOCKED)
+    }
+    LaunchedEffect(autoRotate, lockedOrientation) {
         activity?.requestedOrientation = if (autoRotate) {
             ActivityInfo.SCREEN_ORIENTATION_SENSOR
         } else {
-            ActivityInfo.SCREEN_ORIENTATION_LOCKED
+            lockedOrientation
         }
     }
     DisposableEffect(Unit) {
@@ -1713,6 +1719,11 @@ private fun MediaPlayer(
                     }
                     IconButton(onClick = {
                         onTouchChrome()
+                        // Turning the lock on holds the exact orientation on screen
+                        // now, so it is the same when the film is come back to.
+                        if (autoRotate) {
+                            activity?.let { lockedOrientation = fixedOrientationNow(it) }
+                        }
                         autoRotate = !autoRotate
                     }) {
                         if (autoRotate) {
@@ -2436,6 +2447,29 @@ private const val DIAL_SENSITIVITY = 3f
 
 // A full sideways sweep scrubs two minutes.
 private const val SEEK_SPAN_MS = 120_000f
+
+/**
+ * The concrete orientation the screen is in right now -- landscape or portrait,
+ * and which way up -- for locking to. Read from the display's rotation (a phone's
+ * natural orientation is portrait), so a lock holds exactly what is on screen
+ * rather than "whatever it is when re-read", which drifts across a trip to the
+ * background.
+ */
+@Suppress("DEPRECATION")
+private fun fixedOrientationNow(activity: android.app.Activity): Int {
+    val rotation = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+        activity.display?.rotation
+    } else {
+        activity.windowManager.defaultDisplay.rotation
+    }
+    return when (rotation) {
+        android.view.Surface.ROTATION_0 -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        android.view.Surface.ROTATION_90 -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        android.view.Surface.ROTATION_180 -> ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT
+        android.view.Surface.ROTATION_270 -> ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE
+        else -> ActivityInfo.SCREEN_ORIENTATION_LOCKED
+    }
+}
 
 /**
  * The video player's touch language, on one arbitrated pipeline over a full-screen
