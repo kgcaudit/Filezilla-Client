@@ -1,5 +1,6 @@
 package org.filezilla.android.playback
 
+import android.app.PendingIntent
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
@@ -101,6 +102,21 @@ class PlaybackService : MediaSessionService() {
             0L
         }
 
+    /**
+     * A pending intent that opens the app when the notification is tapped -- the
+     * launcher intent, which brings the running task to the front rather than
+     * starting a second copy. Null only if the package somehow has no launcher.
+     */
+    private fun sessionActivityIntent(): PendingIntent? {
+        val launch = packageManager.getLaunchIntentForPackage(packageName) ?: return null
+        return PendingIntent.getActivity(
+            this,
+            0,
+            launch,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+    }
+
     /** Whether [item] is a sound, read from its file extension. */
     private fun isAudioItem(item: MediaItem?): Boolean {
         val uri = item?.localConfiguration?.uri ?: item?.requestMetadata?.mediaUri ?: return false
@@ -176,6 +192,10 @@ class PlaybackService : MediaSessionService() {
             .build()
         session = MediaSession.Builder(this, player)
             .setCallback(RestoringCallback())
+            // Tapping the notification, or the lock-screen player, opens the app --
+            // bringing the running task back to the front rather than starting it
+            // over. Without this the notification's body did nothing when tapped.
+            .apply { sessionActivityIntent()?.let { setSessionActivity(it) } }
             .build()
         // The controls a song and a film offer differ, so the session watches
         // which is playing and moves the between-file skip on and off to suit.
