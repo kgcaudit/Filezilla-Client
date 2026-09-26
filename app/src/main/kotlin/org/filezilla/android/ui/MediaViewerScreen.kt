@@ -10,11 +10,9 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
-import android.view.View
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -55,11 +53,14 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.RepeatOn
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.ScreenLockRotation
@@ -1237,6 +1238,14 @@ private fun MediaPlayer(
     // The player is the service's, so a speed set on one screen shows on the
     // next; kept in step through the listener below.
     var playbackSpeed by remember { mutableFloatStateOf(player.playbackParameters.speed) }
+    // The controls are the app's own -- drawn in Compose over the picture, never
+    // inside the player view -- so they are laid out and take touches at full
+    // screen size whatever the zoom does to the picture. These drive them.
+    var isPlaying by remember { mutableStateOf(player.isPlaying) }
+    var positionMs by remember { mutableLongStateOf(0L) }
+    var durationMs by remember { mutableLongStateOf(0L) }
+    var scrubbing by remember { mutableStateOf(false) }
+    var scrubMs by remember { mutableLongStateOf(0L) }
 
     // Keep the place. A file the player moves on from, or plays to the end, is
     // put back to the start; one left partway keeps its position, unless it is
@@ -1266,6 +1275,10 @@ private fun MediaPlayer(
                 tracksVersion++
             }
 
+            override fun onIsPlayingChanged(playing: Boolean) {
+                isPlaying = playing
+            }
+
             override fun onPlaybackParametersChanged(
                 parameters: androidx.media3.common.PlaybackParameters,
             ) {
@@ -1276,6 +1289,18 @@ private fun MediaPlayer(
         onDispose {
             savePlaybackPosition(player, viewer.items, model)
             player.removeListener(listener)
+        }
+    }
+
+    // The play position ticks on a half-second for the seek bar and the elapsed
+    // read-out; held back while a finger is scrubbing so the thumb follows it.
+    LaunchedEffect(player) {
+        while (true) {
+            if (!scrubbing) {
+                positionMs = player.currentPosition.coerceAtLeast(0L)
+                durationMs = player.duration.coerceAtLeast(0L)
+            }
+            kotlinx.coroutines.delay(500)
         }
     }
 
@@ -1418,11 +1443,24 @@ private fun MediaPlayer(
         seekTarget = -1L
     }
 
-    // The top bar -- filename, rotate, and subtitle buttons -- rides with the
-    // player's own controls: it shows when they show and hides when they hide,
-    // so a video plays under a clear screen and the chrome is one tap away.
-    // Starts hidden, since the controls do too -- they come up on a tap.
+    // The chrome -- the top bar, the transport and the seek bar -- is the app's
+    // own, drawn in Compose over the picture. It starts hidden so a film plays
+    // under a clear screen and comes up on a tap. A counter, bumped on every
+    // touch of it, restarts the hide timer so it does not vanish mid-use.
     var controlsVisible by remember { mutableStateOf(false) }
+    var controlsTick by remember { mutableIntStateOf(0) }
+    val showControls: () -> Unit = {
+        controlsVisible = true
+        controlsTick++
+    }
+    // While a film plays, the chrome hides itself a few seconds after the last
+    // touch; paused, it stays, so the buttons are there to be read.
+    LaunchedEffect(controlsVisible, isPlaying, controlsTick) {
+        if (controlsVisible && isPlaying) {
+            kotlinx.coroutines.delay(3500)
+            controlsVisible = false
+        }
+    }
     var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
     var showSubtitleSheet by remember { mutableStateOf(false) }
 
@@ -1547,19 +1585,12 @@ private fun MediaPlayer(
     val onScaleDelta: (Float) -> Unit = { factor ->
         videoScale = (videoScale * factor).coerceIn(MIN_VIDEO_SCALE, MAX_VIDEO_SCALE)
     }
-    // The zoom scales the whole player view (see the graphicsLayer below), which
-    // is the only box that fills the screen -- the content frame sizes itself to
-    // the film's letterbox, so scaling that would confine the zoom to no effect.
-    // Scaling the whole view would carry the controls off with it, so the control
-    // box is scaled back by the inverse: both turn about the screen's centre, so
-    // the two cancel and the controls hold their size and place while the picture
-    // grows. Re-applied when the controls appear, in case showing them resets it.
-    LaunchedEffect(playerViewRef, videoScale, controlsVisible) {
-        playerViewRef?.findViewById<View?>(androidx.media3.ui.R.id.exo_controller)?.let { controls ->
-            controls.scaleX = 1f / videoScale
-            controls.scaleY = 1f / videoScale
-        }
-    }
+    // The zoom scales the whole player view (the graphicsLayer below), which is
+    // the only box that fills the screen -- the content frame sizes itself to the
+    // film's letterbox, so scaling that would confine the zoom to no effect. The
+    // player view now carries no controls of its own (they are the app's, in
+    // Compose, over the top and never scaled), so scaling it moves only the
+    // picture and there is nothing to carry off.
     // Whether the picture has been zoomed off its own size, so the "back to 1x"
     // chip is offered -- pinching to exactly 1x by hand is not something to ask of
     // anyone.
@@ -1574,54 +1605,18 @@ private fun MediaPlayer(
                     val playerView = android.view.LayoutInflater.from(ctx)
                         .inflate(R.layout.media_player_view, null) as PlayerView
                     playerView.player = player
-                    playerView.useController = true
-                    // The controls come up on a tap, not on their own, so the
-                    // picture is clear until asked. Showing and hiding is driven
-                    // by the gesture listener below rather than by the view, so
-                    // only a tap in the middle brings them up and a stray tap on
-                    // an edge does not.
-                    playerView.controllerAutoShow = false
-                    // While the controls are up the gesture layer stands down, so
-                    // the built-in seek bar and buttons take touches; a tap on the
-                    // picture then hides the controls and hands gestures back.
-                    playerView.controllerHideOnTouch = true
-                    playerView.controllerShowTimeoutMs = 3_000
-                    // The centre is play, flanked by a ten-second rewind and
-                    // fast-forward rather than the previous and next file: the
-                    // side buttons move within this film, not between films.
-                    playerView.setShowNextButton(false)
-                    playerView.setShowPreviousButton(false)
-                    playerView.setShowRewindButton(true)
-                    playerView.setShowFastForwardButton(true)
+                    // The view draws the picture and the subtitles, nothing else:
+                    // its own controls are turned off and the app draws its own in
+                    // Compose over the top, so the zoom (which scales this view)
+                    // never touches them and they never fall out of reach.
+                    playerView.useController = false
                     playerView.setBackgroundColor(android.graphics.Color.BLACK)
-                    // The top bar follows the controls in and out.
-                    playerView.setControllerVisibilityListener(
-                        PlayerView.ControllerVisibilityListener { visibility ->
-                            controlsVisible = visibility == View.VISIBLE
-                        },
-                    )
-                    // Media3 draws its own settings gear in the control bar; that
-                    // one opens our subtitle sheet, rather than a second gear
-                    // being laid over it. Its built-in popup (speed and track
-                    // menus) is stood down for the sheet, which covers the same
-                    // ground. The listener is set the once and media3 leaves it.
-                    playerView.findViewById<View?>(
-                        androidx.media3.ui.R.id.exo_settings,
-                    )?.let { settings ->
-                        settings.contentDescription = ctx.getString(R.string.action_settings)
-                        settings.setOnClickListener { showSubtitleSheet = true }
-                    }
                     playerViewRef = playerView
-                    // Gestures are handled by a full-screen Compose layer over the
-                    // top (see below), not on the view itself -- so shrinking the
-                    // picture never shrinks the area that takes them, and the pinch
-                    // and the one-finger dials share one arbitrated pipeline.
                     playerView
                 },
-                // Let go of the controller when the view goes, so a released
-                // controller is not left referenced and still fed callbacks. The
-                // controller itself outlives this (it is the service's) and is
-                // released separately.
+                // Let go of the player when the view goes, so a released view is
+                // not left referenced and still fed frames. The controller outlives
+                // this (it is the service's) and is released separately.
                 onRelease = { it.player = null },
                 modifier = Modifier
                     .fillMaxSize()
@@ -1642,7 +1637,7 @@ private fun MediaPlayer(
                         .fillMaxSize()
                         .videoGestures(
                             player = player,
-                            onShowControls = { playerViewRef?.showController() },
+                            onShowControls = showControls,
                             onBrightnessDelta = onBrightnessDelta,
                             onVolumeDelta = onVolumeDelta,
                             onSeekPreview = onSeekPreview,
@@ -1652,17 +1647,26 @@ private fun MediaPlayer(
                         ),
                 )
             }
-            // A way back, over the top-left, since the player's own controls
-            // have no exit; the subtitle and turn buttons opposite it. Shown
-            // only while the controls are, so the picture is otherwise clear.
-            AnimatedVisibility(
-                visible = controlsVisible,
-                modifier = Modifier.align(Alignment.TopStart),
-            ) {
+            // The chrome, the app's own: a scrim that dims the picture and takes a
+            // tap to put the chrome away, the top bar, the centre transport and the
+            // seek bar. Drawn in Compose over the picture, so the zoom never moves
+            // it and its buttons are always where they are drawn.
+            if (controlsVisible) {
+                // Every touch of the chrome restarts its hide timer.
+                val onTouchChrome: () -> Unit = { controlsTick++ }
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            detectTapGestures(onTap = { controlsVisible = false })
+                        }
+                        .background(Color.Black.copy(alpha = 0.28f)),
+                )
+                // Top bar: back, filename, sleep timer, aspect, rotate.
                 Row(
                     Modifier
+                        .align(Alignment.TopStart)
                         .fillMaxWidth()
-                        .background(Color.Black.copy(alpha = 0.35f))
                         .padding(top = reservedTopDp)
                         .padding(horizontal = 4.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -1687,6 +1691,7 @@ private fun MediaPlayer(
                     SleepTimerButton(player = player, tint = Color.White)
                     IconButton(
                         onClick = {
+                            onTouchChrome()
                             // Changing the fit also puts a pinch zoom back to 1x,
                             // so the two ways of sizing the picture do not stack up
                             // into a state that is hard to read or undo.
@@ -1706,7 +1711,10 @@ private fun MediaPlayer(
                             tint = Color.White,
                         )
                     }
-                    IconButton(onClick = { autoRotate = !autoRotate }) {
+                    IconButton(onClick = {
+                        onTouchChrome()
+                        autoRotate = !autoRotate
+                    }) {
                         if (autoRotate) {
                             Icon(
                                 Icons.Filled.ScreenRotation,
@@ -1720,6 +1728,123 @@ private fun MediaPlayer(
                                 tint = Color.White,
                             )
                         }
+                    }
+                }
+                // Centre transport: ten seconds back, play/pause, ten seconds on.
+                Row(
+                    Modifier.align(Alignment.Center),
+                    horizontalArrangement = Arrangement.spacedBy(28.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(
+                        onClick = {
+                            onTouchChrome()
+                            player.seekBack()
+                        },
+                        modifier = Modifier.size(56.dp),
+                    ) {
+                        Icon(
+                            Icons.Filled.Replay10,
+                            contentDescription = stringResource(R.string.video_rewind),
+                            tint = Color.White,
+                            modifier = Modifier.size(40.dp),
+                        )
+                    }
+                    Box(
+                        Modifier
+                            .size(72.dp)
+                            .clip(CircleShape)
+                            .background(Color.White)
+                            .clickable {
+                                onTouchChrome()
+                                if (player.isPlaying) player.pause() else player.play()
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (isPlaying) {
+                            Icon(
+                                Icons.Filled.Pause,
+                                contentDescription = stringResource(R.string.music_pause),
+                                tint = Color.Black,
+                                modifier = Modifier.size(40.dp),
+                            )
+                        } else {
+                            Icon(
+                                Icons.Filled.PlayArrow,
+                                contentDescription = stringResource(R.string.music_play),
+                                tint = Color.Black,
+                                modifier = Modifier.size(40.dp),
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = {
+                            onTouchChrome()
+                            player.seekForward()
+                        },
+                        modifier = Modifier.size(56.dp),
+                    ) {
+                        Icon(
+                            Icons.Filled.Forward10,
+                            contentDescription = stringResource(R.string.video_forward),
+                            tint = Color.White,
+                            modifier = Modifier.size(40.dp),
+                        )
+                    }
+                }
+                // Bottom bar: elapsed, the seek bar, total, and the settings gear.
+                val shownPos = if (scrubbing) scrubMs else positionMs
+                val seekRange = durationMs.coerceAtLeast(1L)
+                Row(
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        clock(shownPos),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White,
+                    )
+                    Slider(
+                        value = shownPos.coerceIn(0L, seekRange).toFloat(),
+                        onValueChange = { value ->
+                            scrubbing = true
+                            scrubMs = value.toLong()
+                            controlsTick++
+                        },
+                        onValueChangeFinished = {
+                            player.seekTo(scrubMs.coerceIn(0L, durationMs))
+                            positionMs = scrubMs
+                            scrubbing = false
+                            controlsTick++
+                        },
+                        valueRange = 0f..seekRange.toFloat(),
+                        colors = SliderDefaults.colors(
+                            thumbColor = Color.White,
+                            activeTrackColor = Color.White,
+                            inactiveTrackColor = Color.White.copy(alpha = 0.3f),
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 10.dp),
+                    )
+                    Text(
+                        clock(durationMs),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White,
+                    )
+                    IconButton(onClick = {
+                        onTouchChrome()
+                        showSubtitleSheet = true
+                    }) {
+                        Icon(
+                            Icons.Filled.Settings,
+                            contentDescription = stringResource(R.string.action_settings),
+                            tint = Color.White,
+                        )
                     }
                 }
             }

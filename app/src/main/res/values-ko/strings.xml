@@ -270,6 +270,8 @@
     <string name="action_aspect">화면 비율</string>
     <!-- 핀치로 키우거나 줄인 화면을 원래 크기로 되돌림. -->
     <string name="video_zoom_reset">1×</string>
+    <string name="video_rewind">10초 뒤로</string>
+    <string name="video_forward">10초 앞으로</string>
     <string name="action_settings">설정</string>
     <string name="section_subtitle">자막</string>
     <string name="section_audio">오디오</string>

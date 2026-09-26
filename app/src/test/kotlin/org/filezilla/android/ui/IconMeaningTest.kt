@@ -146,6 +146,12 @@ class IconMeaningTest {
         "Eject" to setOf("storage_eject"),
         // The player's sleep timer: stop playing after a while.
         "Bedtime" to setOf("sleep_timer"),
+        // The video player's own transport, drawn in Compose over the picture:
+        // the ten-second jumps and the settings gear. Play and pause reuse the
+        // music glyphs above.
+        "Replay10" to setOf("video_rewind"),
+        "Forward10" to setOf("video_forward"),
+        "Settings" to setOf("action_settings"),
     )
 
     @Test
