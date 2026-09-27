@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -26,8 +28,10 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -79,13 +83,47 @@ fun PdfViewerScreen(viewer: MainViewModel.PdfViewer, model: MainViewModel) {
             var frontZoom by remember { mutableFloatStateOf(1f) }
             LaunchedEffect(pagerState.currentPage) { frontZoom = 1f }
 
+            // Where this document was last left. Read once, applied as soon as
+            // the page count is known -- the pager holds no pages until then,
+            // so jumping any sooner would be clamped back to the first page.
+            val start = remember(viewer.file) { model.pdfStartPage(viewer.file) }
+            var restored by remember(viewer.file) { mutableStateOf(false) }
+            LaunchedEffect(count) {
+                val total = count ?: return@LaunchedEffect
+                if (total > 0 && !restored) {
+                    pagerState.scrollToPage(start.coerceIn(0, total - 1))
+                    restored = true
+                }
+            }
+            // Saved only after the last place has been restored, so the first
+            // frame's page 0 does not overwrite it before the jump lands.
+            LaunchedEffect(restored) {
+                if (!restored) return@LaunchedEffect
+                snapshotFlow { pagerState.currentPage }
+                    .collect { model.rememberPdfPage(viewer.file, it) }
+            }
+
+            var jumping by remember { mutableStateOf(false) }
+            // The page a jump asks for, applied by the effect below; -1 is idle.
+            var pageToGo by remember { mutableStateOf(-1) }
+            LaunchedEffect(pageToGo) {
+                if (pageToGo >= 0) {
+                    pagerState.scrollToPage(pageToGo)
+                    pageToGo = -1
+                }
+            }
             ViewerBar(name = viewer.name, onClose = model::closePdfViewer) {
                 if (count != null && count > 0) {
+                    // Tapping the counter is how a long document is skipped
+                    // through without swiping a page at a time.
                     Text(
                         stringResource(R.string.pdf_page, pagerState.currentPage + 1, count),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(end = 8.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { jumping = true }
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
                     )
                 }
             }
@@ -105,6 +143,26 @@ fun PdfViewerScreen(viewer: MainViewModel.PdfViewer, model: MainViewModel) {
                         onZoom = { frontZoom = it },
                     )
                 }
+            }
+
+            val total = count ?: 0
+            if (jumping && total > 0) {
+                OloPromptDialog(
+                    title = R.string.pdf_jump_title,
+                    label = R.string.pdf_jump_label,
+                    initial = (pagerState.currentPage + 1).toString(),
+                    detail = null,
+                    onDismiss = { jumping = false },
+                    onConfirm = { text ->
+                        // Only the digits, so stray characters do not throw; an
+                        // out-of-range page is pulled back to the nearest end.
+                        val wanted = text.filter { it.isDigit() }.toIntOrNull()
+                        if (wanted != null) {
+                            pageToGo = wanted.coerceIn(1, total) - 1
+                        }
+                        jumping = false
+                    },
+                )
             }
         }
     }

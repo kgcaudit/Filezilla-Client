@@ -398,6 +398,40 @@ class AppPreferences(context: Context) {
     private fun mediaSubtitleKey(key: String) = "$KEY_MEDIA_SUBTITLE${comicHash(key)}"
 
     /**
+     * The page a PDF was last left on, so it reopens where it was put down.
+     * Keyed by the file and capped like comics and media -- a reader opens a
+     * great many documents, and one kept entry per file for ever is a
+     * preferences file that only grows. The oldest is forgotten first. None
+     * (or a negative value) means start from the first page.
+     */
+    fun pdfPage(key: String): Int? =
+        prefs.getInt(pdfPageKey(key), -1).takeIf { it >= 0 }
+
+    fun setPdfPage(key: String, page: Int) {
+        val edit = prefs.edit()
+        rememberPdf(edit, key)
+        edit.putInt(pdfPageKey(key), page.coerceAtLeast(0))
+        edit.apply()
+    }
+
+    private fun rememberPdf(edit: android.content.SharedPreferences.Editor, key: String) {
+        val keys = (pdfKeys() - key).toMutableList()
+        keys += key
+        while (keys.size > MAX_REMEMBERED_PDFS) {
+            edit.remove(pdfPageKey(keys.removeAt(0)))
+        }
+        edit.putString(KEY_PDF_KEYS, keys.joinToString(KEY_SEPARATOR))
+    }
+
+    private fun pdfKeys(): List<String> =
+        prefs.getString(KEY_PDF_KEYS, null)
+            ?.split(KEY_SEPARATOR)
+            ?.filter { it.isNotEmpty() }
+            .orEmpty()
+
+    private fun pdfPageKey(key: String) = "$KEY_PDF_PAGE${comicHash(key)}"
+
+    /**
      * How the player draws subtitles: a text height as a fraction of the screen,
      * and a colour. One setting for the whole app rather than per file, since a
      * reader who wants larger yellow captions wants them on everything. The
@@ -554,6 +588,8 @@ class AppPreferences(context: Context) {
         const val KEY_MEDIA_POSITION = "media_pos_"
         const val KEY_MEDIA_SUBTITLE = "media_sub_"
         const val KEY_MEDIA_KEYS = "media_pos_keys"
+        const val KEY_PDF_PAGE = "pdf_page_"
+        const val KEY_PDF_KEYS = "pdf_page_keys"
         const val KEY_SUBTITLE_SCALE = "subtitle_scale"
         const val KEY_SUBTITLE_COLOR = "subtitle_color"
 
@@ -584,5 +620,6 @@ class AppPreferences(context: Context) {
         /** How many comics keep their place; the oldest is forgotten first. */
         internal const val MAX_REMEMBERED_COMICS = 500
         internal const val MAX_REMEMBERED_MEDIA = 300
+        internal const val MAX_REMEMBERED_PDFS = 300
     }
 }

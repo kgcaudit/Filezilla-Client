@@ -1976,6 +1976,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         pdfViewer = null
     }
 
+    /** The page [file] was last left on, so the reader reopens there. */
+    fun pdfStartPage(file: java.io.File): Int = graph.preferences.pdfPage(file.absolutePath) ?: 0
+
+    /** Remembers the page [file] is being read at, for reopening later. */
+    fun rememberPdfPage(file: java.io.File, page: Int) {
+        graph.preferences.setPdfPage(file.absolutePath, page)
+    }
+
     /**
      * The files opened in a viewer, most recent first -- what the recents screen
      * shows. Held as state so the screen redraws when a file is opened, removed,
