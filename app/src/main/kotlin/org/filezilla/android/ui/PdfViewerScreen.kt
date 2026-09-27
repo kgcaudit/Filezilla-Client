@@ -15,12 +15,14 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -141,20 +143,26 @@ fun PdfViewerScreen(viewer: MainViewModel.PdfViewer, model: MainViewModel) {
                 }
             }
 
-            when {
-                count == null -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-                count <= 0 -> ViewerMessage(stringResource(R.string.pdf_open_failed))
-                else -> HorizontalPager(
-                    state = pagerState,
-                    userScrollEnabled = frontZoom <= 1.01f,
-                    modifier = Modifier.fillMaxSize(),
-                ) { index ->
-                    PdfPage(
-                        doc = doc,
-                        index = index,
-                        isCurrent = index == pagerState.currentPage,
-                        onZoom = { frontZoom = it },
-                    )
+            HorizontalDivider()
+            // The pages take exactly the space left under the bar, so the page
+            // is centred in what is visible rather than in the whole screen --
+            // which had pushed a short page down behind an oversized top margin.
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                when {
+                    count == null -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
+                    count <= 0 -> ViewerMessage(stringResource(R.string.pdf_open_failed))
+                    else -> HorizontalPager(
+                        state = pagerState,
+                        userScrollEnabled = frontZoom <= 1.01f,
+                        modifier = Modifier.fillMaxSize(),
+                    ) { index ->
+                        PdfPage(
+                            doc = doc,
+                            index = index,
+                            isCurrent = index == pagerState.currentPage,
+                            onZoom = { frontZoom = it },
+                        )
+                    }
                 }
             }
 
