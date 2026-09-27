@@ -6,8 +6,11 @@ import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,6 +40,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringResource
@@ -49,6 +53,14 @@ import java.io.File
 
 /** How far a single page may be pinched in. */
 private const val MAX_ZOOM = 4f
+
+/** Keeps a zoomed page's offset within its grown bounds; centred at fit size. */
+private fun clampOffset(offset: Offset, scale: Float, size: IntSize): Offset {
+    if (scale <= 1f) return Offset.Zero
+    val maxX = (scale - 1f) * size.width / 2f
+    val maxY = (scale - 1f) * size.height / 2f
+    return Offset(offset.x.coerceIn(-maxX, maxX), offset.y.coerceIn(-maxY, maxY))
+}
 
 /**
  * Reads a PDF page by page with Android's own [PdfRenderer].
@@ -202,21 +214,27 @@ private fun PdfPage(doc: PdfDoc, index: Int, isCurrent: Boolean, onZoom: (Float)
             .onSizeChanged { boxSize = it }
             .pointerInput(isCurrent) {
                 if (!isCurrent) return@pointerInput
-                detectTransformGestures { _, pan, zoom, _ ->
-                    val next = (scale * zoom).coerceIn(1f, MAX_ZOOM)
-                    scale = next
-                    offset = if (next <= 1f) {
-                        Offset.Zero
-                    } else {
-                        // Kept within the grown page rather than letting it be
-                        // dragged off into empty space.
-                        val maxX = (next - 1f) * boxSize.width / 2f
-                        val maxY = (next - 1f) * boxSize.height / 2f
-                        Offset(
-                            (offset.x + pan.x).coerceIn(-maxX, maxX),
-                            (offset.y + pan.y).coerceIn(-maxY, maxY),
-                        )
-                    }
+                // Hand-rolled rather than detectTransformGestures, which takes
+                // every drag -- including a one-finger swipe at fit size, which
+                // is how the pager turns the page. Here a pinch is always ours,
+                // a one-finger drag is ours only once zoomed in, and a
+                // one-finger drag at fit size is left for the pager.
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    do {
+                        val event = awaitPointerEvent()
+                        val fingers = event.changes.count { it.pressed }
+                        val pan = event.calculatePan()
+                        if (fingers >= 2) {
+                            val next = (scale * event.calculateZoom()).coerceIn(1f, MAX_ZOOM)
+                            scale = next
+                            offset = clampOffset(offset + pan, next, boxSize)
+                            event.changes.forEach { it.consume() }
+                        } else if (scale > 1f) {
+                            offset = clampOffset(offset + pan, scale, boxSize)
+                            event.changes.forEach { if (it.positionChanged()) it.consume() }
+                        }
+                    } while (event.changes.any { it.pressed })
                 }
             }
             .pointerInput(isCurrent) {
