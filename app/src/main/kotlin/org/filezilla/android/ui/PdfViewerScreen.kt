@@ -38,6 +38,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -147,7 +148,9 @@ fun PdfViewerScreen(viewer: MainViewModel.PdfViewer, model: MainViewModel) {
             // The pages take exactly the space left under the bar, so the page
             // is centred in what is visible rather than in the whole screen --
             // which had pushed a short page down behind an oversized top margin.
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+            // Clipped to its own bounds, so a zoomed page grows within the
+            // reading area rather than drawing up over the bar and its title.
+            Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
                 when {
                     count == null -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
                     count <= 0 -> ViewerMessage(stringResource(R.string.pdf_open_failed))
