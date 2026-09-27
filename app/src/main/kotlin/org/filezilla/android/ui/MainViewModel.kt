@@ -1954,6 +1954,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         textViewer = null
     }
 
+    /** A PDF shown in the app's own page-by-page reader. */
+    data class PdfViewer(val file: java.io.File, val name: String)
+
+    var pdfViewer by mutableStateOf<PdfViewer?>(null)
+        private set
+
+    /**
+     * Opens [file] in the PDF reader.
+     *
+     * The file is on disk either way -- a phone file, or a server file already
+     * fetched to the cache -- because the reader hands it to Android's
+     * PdfRenderer, which reads a file descriptor, not a stream off a socket.
+     */
+    fun openPdfViewer(file: java.io.File) {
+        recordRecent(file)
+        pdfViewer = PdfViewer(file, file.name)
+    }
+
+    fun closePdfViewer() {
+        pdfViewer = null
+    }
+
     /**
      * The files opened in a viewer, most recent first -- what the recents screen
      * shows. Held as state so the screen redraws when a file is opened, removed,

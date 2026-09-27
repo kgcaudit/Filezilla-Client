@@ -268,9 +268,9 @@ private fun ScrollGrip(
     )
 }
 
-/** The top bar shared by both viewers: a way back, the name, and actions. */
+/** The top bar shared by the viewers: a way back, the name, and actions. */
 @Composable
-private fun ViewerBar(name: String, onClose: () -> Unit, actions: @Composable () -> Unit) {
+internal fun ViewerBar(name: String, onClose: () -> Unit, actions: @Composable () -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -318,7 +318,7 @@ private fun SearchRow(
 }
 
 @Composable
-private fun ViewerMessage(text: String) {
+internal fun ViewerMessage(text: String) {
     Box(Modifier.fillMaxSize().padding(24.dp), Alignment.Center) {
         Text(text, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }

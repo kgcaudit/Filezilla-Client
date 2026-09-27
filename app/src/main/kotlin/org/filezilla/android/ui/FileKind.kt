@@ -42,6 +42,16 @@ fun kindOf(name: String, isDirectory: Boolean): FileKind {
 /** Whether the app's own player shows this file: a video or a sound. */
 fun looksMedia(name: String): Boolean = kindOf(name, false).let { it == FileKind.VIDEO || it == FileKind.AUDIO }
 
+/**
+ * A PDF, which the app shows in its own page-by-page reader.
+ *
+ * The extension alone, like every other kind here. A PDF is one of the
+ * DOCUMENT extensions, so this is a narrower question than [kindOf]: the tile
+ * still says "document", but a tap opens the reader rather than another app.
+ */
+fun looksPdf(name: String): Boolean =
+    name.substringAfterLast('.', "").equals("pdf", ignoreCase = true)
+
 /** A video, so the player shows a picture rather than only controls. */
 fun looksVideo(name: String): Boolean = kindOf(name, false) == FileKind.VIDEO
 

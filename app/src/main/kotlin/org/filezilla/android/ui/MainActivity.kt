@@ -518,6 +518,9 @@ private fun AppScreen(
                         // the rest of its kind in the folder as a playlist.
                         looksMedia(file.name) ->
                             model.openLocalMedia(id, file)
+                        // A PDF opens in the app's own page-by-page reader.
+                        looksPdf(file.name) ->
+                            model.openPdfViewer(file)
                         else -> {
                             askWhichApp = false
                             openingFile = file
@@ -838,6 +841,9 @@ private fun AppScreen(
                 // app's own player on that copy (Phase 1: cache then play).
                 looksMedia(ready.name) ->
                     model.openCachedMedia(ready)
+                // A PDF fetched from a server opens in the app's own reader.
+                looksPdf(ready.name) ->
+                    model.openPdfViewer(ready)
                 else -> {
                     askWhichApp = false
                     openingFile = ready
@@ -958,6 +964,14 @@ private fun AppScreen(
     model.textViewer?.let { viewer ->
         BackHandler { model.closeTextViewer() }
         TextViewerScreen(viewer, model)
+    }
+    model.pdfViewer?.let { viewer ->
+        BackHandler { model.closePdfViewer() }
+        // Keyed on the file so tapping a different PDF rebuilds the reader
+        // rather than leaving the previous document's pages on screen.
+        androidx.compose.runtime.key(viewer.file.path) {
+            PdfViewerScreen(viewer, model)
+        }
     }
     model.mediaViewer?.let { viewer ->
         // Keyed on the opened file so tapping a different one rebuilds the
