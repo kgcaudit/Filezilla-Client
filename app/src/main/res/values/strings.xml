@@ -496,6 +496,11 @@
     <string name="pdf_open_failed">This PDF could not be opened.</string>
     <string name="pdf_jump_title">Go to page</string>
     <string name="pdf_jump_label">Page number</string>
+    <string name="epub_toc">Contents</string>
+    <string name="epub_prev">Previous</string>
+    <string name="epub_next">Next</string>
+    <string name="epub_chapter">%1$d / %2$d</string>
+    <string name="epub_open_failed">This EPUB could not be opened.</string>
     <string name="reader_settings">Reader settings</string>
     <string name="reader_direction_rtl">Turn left (manga)</string>
     <string name="reader_two_page">Two pages (landscape)</string>

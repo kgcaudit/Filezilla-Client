@@ -1984,6 +1984,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         graph.preferences.setPdfPage(file.absolutePath, page)
     }
 
+    /** An EPUB shown in the app's own chapter-by-chapter reader. */
+    data class EpubViewer(val file: java.io.File, val name: String)
+
+    var epubViewer by mutableStateOf<EpubViewer?>(null)
+        private set
+
+    /**
+     * Opens [file] in the EPUB reader. The file is on disk either way -- a
+     * phone file, or a server file already fetched to the cache -- because
+     * the reader reads it as a zip.
+     */
+    fun openEpubViewer(file: java.io.File) {
+        recordRecent(file)
+        epubViewer = EpubViewer(file, file.name)
+    }
+
+    fun closeEpubViewer() {
+        epubViewer = null
+    }
+
+    /** The chapter [file] was last left on, so the reader reopens there. */
+    fun epubStartChapter(file: java.io.File): Int = graph.preferences.epubChapter(file.absolutePath) ?: 0
+
+    /** Remembers the chapter [file] is being read at, for reopening later. */
+    fun rememberEpubChapter(file: java.io.File, chapter: Int) {
+        graph.preferences.setEpubChapter(file.absolutePath, chapter)
+    }
+
     /**
      * The files opened in a viewer, most recent first -- what the recents screen
      * shows. Held as state so the screen redraws when a file is opened, removed,

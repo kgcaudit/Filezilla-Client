@@ -521,6 +521,9 @@ private fun AppScreen(
                         // A PDF opens in the app's own page-by-page reader.
                         looksPdf(file.name) ->
                             model.openPdfViewer(file)
+                        // An EPUB opens in the app's own chapter reader.
+                        looksEpub(file.name) ->
+                            model.openEpubViewer(file)
                         else -> {
                             askWhichApp = false
                             openingFile = file
@@ -844,6 +847,9 @@ private fun AppScreen(
                 // A PDF fetched from a server opens in the app's own reader.
                 looksPdf(ready.name) ->
                     model.openPdfViewer(ready)
+                // An EPUB fetched from a server opens in the app's own reader.
+                looksEpub(ready.name) ->
+                    model.openEpubViewer(ready)
                 else -> {
                     askWhichApp = false
                     openingFile = ready
@@ -971,6 +977,13 @@ private fun AppScreen(
         // rather than leaving the previous document's pages on screen.
         androidx.compose.runtime.key(viewer.file.path) {
             PdfViewerScreen(viewer, model)
+        }
+    }
+    model.epubViewer?.let { viewer ->
+        BackHandler { model.closeEpubViewer() }
+        // Keyed on the file so opening a different book rebuilds the reader.
+        androidx.compose.runtime.key(viewer.file.path) {
+            EpubViewerScreen(viewer, model)
         }
     }
     model.mediaViewer?.let { viewer ->

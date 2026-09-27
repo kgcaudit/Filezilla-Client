@@ -432,6 +432,37 @@ class AppPreferences(context: Context) {
     private fun pdfPageKey(key: String) = "$KEY_PDF_PAGE${comicHash(key)}"
 
     /**
+     * The chapter an EPUB was last left on, so it reopens there. Kept and
+     * capped like PDFs; the oldest is forgotten first. None means the start.
+     */
+    fun epubChapter(key: String): Int? =
+        prefs.getInt(epubChapterKey(key), -1).takeIf { it >= 0 }
+
+    fun setEpubChapter(key: String, chapter: Int) {
+        val edit = prefs.edit()
+        rememberEpub(edit, key)
+        edit.putInt(epubChapterKey(key), chapter.coerceAtLeast(0))
+        edit.apply()
+    }
+
+    private fun rememberEpub(edit: android.content.SharedPreferences.Editor, key: String) {
+        val keys = (epubKeys() - key).toMutableList()
+        keys += key
+        while (keys.size > MAX_REMEMBERED_EPUBS) {
+            edit.remove(epubChapterKey(keys.removeAt(0)))
+        }
+        edit.putString(KEY_EPUB_KEYS, keys.joinToString(KEY_SEPARATOR))
+    }
+
+    private fun epubKeys(): List<String> =
+        prefs.getString(KEY_EPUB_KEYS, null)
+            ?.split(KEY_SEPARATOR)
+            ?.filter { it.isNotEmpty() }
+            .orEmpty()
+
+    private fun epubChapterKey(key: String) = "$KEY_EPUB_CHAPTER${comicHash(key)}"
+
+    /**
      * How the player draws subtitles: a text height as a fraction of the screen,
      * and a colour. One setting for the whole app rather than per file, since a
      * reader who wants larger yellow captions wants them on everything. The
@@ -590,6 +621,8 @@ class AppPreferences(context: Context) {
         const val KEY_MEDIA_KEYS = "media_pos_keys"
         const val KEY_PDF_PAGE = "pdf_page_"
         const val KEY_PDF_KEYS = "pdf_page_keys"
+        const val KEY_EPUB_CHAPTER = "epub_chapter_"
+        const val KEY_EPUB_KEYS = "epub_chapter_keys"
         const val KEY_SUBTITLE_SCALE = "subtitle_scale"
         const val KEY_SUBTITLE_COLOR = "subtitle_color"
 
@@ -621,5 +654,6 @@ class AppPreferences(context: Context) {
         internal const val MAX_REMEMBERED_COMICS = 500
         internal const val MAX_REMEMBERED_MEDIA = 300
         internal const val MAX_REMEMBERED_PDFS = 300
+        internal const val MAX_REMEMBERED_EPUBS = 300
     }
 }

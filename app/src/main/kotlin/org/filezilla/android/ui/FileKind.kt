@@ -52,6 +52,10 @@ fun looksMedia(name: String): Boolean = kindOf(name, false).let { it == FileKind
 fun looksPdf(name: String): Boolean =
     name.substringAfterLast('.', "").equals("pdf", ignoreCase = true)
 
+/** An EPUB, which the app shows in its own chapter-by-chapter reader. */
+fun looksEpub(name: String): Boolean =
+    name.substringAfterLast('.', "").equals("epub", ignoreCase = true)
+
 /** A video, so the player shows a picture rather than only controls. */
 fun looksVideo(name: String): Boolean = kindOf(name, false) == FileKind.VIDEO
 
@@ -70,7 +74,7 @@ private val BY_EXTENSION: Map<String, FileKind> = buildMap {
     // Subtitles count as documents: they are text, and on a server full of
     // films they sit beside the video they belong to and should not look
     // like one.
-    for (e in "pdf doc docx xls xlsx ppt pptx txt md rtf odt hwp srt smi ass vtt sub"
+    for (e in "pdf epub doc docx xls xlsx ppt pptx txt md rtf odt hwp srt smi ass vtt sub"
         .split(" ")) {
         put(e, FileKind.DOCUMENT)
     }
