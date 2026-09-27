@@ -8,6 +8,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -226,9 +227,15 @@ private fun PdfPage(doc: PdfDoc, index: Int, isCurrent: Boolean, onZoom: (Float)
                         val fingers = event.changes.count { it.pressed }
                         val pan = event.calculatePan()
                         if (fingers >= 2) {
-                            val next = (scale * event.calculateZoom()).coerceIn(1f, MAX_ZOOM)
+                            // Zoom about the point between the fingers, so the
+                            // text under them stays put instead of the page
+                            // growing away from its left edge off the screen.
+                            val old = scale
+                            val next = (old * event.calculateZoom()).coerceIn(1f, MAX_ZOOM)
+                            val focus = event.calculateCentroid() -
+                                Offset(boxSize.width / 2f, boxSize.height / 2f)
                             scale = next
-                            offset = clampOffset(offset + pan, next, boxSize)
+                            offset = clampOffset(focus - (focus - offset) * (next / old) + pan, next, boxSize)
                             event.changes.forEach { it.consume() }
                         } else if (scale > 1f) {
                             offset = clampOffset(offset + pan, scale, boxSize)
@@ -239,13 +246,19 @@ private fun PdfPage(doc: PdfDoc, index: Int, isCurrent: Boolean, onZoom: (Float)
             }
             .pointerInput(isCurrent) {
                 detectTapGestures(
-                    onDoubleTap = {
+                    onDoubleTap = { tap ->
                         if (!isCurrent) return@detectTapGestures
                         if (scale > 1f) {
                             scale = 1f
                             offset = Offset.Zero
                         } else {
-                            scale = 2f
+                            // Zoom in on the spot tapped, so double-tapping the
+                            // start of a line brings that line up rather than
+                            // the middle of the page.
+                            val next = 2f
+                            val focus = tap - Offset(boxSize.width / 2f, boxSize.height / 2f)
+                            offset = clampOffset(focus - (focus - offset) * next, next, boxSize)
+                            scale = next
                         }
                     },
                 )
