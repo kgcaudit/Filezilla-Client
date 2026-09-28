@@ -20,14 +20,12 @@
     <!-- 제목 -->
     <string name="title_sites">서버 목록</string>
     <string name="title_queue">전송 목록</string>
-    <string name="title_log">메시지 로그</string>
+    <string name="title_log">접속 로그</string>
     <string name="title_recents">최근 기록</string>
-    <string name="recents_open">최근 본·재생한 항목</string>
     <string name="recents_clear">기록 삭제</string>
     <string name="recents_empty">아직 연 항목이 없습니다</string>
     <string name="recents_empty_detail">뷰어로 연 파일이 여기에 모입니다.</string>
     <string name="title_trash">휴지통</string>
-    <string name="trash_open">삭제한 파일</string>
     <string name="trash_empty">휴지통 비우기</string>
     <string name="trash_restore">복원</string>
     <string name="trash_delete_forever">영구 삭제</string>

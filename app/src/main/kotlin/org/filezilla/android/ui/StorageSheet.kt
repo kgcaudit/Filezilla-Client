@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -25,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -234,49 +236,42 @@ fun StoragePlaces(
             // used to be tabs along the bottom, at 80dp of every screen.
             SectionLabel(stringResource(R.string.storage_tools_section))
 
-            PlaceRow(
-                // Its own mark, not a folder's: the folder tile is what the
-                // row above this one means, and two rows carrying the same
-                // picture is two rows nobody reads.
-                glyph = R.drawable.ic_tile_transfers,
-                colour = MaterialTheme.tiles.code,
-                title = stringResource(R.string.title_queue),
-                subtitle = null,
-                onClick = {
-                    onOpenScreen(Screen.QUEUE)
-                    onDismiss()
-                },
-            )
-            PlaceRow(
-                glyph = R.drawable.ic_tile_document,
-                colour = MaterialTheme.tiles.document,
-                title = stringResource(R.string.title_log),
-                subtitle = null,
-                onClick = {
-                    onOpenScreen(Screen.LOG)
-                    onDismiss()
-                },
-            )
-            PlaceRow(
-                glyph = R.drawable.ic_tile_recents,
-                colour = MaterialTheme.colorScheme.primary,
-                title = stringResource(R.string.title_recents),
-                subtitle = stringResource(R.string.recents_open),
-                onClick = {
-                    onOpenScreen(Screen.RECENTS)
-                    onDismiss()
-                },
-            )
-            PlaceRow(
-                glyph = R.drawable.ic_tile_trash,
-                colour = MaterialTheme.colorScheme.error,
-                title = stringResource(R.string.title_trash),
-                subtitle = stringResource(R.string.trash_open),
-                onClick = {
-                    onOpenScreen(Screen.TRASH)
-                    onDismiss()
-                },
-            )
+            // Two to a row, aligned in a 2x2 grid rather than a tall stack:
+            // these are four short shortcuts, and one per line is a lot of
+            // sheet for four words. The tiles carry the meaning, so the
+            // subtitles that padded the full-width rows are dropped here.
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                ToolCell(
+                    glyph = R.drawable.ic_tile_recents,
+                    colour = MaterialTheme.colorScheme.primary,
+                    title = stringResource(R.string.title_recents),
+                    onClick = { onOpenScreen(Screen.RECENTS); onDismiss() },
+                    modifier = Modifier.weight(1f),
+                )
+                ToolCell(
+                    glyph = R.drawable.ic_tile_transfers,
+                    colour = MaterialTheme.tiles.code,
+                    title = stringResource(R.string.title_queue),
+                    onClick = { onOpenScreen(Screen.QUEUE); onDismiss() },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                ToolCell(
+                    glyph = R.drawable.ic_tile_document,
+                    colour = MaterialTheme.tiles.document,
+                    title = stringResource(R.string.title_log),
+                    onClick = { onOpenScreen(Screen.LOG); onDismiss() },
+                    modifier = Modifier.weight(1f),
+                )
+                ToolCell(
+                    glyph = R.drawable.ic_tile_trash,
+                    colour = MaterialTheme.colorScheme.error,
+                    title = stringResource(R.string.title_trash),
+                    onClick = { onOpenScreen(Screen.TRASH); onDismiss() },
+                    modifier = Modifier.weight(1f),
+                )
+            }
 
             TextButton(
                 onClick = {
@@ -315,6 +310,34 @@ private fun SectionLabel(text: String, action: (@Composable () -> Unit)? = null)
             modifier = Modifier.weight(1f),
         )
         action()
+    }
+}
+
+/** One shortcut in the tools grid: a tile and its name, half a row wide. */
+@Composable
+private fun ToolCell(
+    @DrawableRes glyph: Int,
+    colour: androidx.compose.ui.graphics.Color,
+    title: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TileIcon(glyph, colour, contentDescription = null, size = 34.dp, cornerRadius = 10.dp)
+        Text(
+            title,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).padding(start = 12.dp),
+        )
     }
 }
 

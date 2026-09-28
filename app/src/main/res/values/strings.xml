@@ -23,12 +23,10 @@
     <string name="title_queue">Transfers</string>
     <string name="title_log">Message log</string>
     <string name="title_recents">Recent</string>
-    <string name="recents_open">Recently opened</string>
     <string name="recents_clear">Clear history</string>
     <string name="recents_empty">Nothing opened yet</string>
     <string name="recents_empty_detail">Files you open in a viewer show up here.</string>
     <string name="title_trash">Trash</string>
-    <string name="trash_open">Deleted files</string>
     <string name="trash_empty">Empty trash</string>
     <string name="trash_restore">Restore</string>
     <string name="trash_delete_forever">Delete permanently</string>
