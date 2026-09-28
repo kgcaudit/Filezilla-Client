@@ -183,6 +183,18 @@ class WordingTest {
             // The trash screen's name, on its bar and on the storage row that
             // opens it -- the row answers the screen, same as recents.
             "title_trash",
+            // How many rows are ticked, read on the pane's selection bar and
+            // on the trash's -- one count, one wording, on the two screens
+            // that let a selection be made.
+            "selection_count",
+            // "Select all", on the pane's selection menu and on the trash
+            // bar's tick-everything button: the same act in the two places
+            // a multi-select lives.
+            "menu_select_all",
+            // Put a trashed file back, and erase one for good: the trash
+            // screen offers each on a row's own menu, and the selection bar
+            // offers the same two on everything ticked. One verb per act.
+            "trash_restore", "trash_delete_forever",
             // "%1$d of %2$d", said by the delete-from-server dialog and by
             // the unpack and compress bars. One sentence with one meaning:
             // how far through a run of things the app is. Three ways of

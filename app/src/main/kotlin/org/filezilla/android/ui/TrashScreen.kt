@@ -1,5 +1,6 @@
 package org.filezilla.android.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -23,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -50,6 +53,8 @@ fun TrashScreen(
     LaunchedEffect(Unit) { model.refreshTrash() }
 
     val entries = model.trash
+    val selecting = model.trashSelecting
+    val selected = model.trashSelection
     val dayStart = remember { RecentDays.today() }
     val yesterdayStart = remember { RecentDays.yesterday() }
 
@@ -87,6 +92,9 @@ fun TrashScreen(
                     entry = entry,
                     file = model.trashFile(entry),
                     source = model.trashSource(entry.originalPath),
+                    selecting = selecting,
+                    selected = entry.trashPath in selected,
+                    onToggle = { model.toggleTrashSelected(entry) },
                     onRestore = { model.restoreFromTrash(entry) },
                     onDeleteForever = { model.deleteFromTrashForever(entry) },
                 )
@@ -111,6 +119,9 @@ private fun TrashRow(
     entry: TrashEntry,
     file: java.io.File,
     source: String,
+    selecting: Boolean,
+    selected: Boolean,
+    onToggle: () -> Unit,
     onRestore: () -> Unit,
     onDeleteForever: () -> Unit,
 ) {
@@ -131,19 +142,32 @@ private fun TrashRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                // Keyed on the entry so a reused row's long-press belongs to
-                // the entry it now shows, not the one it first held.
+                .background(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                // A tap picks the row (and enters selection mode on the first);
+                // a long press, only when not already picking, offers the
+                // single-row menu. Keyed on the entry so a reused row's
+                // gestures belong to the file it now shows.
                 .pointerInput(entry.trashPath) {
                     detectTapGestures(
+                        onTap = { onToggle() },
                         onLongPress = {
-                            pressAt = it
-                            menuOpen = true
+                            if (!selecting) {
+                                pressAt = it
+                                menuOpen = true
+                            }
                         },
                     )
                 }
                 .padding(horizontal = 20.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (selecting) {
+                Checkbox(
+                    checked = selected,
+                    onCheckedChange = { onToggle() },
+                    modifier = Modifier.padding(end = 6.dp),
+                )
+            }
             TrashRowBody(file = file, name = name, folder = folder, kind = kind, source = source, time = entry.time)
         }
         DropdownMenu(

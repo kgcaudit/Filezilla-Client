@@ -2163,9 +2163,68 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var trash by mutableStateOf<List<TrashEntry>>(emptyList())
         private set
 
-    /** Re-reads the trash from storage, for when the screen opens. */
+    /** Re-reads the trash from storage, for when the screen opens; starts it unselected. */
     fun refreshTrash() {
         trash = graph.preferences.trash()
+        exitTrashSelection()
+    }
+
+    // ------------------------------------------------------- trash selection
+
+    /** Whether the trash screen is picking rows for a bulk restore or erase. */
+    var trashSelecting by mutableStateOf(false)
+        private set
+
+    /** The trash paths currently ticked. */
+    var trashSelection by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    /** Turns a row's tick on or off, entering selection mode on the first. */
+    fun toggleTrashSelected(entry: TrashEntry) {
+        trashSelecting = true
+        trashSelection = if (entry.trashPath in trashSelection) {
+            trashSelection - entry.trashPath
+        } else {
+            trashSelection + entry.trashPath
+        }
+    }
+
+    /** Ticks every row, or clears them all when they are already all ticked. */
+    fun toggleSelectAllTrash() {
+        val all = trash.map { it.trashPath }.toSet()
+        trashSelecting = true
+        trashSelection = if (all.isNotEmpty() && trashSelection.containsAll(all)) emptySet() else all
+    }
+
+    /** Leaves selection mode, forgetting the ticks. */
+    fun exitTrashSelection() {
+        trashSelecting = false
+        trashSelection = emptySet()
+    }
+
+    private fun selectedTrash(): List<TrashEntry> = trash.filter { it.trashPath in trashSelection }
+
+    /** Puts every ticked file back where it came from, then leaves selection mode. */
+    fun restoreSelectedTrash() {
+        val picked = selectedTrash()
+        if (picked.isEmpty()) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { picked.forEach(::restoreEntryBlocking) }
+            trash = graph.preferences.trash()
+            exitTrashSelection()
+            relistLocalPanes()
+        }
+    }
+
+    /** Erases every ticked file for good, then leaves selection mode. */
+    fun deleteSelectedTrashForever() {
+        val picked = selectedTrash()
+        if (picked.isEmpty()) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { picked.forEach(::deleteEntryBlocking) }
+            trash = graph.preferences.trash()
+            exitTrashSelection()
+        }
     }
 
     /**
@@ -2194,25 +2253,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun restoreFromTrash(entry: TrashEntry) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
-                val stored = trashFile(entry)
-                // The record is dropped only when the file is actually back
-                // where it belongs -- or was already gone. A failed move (a
-                // full card, an unwritable old folder) keeps the entry, so the
-                // file still shows in the trash and can be tried again rather
-                // than being orphaned in the trash folder with nothing naming it.
-                val done = if (!stored.exists()) {
-                    true
-                } else {
-                    runCatching {
-                        val original = java.io.File(entry.originalPath)
-                        val parent = original.parentFile
-                        if (parent != null && !parent.exists()) parent.mkdirs()
-                        Trash.restore(stored, parent?.absolutePath ?: FilePath.ROOT, original.name)
-                    }.isSuccess
-                }
-                if (done) graph.preferences.removeTrash(entry.trashPath)
-            }
+            withContext(Dispatchers.IO) { restoreEntryBlocking(entry) }
             trash = graph.preferences.trash()
             relistLocalPanes()
         }
@@ -2221,17 +2262,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Erases one trashed file for good and drops it from the list. */
     fun deleteFromTrashForever(entry: TrashEntry) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
-                // Kept in the list if the erase failed, for the same reason a
-                // failed restore is: a record with no file is a row that cannot
-                // be acted on, and a file with no record cannot be reached.
-                val gone = runCatching {
-                    LocalOperations.delete(trashFile(entry).absolutePath)
-                }.isSuccess
-                if (gone) graph.preferences.removeTrash(entry.trashPath)
-            }
+            withContext(Dispatchers.IO) { deleteEntryBlocking(entry) }
             trash = graph.preferences.trash()
         }
+    }
+
+    // One entry, shared by the single-row menu and the batch actions. Runs on
+    // a caller's IO context.
+
+    /**
+     * Moves one entry's file back, dropping the record only when it is actually
+     * back -- or was already gone. A failed move (a full card, an unwritable
+     * old folder) keeps the entry, so a row with no file, and a file no row
+     * names, never happen.
+     */
+    private fun restoreEntryBlocking(entry: TrashEntry) {
+        val stored = trashFile(entry)
+        val done = if (!stored.exists()) {
+            true
+        } else {
+            runCatching {
+                val original = java.io.File(entry.originalPath)
+                val parent = original.parentFile
+                if (parent != null && !parent.exists()) parent.mkdirs()
+                Trash.restore(stored, parent?.absolutePath ?: FilePath.ROOT, original.name)
+            }.isSuccess
+        }
+        if (done) graph.preferences.removeTrash(entry.trashPath)
+    }
+
+    /** Erases one entry's file, keeping the record if the erase failed. */
+    private fun deleteEntryBlocking(entry: TrashEntry) {
+        val gone = runCatching { LocalOperations.delete(trashFile(entry).absolutePath) }.isSuccess
+        if (gone) graph.preferences.removeTrash(entry.trashPath)
     }
 
     /** Erases everything in the trash for good. */

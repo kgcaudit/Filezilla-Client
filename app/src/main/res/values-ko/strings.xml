@@ -29,6 +29,8 @@
     <string name="trash_empty">휴지통 비우기</string>
     <string name="trash_restore">복원</string>
     <string name="trash_delete_forever">영구 삭제</string>
+    <string name="trash_delete_selected_title">%1$d개를 영구 삭제할까요?</string>
+    <string name="trash_delete_selected_detail">완전히 지워지며 다시 되돌릴 수 없습니다.</string>
     <string name="trash_empty_title">휴지통이 비어 있습니다</string>
     <string name="trash_empty_detail">삭제한 파일은 비우기 전까지 여기에 보관됩니다.</string>
     <string name="recents_group_today">오늘</string>

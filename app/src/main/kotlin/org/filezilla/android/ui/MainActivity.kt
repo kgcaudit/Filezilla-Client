@@ -9,21 +9,34 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.SnackbarHost
@@ -43,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import android.content.Intent
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.text.style.TextOverflow
@@ -132,6 +146,7 @@ private fun AppScreen(
     val associations = remember(context) { FileAssociations(context) }
     var editingSite by remember { mutableStateOf<SiteDraft?>(null) }
     var creatingDirectory by remember { mutableStateOf(false) }
+    var deletingSelectedTrash by remember { mutableStateOf(false) }
 
     val sites by model.sites.collectAsState()
     val transfers by model.transfers.collectAsState()
@@ -144,6 +159,12 @@ private fun AppScreen(
     var exitArmedAt by remember { mutableStateOf(0L) }
     val exitMessage = stringResource(R.string.exit_confirm)
     BackHandler {
+        // In the trash's selection mode, back drops the selection first --
+        // the same "undo the nearest thing" rule the rest of back follows.
+        if (screen == Screen.TRASH && model.trashSelecting) {
+            model.exitTrashSelection()
+            return@BackHandler
+        }
         val armed = System.currentTimeMillis() - exitArmedAt < EXIT_CONFIRM_MILLIS
         when (
             backActionFor(
@@ -332,6 +353,51 @@ private fun AppScreen(
                 queue?.let { summary ->
                     TransferStrip(summary = summary, onOpen = { screen = Screen.QUEUE })
                 }
+            } else if (screen == Screen.TRASH && model.trashSelecting) {
+                // What happens to what is ticked: put it all back, or erase it
+                // all. Restore is one tap; erase asks first, since it is the
+                // one thing here with no undo. Both grey out with nothing
+                // ticked so the bar is never a button that does nothing.
+                val any = model.trashSelection.isNotEmpty()
+                Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Button(
+                            onClick = { model.restoreSelectedTrash() },
+                            enabled = any,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Icon(
+                                Icons.Filled.Restore,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.trash_restore))
+                        }
+                        OutlinedButton(
+                            onClick = { deletingSelectedTrash = true },
+                            enabled = any,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error,
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                        ) {
+                            Icon(
+                                Icons.Filled.DeleteForever,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.trash_delete_forever))
+                        }
+                    }
+                }
             }
         },
         topBar = {
@@ -342,6 +408,37 @@ private fun AppScreen(
             // tab strip, the pane header and the first crumb of the path
             // were already saying the same word.
             if (screen != HOME) {
+              if (screen == Screen.TRASH && model.trashSelecting) {
+                // The trash's own selection bar: how many are ticked, a way to
+                // drop the selection, and select-all. The restore and erase
+                // buttons for what is ticked sit along the foot.
+                TopAppBar(
+                    title = {
+                        Text(
+                            stringResource(R.string.selection_count, model.trashSelection.size),
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { model.exitTrashSelection() }) {
+                            Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.action_cancel))
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { model.toggleSelectAllTrash() }) {
+                            Icon(Icons.Filled.DoneAll, contentDescription = stringResource(R.string.menu_select_all))
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                        actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                )
+              } else {
                 TopAppBar(
                     title = {
                         Text(
@@ -442,6 +539,7 @@ private fun AppScreen(
                         }
                     },
                 )
+              }
             }
         },
         floatingActionButton = {
@@ -730,6 +828,22 @@ private fun AppScreen(
             onConfirm = {
                 model.clearAllTransfers()
                 emptyingQueue = false
+            },
+        )
+    }
+
+    if (deletingSelectedTrash) {
+        // Erasing the ticked files for good -- the one action in the trash
+        // with no way back -- so it asks, and says how many it will take.
+        val count = model.trashSelection.size
+        OloConfirmDialog(
+            title = stringResource(R.string.trash_delete_selected_title, count),
+            detail = stringResource(R.string.trash_delete_selected_detail),
+            confirmLabel = stringResource(R.string.trash_delete_forever),
+            onDismiss = { deletingSelectedTrash = false },
+            onConfirm = {
+                model.deleteSelectedTrashForever()
+                deletingSelectedTrash = false
             },
         )
     }
