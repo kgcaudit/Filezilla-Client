@@ -32,7 +32,7 @@
     <string name="trash_restore">복원</string>
     <string name="trash_delete_forever">영구 삭제</string>
     <string name="trash_empty_title">휴지통이 비어 있습니다</string>
-    <string name="trash_empty_detail">휴대폰에서 삭제한 파일은 휴지통을 비우기 전까지 여기에 보관됩니다.</string>
+    <string name="trash_empty_detail">삭제한 파일은 비우기 전까지 여기에 보관됩니다.</string>
     <string name="recents_group_today">오늘</string>
     <string name="recents_group_yesterday">어제</string>
     <string name="recents_group_earlier">이전</string>
@@ -47,7 +47,7 @@
 
     <!-- 서버 -->
     <string name="sites_empty_title">등록된 서버가 없습니다</string>
-    <string name="sites_empty_detail">+ 버튼으로 추가하세요. FTP와 FTPS 모두 지원하며, 보통은 21번 포트의 FTPS explicit을 씁니다.</string>
+    <string name="sites_empty_detail">+ 버튼으로 서버를 추가하세요. FTP·FTPS를 지원합니다.</string>
     <string name="sites_add">서버 추가</string>
     <string name="sites_edit">%1$s 편집</string>
     <string name="sites_delete">%1$s 삭제</string>
@@ -56,7 +56,7 @@
     <string name="sites_new_title">새 서버</string>
     <string name="sites_edit_title">서버 편집</string>
     <string name="field_name">이름</string>
-    <string name="name_hint">비워 두면 호스트가 이름이 됩니다</string>
+    <string name="name_hint">비우면 호스트가 이름이 됩니다</string>
     <string name="field_host">호스트</string>
     <string name="field_port">포트</string>
     <string name="field_encryption">암호화</string>
@@ -66,13 +66,13 @@
     <string name="mode_default">패시브 (권장)</string>
     <string name="mode_passive">패시브</string>
     <string name="mode_active">액티브 (서버가 역접속)</string>
-    <string name="mode_active_note">액티브 모드는 서버가 이 휴대폰으로 접속할 수 있어야 하므로 같은 네트워크에서만 동작합니다. 모바일 데이터에서는 패시브를 쓰세요.</string>
+    <string name="mode_active_note">서버가 휴대폰으로 역접속하므로 같은 네트워크에서만 됩니다. 모바일 데이터는 패시브를 쓰세요.</string>
     <string name="field_encoding">파일명 인코딩</string>
     <string name="encoding_auto">자동 (UTF-8)</string>
-    <string name="encoding_note">파일명이 깨질 때만 변경하세요. 국내 NAS는 EUC-KR로 저장하는 경우가 많습니다.</string>
+    <string name="encoding_note">파일명이 깨질 때만 바꾸세요. 국내 NAS는 주로 EUC-KR입니다.</string>
     <string name="password_hint">비워두면 익명 접속</string>
     <string name="field_initial_path">시작 폴더 (선택)</string>
-    <string name="password_unreadable">저장된 비밀번호를 읽지 못했습니다. 다시 입력해 주세요.</string>
+    <string name="password_unreadable">비밀번호를 읽지 못했습니다. 다시 입력하세요.</string>
     <string name="security_plain">일반 FTP</string>
     <string name="security_explicit">FTPS explicit (AUTH TLS)</string>
     <string name="security_implicit">FTPS implicit</string>
@@ -82,7 +82,7 @@
 
     <!-- 파일 -->
     <string name="browse_not_connected_title">연결되지 않음</string>
-    <string name="browse_not_connected_detail">서버 탭에서 서버를 선택하면 파일을 볼 수 있습니다.</string>
+    <string name="browse_not_connected_detail">서버 탭에서 서버를 선택하세요.</string>
     <string name="browse_refresh">목록 새로고침</string>
     <string name="browse_download">%1$s 다운로드</string>
     <string name="browse_more">%1$s 추가 작업</string>
@@ -140,15 +140,15 @@
     <string name="conflict_skipped_all">이미 있는 파일이라 모두 건너뛰었습니다</string>
     <string name="queue_speed_remaining">%1$s · %2$s 남음</string>
     <string name="queued_skipped_links">%1$d개 대기열에 추가됨, 바로가기 %2$d개 건너뜀</string>
-    <string name="queued_truncated">%1$d개 대기열에 추가됨. 폴더가 너무 커서 전부 담지 못했습니다</string>
+    <string name="queued_truncated">%1$d개 추가됨. 폴더가 너무 커서 일부만 담았습니다</string>
     <string name="browse_download_folder">이 폴더 다운로드</string>
     <string name="browse_select">%1$s 선택</string>
     <string name="action_rename">이름 변경</string>
     <string name="action_delete">삭제</string>
     <string name="prompt_rename_title">%1$s 이름 변경</string>
     <string name="prompt_new_name">새 이름</string>
-    <string name="new_folder_detail">지금 보고 있는 폴더 안에 만들어집니다.</string>
-    <string name="new_file_detail">지금 보고 있는 폴더 안에 빈 파일로 만들어집니다.</string>
+    <string name="new_folder_detail">현재 폴더에 만듭니다.</string>
+    <string name="new_file_detail">현재 폴더에 빈 파일로 만듭니다.</string>
     <string name="rename_detail">이름만 바뀌고 내용은 그대로 둡니다.</string>
     <plurals name="confirm_delete_selected">
         <item quantity="other">%d개 항목을 삭제할까요?</item>
@@ -165,16 +165,16 @@
 
     <!-- 전송 -->
     <string name="queue_empty_title">전송 항목이 없습니다</string>
-    <string name="queue_empty_detail">파일 탭에서 파일을 누르면 내려받습니다. 앱을 벗어나도 전송은 계속됩니다.</string>
+    <string name="queue_empty_detail">파일 탭에서 파일을 누르면 다운로드됩니다. 앱을 벗어나도 계속됩니다.</string>
     <string name="queue_pause">일시정지</string>
     <string name="queue_resume">이어받기</string>
     <string name="queue_retry_now">지금 다시 시도</string>
-    <string name="queue_still_waiting_wifi">아직 모바일 데이터입니다. 와이파이가 돌아오면 이어서 받습니다</string>
+    <string name="queue_still_waiting_wifi">와이파이가 돌아오면 이어받습니다</string>
     <string name="queue_remove">목록에서 삭제</string>
     <string name="queue_clear_finished">완료된 항목 삭제</string>
     <string name="queue_settings">전송 설정</string>
     <string name="setting_wifi_only">와이파이에서만 전송</string>
-    <string name="setting_wifi_only_detail">모바일 데이터에서는 멈추고, 와이파이에서 이어갑니다</string>
+    <string name="setting_wifi_only_detail">모바일 데이터에선 멈추고 와이파이에서 이어받습니다</string>
     <string name="queue_queued_toast">%1$s 대기열에 추가됨</string>
     <string name="queue_upload_toast">업로드 대기열에 추가됨</string>
     <string name="direction_download">다운로드</string>
@@ -191,25 +191,25 @@
     <string name="fail_offline">네트워크에 연결되어 있지 않습니다</string>
     <string name="fail_offline_advice">Wi\u2011Fi 또는 모바일 데이터를 켠 뒤 다시 시도하세요.</string>
     <string name="fail_host">서버를 찾을 수 없습니다</string>
-    <string name="fail_host_advice">호스트 이름을 조회하지 못했습니다. 철자를 확인하고, 앞에 http:// 나 ftp:// 가 붙어 있지 않은지 보세요.</string>
+    <string name="fail_host_advice">호스트를 찾지 못했습니다. 철자와 http:// ftp:// 접두사를 확인하세요.</string>
     <string name="fail_refused">서버가 연결을 거부했습니다</string>
-    <string name="fail_refused_advice">해당 주소에는 응답이 있으나 이 포트에서는 받지 않습니다. 포트 번호와 서버 구동 여부를 확인하세요.</string>
+    <string name="fail_refused_advice">이 포트에서 연결을 받지 않습니다. 포트 번호와 서버 실행 여부를 확인하세요.</string>
     <string name="fail_timeout">서버가 응답하지 않습니다</string>
-    <string name="fail_timeout_advice">주소에는 닿았지만 제한 시간 안에 응답이 없었습니다. 포트 번호와 방화벽을 확인하세요.</string>
+    <string name="fail_timeout_advice">제한 시간 안에 응답이 없습니다. 포트 번호와 방화벽을 확인하세요.</string>
     <string name="fail_tls">암호화 연결에 실패했습니다</string>
-    <string name="fail_tls_advice">TLS 핸드셰이크가 끝나지 않았습니다. 암호화 설정을 바꿔 보세요. 일반 FTP나 암시적 TLS를 기다리는 서버는 명시적 TLS에 응답하지 못합니다.</string>
+    <string name="fail_tls_advice">TLS 핸드셰이크에 실패했습니다. 암호화 설정을 바꿔 보세요.</string>
     <string name="fail_login">로그인이 거부되었습니다</string>
-    <string name="fail_login_advice">서버가 이 계정을 받아들이지 않았습니다. 사용자 이름과 비밀번호를 확인하세요.</string>
+    <string name="fail_login_advice">사용자 이름과 비밀번호를 확인하세요.</string>
     <string name="fail_denied">사용할 수 없습니다</string>
-    <string name="fail_denied_advice">서버가 해당 파일이나 폴더를 내주지 않았습니다. 존재하지 않거나, 이 계정에 권한이 없을 수 있습니다.</string>
+    <string name="fail_denied_advice">파일이나 폴더가 없거나, 이 계정에 권한이 없습니다.</string>
     <string name="fail_busy">서버가 일시적으로 처리할 수 없습니다</string>
-    <string name="fail_busy_advice">서버가 지금은 처리할 수 없다고 응답했습니다. 대개 저절로 해소되니 잠시 후 다시 시도하세요.</string>
+    <string name="fail_busy_advice">서버가 잠시 바쁩니다. 잠시 후 다시 시도하세요.</string>
     <string name="fail_refused_command">서버가 요청을 거부했습니다</string>
-    <string name="fail_refused_command_advice">서버가 오류로 답했습니다. 아래에 서버의 응답 원문이 있고, 로그 탭에 전체 주고받은 내용이 있습니다.</string>
+    <string name="fail_refused_command_advice">서버가 오류로 응답했습니다. 원문은 아래, 전체 내용은 로그 탭에 있습니다.</string>
     <string name="fail_network">연결에 문제가 있습니다</string>
     <string name="fail_network_advice">연결이 도중에 끊겼습니다. 네트워크를 확인하고 다시 시도하세요.</string>
     <string name="fail_unknown">알 수 없는 오류입니다</string>
-    <string name="fail_unknown_advice">앱이 분류하지 못한 오류입니다. 로그 탭에 전체 주고받은 내용이 있습니다.</string>
+    <string name="fail_unknown_advice">알 수 없는 오류입니다. 자세한 내용은 로그 탭에 있습니다.</string>
     <string name="detail_plain">%1$s</string>
     <string name="detail_host">호스트 조회 실패: %1$s</string>
     <string name="detail_refused">연결 거부: %1$s</string>
@@ -222,7 +222,7 @@
 
     <!-- 로그 -->
     <string name="log_empty_title">아직 기록이 없습니다</string>
-    <string name="log_empty_detail">접속하면 주고받은 모든 명령과 응답이 여기에 그대로 표시됩니다.</string>
+    <string name="log_empty_detail">접속하면 주고받은 명령과 응답이 여기에 표시됩니다.</string>
     <string name="log_clear">로그 삭제</string>
     <plurals name="conflict_title">
         <item quantity="other">같은 이름의 파일이 %d개 있습니다</item>
@@ -231,16 +231,16 @@
     <string name="storage_downloads">다운로드</string>
     <string name="storage_this_device">내 파일</string>
     <string name="storage_permission_title">파일에 접근할 수 있게 해주세요</string>
-    <string name="storage_permission_detail">휴대폰을 탐색하고 서버와 파일을 주고받으려면 저장소 접근 권한이 필요합니다. 요청하지 않은 파일은 전송되지 않습니다.</string>
+    <string name="storage_permission_detail">파일을 탐색하고 주고받으려면 저장소 접근 권한이 필요합니다.</string>
     <string name="storage_permission_action">권한 허용</string>
     <string name="storage_unavailable_title">이 안드로이드 버전에서는 불가능합니다</string>
-    <string name="storage_unavailable_detail">안드로이드 10은 전체 저장소 접근도, 이를 대체한 권한도 지원하지 않습니다. 휴대폰 탐색은 안드로이드 11 이상이 필요합니다.</string>
+    <string name="storage_unavailable_detail">휴대폰 탐색은 안드로이드 11 이상이 필요합니다.</string>
     <string name="side_local">내 파일</string>
     <string name="fail_local_title">폴더를 읽을 수 없습니다</string>
     <string name="fail_local_advice">폴더가 삭제되었거나, 설정에서 저장소 접근 권한이 꺼졌을 수 있습니다.</string>
     <string name="pane_no_source">선택 안 됨</string>
     <string name="pane_pick_title">이 창에 무엇을 볼지 고르세요</string>
-    <string name="pane_pick_detail">위의 메뉴 버튼을 눌러 이 휴대폰의 저장소나 저장한 서버를 고르세요.</string>
+    <string name="pane_pick_detail">위 메뉴 버튼으로 저장소나 서버를 고르세요.</string>
     <string name="fab_actions">파일 기능</string>
     <string name="fab_close">닫기</string>
     <string name="fab_new_folder">새 폴더</string>
@@ -255,17 +255,17 @@
     <string name="paste_into_itself">폴더를 자기 자신 안에 넣을 수 없습니다</string>
     <string name="new_folder_title">새 폴더</string>
     <string name="new_file_title">새 파일</string>
-    <string name="confirm_delete_detail">폴더는 안에 든 것까지 함께 삭제됩니다. 되돌릴 수 없습니다.</string>
-    <string name="confirm_delete_detail_local">폴더는 안에 든 것까지 함께 삭제됩니다. 삭제한 파일은 휴지통으로 이동하며 복원할 수 있습니다.</string>
+    <string name="confirm_delete_detail">폴더는 안의 내용까지 삭제되며, 되돌릴 수 없습니다.</string>
+    <string name="confirm_delete_detail_local">폴더는 안의 내용까지 삭제됩니다. 삭제한 파일은 휴지통에서 복원할 수 있습니다.</string>
     <string name="confirm_delete_one">\u0022%1$s\u0022을(를) 삭제할까요?</string>
-    <string name="paste_no_server_copy">FTP는 같은 서버 안에서 복사할 수 없습니다. 잘라내거나, 내 파일로 붙여넣으세요.</string>
+    <string name="paste_no_server_copy">같은 서버 안 복사는 안 됩니다. 잘라내거나 내 파일로 붙여넣으세요.</string>
     <string name="paste_move_here">%1$d개를 여기로 옮기기</string>
-    <string name="download_needs_local_pane">다운로드는 반대쪽 창으로 갑니다. 그 창을 이 휴대폰의 폴더로 지정하세요.</string>
+    <string name="download_needs_local_pane">반대쪽 창을 휴대폰 폴더로 지정하세요.</string>
     <string name="download_point_other_pane">내 파일로</string>
     <string name="download_needs_storage">아직 저장소를 읽을 수 없습니다</string>
     <string name="storage_grant_short">허용</string>
     <string name="fail_too_much_to_delete">한 번에 삭제하기엔 너무 많습니다</string>
-    <string name="fail_too_much_to_delete_advice">아무것도 삭제되지 않았습니다. 폴더를 열어 나누어 삭제하세요.</string>
+    <string name="fail_too_much_to_delete_advice">삭제하지 않았습니다. 폴더를 열어 나눠 삭제하세요.</string>
     <string name="paste_between_servers">FTP에서는 서버끼리 복사할 수 없습니다</string>
     <string name="paste_upload_here">이 서버로 %1$d개 보내기</string>
     <string name="paste_download_here">이 휴대폰에 %1$d개 저장</string>
@@ -326,7 +326,7 @@
     <string name="storage_clear_pane">이 창 비우기</string>
     <string name="storage_manage_servers">서버 추가·편집</string>
     <string name="storage_eject">꺼내기</string>
-    <string name="storage_eject_hint">Android는 앱에서 저장소를 직접 마운트 해제할 수 없습니다. 시스템 저장소 설정에서 안전하게 꺼내 주세요.</string>
+    <string name="storage_eject_hint">앱에서 직접 꺼낼 수 없습니다. 시스템 저장소 설정에서 꺼내세요.</string>
     <string name="chosen">선택됨</string>
     <string name="action_share_selected">공유</string>
     <string name="share_no_app">이 파일을 받을 수 있는 앱이 없습니다</string>
@@ -336,7 +336,7 @@
     <string name="search_results_title">\"%1$s\" 검색 결과</string>
     <string name="search_running">%1$d개 찾음 · 폴더 %2$d개 확인</string>
     <string name="search_found">%1$d개 찾음</string>
-    <string name="search_truncated">%1$d개 찾음. 더 있을 수 있습니다. 이름을 더 좁혀 보세요.</string>
+    <string name="search_truncated">%1$d개 찾음. 이름을 더 좁혀 보세요.</string>
     <string name="search_stopped">중지 전까지 %1$d개 찾음</string>
     <string name="search_stop">중지</string>
     <string name="search_close">결과 닫기</string>
@@ -352,14 +352,14 @@
     <string name="sort_ascending_short">↑ 오름차순</string>
     <string name="sort_descending_short">↓ 내림차순</string>
     <string name="option_only_here">이 폴더만</string>
-    <string name="option_only_here_detail">이 폴더에만 위 설정을 씁니다. 나머지 폴더는 공용 설정을 그대로 씁니다.</string>
+    <string name="option_only_here_detail">이 폴더에만 적용하고, 나머지는 공용 설정을 씁니다.</string>
 
     <string name="open_with_title">연결 프로그램</string>
     <string name="open_always">.%1$s 파일은 항상 이 앱으로 열기</string>
     <string name="open_system_chooser">다른 앱 찾기…</string>
-    <string name="open_none_detail">이 형식을 열겠다는 앱이 이 기기에 없습니다. 시스템 선택기를 써 보세요.</string>
+    <string name="open_none_detail">이 형식을 열 앱이 없습니다. 시스템 선택기를 써 보세요.</string>
     <string name="associations_title">기본 연결 프로그램</string>
-    <string name="associations_empty">아직 앱을 지정한 형식이 없습니다. 파일을 눌러 선택하세요.</string>
+    <string name="associations_empty">지정한 형식이 없습니다. 파일을 눌러 선택하세요.</string>
     <string name="associations_forget">해제</string>
     <string name="menu_associations">연결 프로그램</string>
 
@@ -385,15 +385,15 @@
     <string name="queue_clear_failed">실패한 항목 삭제</string>
     <string name="queue_clear_all">목록 비우기</string>
     <string name="queue_clear_all_title">전송 목록을 비울까요?</string>
-    <string name="queue_clear_all_detail">진행 중인 전송은 중지되고, 받아둔 부분은 버려집니다. 이미 저장된 파일은 그대로 둡니다.</string>
+    <string name="queue_clear_all_detail">진행 중인 전송을 중지하고 받던 부분은 버립니다. 저장된 파일은 그대로입니다.</string>
     <string name="queue_clear_all_confirm">비우기</string>
 
     <string name="install_blocked_title">앱 설치 허용 필요</string>
-    <string name="install_blocked_detail">%1$s을(를) 설치하려면 이 앱이 앱 설치 출처로 허용되어야 합니다. 안드로이드 설정에서 켤 수 있고, 켜기 전에는 설치 화면이 아무 말 없이 닫힙니다.</string>
+    <string name="install_blocked_detail">%1$s을(를) 설치하려면 설정에서 이 앱을 설치 출처로 허용해야 합니다.</string>
     <string name="install_blocked_settings">설정 열기</string>
     <string name="app_build">빌드 %1$s</string>
     <string name="cert_none_title">인증서를 아직 확인하지 않음</string>
-    <string name="cert_none_detail">처음 접속할 때 인증서를 보여주고, 맞는지 확인합니다.</string>
+    <string name="cert_none_detail">처음 접속할 때 인증서를 확인합니다.</string>
     <string name="cert_pinned_title">이 서버의 인증서를 확인함</string>
     <string name="cert_forget">해제</string>
     <string name="cert_fingerprint">지문 (SHA-256)</string>
@@ -404,10 +404,10 @@
     <string name="cert_valid_range">%1$s ~ %2$s</string>
     <string name="cert_valid_expired">%1$s ~ %2$s — 오늘은 이 기간 밖입니다</string>
     <string name="cert_ask_title">%1$s의 인증서가 맞습니까?</string>
-    <string name="cert_ask_detail">이 인증서를 보증하는 기관이 없습니다. 직접 운영하는 서버라면 정상입니다. 아래 지문을 서버가 알려주는 지문과 비교해, 같을 때만 수락하세요. 다르면 다른 누군가가 서버인 척 답하는 중일 수 있습니다.</string>
+    <string name="cert_ask_detail">보증 기관이 없는 인증서입니다. 아래 지문이 서버가 알려준 지문과 같을 때만 수락하세요.</string>
     <string name="cert_accept">내 서버가 맞습니다</string>
     <string name="cert_changed_title">%1$s의 인증서가 전과 다릅니다</string>
-    <string name="cert_changed_detail">인증서 갱신과 연결 가로채기는 여기서 똑같이 보입니다. 어느 쪽인지 아는 사람은 본인뿐입니다. 서버를 손댄 기억이 없다면 수락하지 마세요.</string>
+    <string name="cert_changed_detail">인증서 갱신일 수도, 연결 가로채기일 수도 있습니다. 서버를 직접 바꾼 게 아니라면 수락하지 마세요.</string>
     <string name="cert_changed_was">전에 수락한 지문: %1$s</string>
     <string name="cert_accept_changed">새 인증서 수락</string>
     <string name="fail_certificate">서버의 인증서를 확인할 수 없습니다.</string>
@@ -422,17 +422,17 @@
     <string name="mode_write">쓰기</string>
     <string name="mode_execute">실행</string>
     <string name="mode_result">%1$s  ·  %2$s</string>
-    <string name="mode_unknown">서버가 현재 권한을 알려주지 않아, 새로 만들 때의 기본값에서 시작합니다.</string>
-    <string name="mode_special_kept">특수 비트(%1$s)가 설정되어 있습니다. 그대로 유지되며 여기서는 바꿀 수 없습니다.</string>
+    <string name="mode_unknown">서버가 현재 권한을 알려주지 않아 기본값에서 시작합니다.</string>
+    <string name="mode_special_kept">특수 비트(%1$s)는 그대로 유지되며 여기서 바꿀 수 없습니다.</string>
     <string name="props_link_target">가리키는 곳</string>
     <string name="viewing_title">열기 위해 받는 중</string>
     <string name="viewing_progress">%2$s 중 %1$s</string>
     <string name="viewing_progress_unknown">%1$s 받음</string>
     <string name="viewing_read_only_title">고친 내용은 서버에 저장되지 않습니다</string>
-    <string name="viewing_read_only_detail">서버에서 연 파일은 이 휴대폰에 받아둔 사본입니다. 다른 앱에서 고쳐도 사본만 바뀝니다. 서버의 파일을 고치려면 받아서 고친 뒤 다시 올려주세요.</string>
+    <string name="viewing_read_only_detail">서버 파일의 사본을 여는 것이라, 여기서 고쳐도 서버에는 반영되지 않습니다.</string>
     <string name="action_got_it">알겠습니다</string>
     <string name="setting_view_cache">열기용으로 보관 중인 파일</string>
-    <string name="setting_view_cache_detail">%1$s 사용 중. 같은 파일을 다시 열 때 바로 열리도록 둔 사본입니다. 공간이 필요하면 자동으로 지워집니다.</string>
+    <string name="setting_view_cache_detail">%1$s 사용 중. 다시 열 때 빠르도록 둔 사본이며, 공간이 부족하면 자동 삭제됩니다.</string>
     <string name="setting_view_cache_clear">비우기</string>
     <string name="work_scanning">폴더를 살펴보는 중</string>
     <string name="work_deleting">서버에서 삭제하는 중</string>
@@ -448,7 +448,7 @@
     <string name="archive_extract_none">푼 파일이 없습니다</string>
     <string name="archive_extract_stopped">파일 %1$d개를 풀고 중지했습니다</string>
     <string name="archive_password_title">암호</string>
-    <string name="archive_password_detail">이 압축파일에는 암호가 걸린 파일이 있습니다. 암호가 없으면 그 파일은 빠집니다.</string>
+    <string name="archive_password_detail">암호가 걸린 파일은 암호가 없으면 빠집니다.</string>
     <string name="archive_password_wrong">암호가 맞지 않습니다.</string>
     <string name="archive_not_readable">이 앱이 읽을 수 있는 압축파일이 아닙니다.</string>
     <string name="archive_compress">압축</string>
@@ -467,7 +467,7 @@
     <string name="archive_opening">%1$s 여는 중…</string>
     <string name="archive_open_failed">%1$s을(를) 열지 못했습니다: %2$s</string>
     <string name="archive_folder_exists_title">"%1$s" 폴더가 이미 있습니다</string>
-    <string name="archive_folder_exists_detail">풀리는 파일을 어떻게 할지 고르세요. 모든 파일에 같은 조건이 적용됩니다.</string>
+    <string name="archive_folder_exists_detail">처리 방식을 고르세요. 모든 파일에 같게 적용됩니다.</string>
     <string name="archive_extract_where_title">압축 풀기</string>
     <string name="archive_extract_where_detail">%1$s의 압축을 어디에 풀지 고르세요.</string>
     <string name="archive_extract_new_folder">새 폴더에 풀기</string>
@@ -480,7 +480,7 @@
     <string name="viewer_save">저장</string>
     <string name="viewer_prev_match">이전 찾기</string>
     <string name="viewer_next_match">다음 찾기</string>
-    <string name="viewer_text_too_big">이 파일은 여기서 열기에 너무 큽니다. “연결 프로그램”으로 다른 앱에서 여세요.</string>
+    <string name="viewer_text_too_big">너무 커서 여기서 못 엽니다. “연결 프로그램”으로 다른 앱에서 여세요.</string>
     <string name="viewer_image_failed">이미지를 표시할 수 없습니다.</string>
     <string name="viewer_saved">저장했습니다</string>
     <string name="viewer_save_failed">저장하지 못했습니다</string>
