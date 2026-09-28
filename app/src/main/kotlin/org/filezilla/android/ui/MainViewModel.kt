@@ -3582,29 +3582,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** A compress waiting on the choice of one archive or one per item. */
-    data class CompressRequest(val id: PaneId, val picks: List<String>)
+    /**
+     * A compress waiting on the choice of how it is made.
+     *
+     * [bundled] is whether the bundling and structure questions apply at all:
+     * a lone file is only ever itself at the archive's root, so those two are
+     * moot and only the split size is worth asking. It is false for that case.
+     */
+    data class CompressRequest(val id: PaneId, val picks: List<String>, val bundled: Boolean)
 
     var compressRequest by mutableStateOf<CompressRequest?>(null)
         private set
 
-    /** The bundling and structure the last compress used, to open the dialog on. */
+    /** The bundling, structure and split the last compress used, to open the dialog on. */
     val compressSeparateDefault: Boolean get() = graph.preferences.compressSeparate
     val compressFlatDefault: Boolean get() = graph.preferences.compressFlat
+    val compressSplitDefault: Long get() = graph.preferences.compressSplitBytes
 
     /**
-     * Starts a compress, asking first when there is a choice to make.
+     * Starts a compress by asking how it should be made.
      *
-     * A lone file has only one sensible answer -- itself, at the archive's root
-     * -- so it is zipped straight away. Anything with a folder in it, or more
-     * than one item, can be bundled into one archive or one apiece and laid
-     * flat or under a folder, and those are questions, so they are put.
+     * Every compress is put through the dialog now, because the one question
+     * that fits every case -- whether to cut the archive into parts small
+     * enough to send -- is the reason a lone large file is compressed at all.
+     * The bundling and structure questions are the ones that need more than one
+     * item or a folder to mean anything, so a lone file is marked not
+     * [bundled][CompressRequest.bundled] and shown only the split choice.
      */
     fun askCompress(id: PaneId, picks: List<String>) {
         if (picks.isEmpty()) return
         val hasFolder = pane(id).entries.any { it.name in picks && it.isDirectory }
-        if (picks.size <= 1 && !hasFolder) compress(id, picks, flat = true)
-        else compressRequest = CompressRequest(id, picks)
+        compressRequest = CompressRequest(id, picks, bundled = picks.size > 1 || hasFolder)
     }
 
     fun dismissCompress() {
@@ -3615,14 +3623,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * Carries out the pending compress, and remembers how for next time.
      *
      * [separate] makes one archive per item; [flat] drops the wrapping folder
-     * so the contents sit at the archive's root.
+     * so the contents sit at the archive's root; [splitBytes] cuts the archive
+     * into parts of that size, or 0 leaves it whole.
      */
-    fun runCompress(separate: Boolean, flat: Boolean) {
+    fun runCompress(separate: Boolean, flat: Boolean, splitBytes: Long) {
         val request = compressRequest ?: return
         compressRequest = null
         graph.preferences.compressSeparate = separate
         graph.preferences.compressFlat = flat
-        if (separate) compressEach(request.id, request.picks, flat) else compress(request.id, request.picks, flat)
+        graph.preferences.compressSplitBytes = splitBytes
+        if (separate) compressEach(request.id, request.picks, flat, splitBytes)
+        else compress(request.id, request.picks, flat, splitBytes)
     }
 
     /**
@@ -3634,13 +3645,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * a folder's contents at the archive root; otherwise a folder keeps its
      * name, and a plain handful of files is given a folder of the archive's.
      */
-    fun compress(id: PaneId, picks: List<String>, flat: Boolean = false) {
+    fun compress(id: PaneId, picks: List<String>, flat: Boolean = false, splitBytes: Long = 0) {
         if (picks.isEmpty()) return
         val folder = pane(id).path.takeIf { it.isNotEmpty() && pane(id).isLocal } ?: return
         val sources = picks.map { java.io.File(folder, it) }
         val stem = if (sources.size == 1) Archives.folderNameFor(sources.first().name)
         else java.io.File(folder).name.ifEmpty { "archive" }
-        val target = java.io.File(folder, freeNameIn(folder, "$stem.zip"))
+        val target = freeArchiveTarget(folder, stem, splitBytes)
         // Foldered: a folder keeps its own name already, so only a selection
         // that is all files needs a folder made for it.
         val wrap = if (!flat && sources.all { it.isFile }) stem else null
@@ -3653,7 +3664,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    ArchiveWriter.zip(sources, target, flatten = flat, wrap = wrap, cancelled = { stop.get() }) { done, total, name ->
+                    ArchiveWriter.zip(sources, target, flatten = flat, wrap = wrap, partBytes = splitBytes, cancelled = { stop.get() }) { done, total, name ->
                         archiveBusy = archiveBusy?.copy(done = done, total = total, path = name)
                     }
                 }
@@ -3662,11 +3673,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             result.onSuccess { written ->
                 if (written.cancelled) {
                     // Half a zip is a file that opens and is wrong, so it
-                    // goes rather than being left to be found later.
-                    runCatching { target.delete() }
+                    // goes rather than being left to be found later; the same
+                    // for a half-written run of parts.
+                    deleteArchiveParts(target)
                     archiveOutcome = ArchiveOutcome(
                         R.string.archive_compress_stopped,
                         listOf(target.name),
+                    )
+                } else if (written.parts.size > 1) {
+                    archiveOutcome = ArchiveOutcome(
+                        R.string.archive_compressed_split,
+                        listOf(target.name, written.parts.size),
                     )
                 } else {
                     archiveOutcome = ArchiveOutcome(
@@ -3677,9 +3694,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 clearSelectionIn(id)
                 relistLocalPanes()
             }.onFailure {
-                runCatching { target.delete() }
+                deleteArchiveParts(target)
                 archiveOutcome = ArchiveOutcome(R.string.archive_compress_stopped, listOf(target.name))
             }
+        }
+    }
+
+    /**
+     * A free name for an archive in [folder] built on [stem], safe for a split
+     * too: when the archive will be cut into parts, its first part `name.001`
+     * must also be free, or a second split beside the first would write parts
+     * over its parts while leaving its own `name.zip` untouched and the clash
+     * unseen.
+     */
+    private fun freeArchiveTarget(folder: String, stem: String, splitBytes: Long): java.io.File {
+        var name = freeNameIn(folder, "$stem.zip")
+        if (splitBytes > 0) {
+            var n = 1
+            while (java.io.File(folder, "$name.001").exists()) {
+                name = freeNameIn(folder, "$stem (${n++}).zip")
+            }
+        }
+        return java.io.File(folder, name)
+    }
+
+    /**
+     * Removes an archive and every part of it -- `name.zip` and any
+     * `name.zip.001`, `.002` beside it -- so a stopped or failed split leaves
+     * nothing half-made behind. The three-digit tail is what a part is; a file
+     * a user happened to name `name.zip.notes` is not touched.
+     */
+    private fun deleteArchiveParts(target: java.io.File) {
+        runCatching { target.delete() }
+        val parent = target.parentFile ?: return
+        val partOf = Regex("^" + Regex.escape(target.name) + "\\.\\d{3}$")
+        parent.listFiles()?.forEach { file ->
+            if (partOf.matches(file.name)) runCatching { file.delete() }
         }
     }
 
@@ -3691,7 +3741,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * something, and stoppable partway -- what was made stays, the one being
      * written when stopped is thrown away rather than left half done.
      */
-    private fun compressEach(id: PaneId, picks: List<String>, flat: Boolean = false) {
+    private fun compressEach(id: PaneId, picks: List<String>, flat: Boolean = false, splitBytes: Long = 0) {
         if (picks.isEmpty()) return
         val folder = pane(id).path.takeIf { it.isNotEmpty() && pane(id).isLocal } ?: return
         val sources = picks.map { java.io.File(folder, it) }
@@ -3706,19 +3756,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 for (source in sources) {
                     if (stop.get()) break
                     val stem = Archives.folderNameFor(source.name)
-                    val target = java.io.File(folder, freeNameIn(folder, "$stem.zip"))
+                    val target = freeArchiveTarget(folder, stem, splitBytes)
                     // A folder keeps its own name unless flattened; a lone file
                     // under "folder made" gets one of the archive's name.
                     val wrap = if (!flat && source.isFile) stem else null
                     val result = runCatching {
-                        ArchiveWriter.zip(listOf(source), target, flatten = flat, wrap = wrap, cancelled = { stop.get() }) { done, total, name ->
+                        ArchiveWriter.zip(listOf(source), target, flatten = flat, wrap = wrap, partBytes = splitBytes, cancelled = { stop.get() }) { done, total, name ->
                             archiveBusy = archiveBusy?.copy(done = done, total = total, path = name)
                         }
                     }.getOrNull()
                     if (result == null || result.cancelled) {
                         // A half-written zip opens and is wrong, so it goes;
                         // a stop ends the run, a failure skips to the next.
-                        runCatching { target.delete() }
+                        deleteArchiveParts(target)
                         if (result?.cancelled == true) break else continue
                     }
                     count++

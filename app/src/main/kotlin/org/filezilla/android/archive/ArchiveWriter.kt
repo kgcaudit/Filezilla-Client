@@ -1,6 +1,7 @@
 package org.filezilla.android.archive
 
 import java.io.File
+import java.io.OutputStream
 import java.util.zip.Deflater
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -11,6 +12,12 @@ data class WriteResult(
     val cancelled: Boolean = false,
     /** Files that could not be read, in the order tried. */
     val skipped: List<String> = emptyList(),
+    /**
+     * When the archive was split, the parts written, in order; empty for a
+     * single-file archive. Kept so the caller can name them to the user and
+     * clean them all up if the write was stopped or failed.
+     */
+    val parts: List<File> = emptyList(),
 )
 
 /**
@@ -56,12 +63,22 @@ object ArchiveWriter {
      * single folder. [wrap], when set, does the opposite, putting everything
      * under one folder of that name; it is how a loose handful of files is
      * given a folder of their own. The two are not combined.
+     *
+     * [partBytes], when above zero, cuts the archive into parts of at most that
+     * many bytes each, named `into.001`, `into.002`, and so on -- the split any
+     * of 7-Zip, Bandizip or ALZip makes and reads, where the parts join back
+     * into one zip simply by being laid end to end (`cat`, `copy /b`, or opening
+     * the `.001`). It is there for a file too big to send whole over a channel
+     * that caps each upload. The zip itself is unchanged; it is only carried in
+     * pieces. When it is set, [into] itself is never written -- only its parts
+     * are -- and the parts written are returned in the result.
      */
     fun zip(
         sources: List<File>,
         into: File,
         flatten: Boolean = false,
         wrap: String? = null,
+        partBytes: Long = 0,
         cancelled: () -> Boolean = { false },
         onProgress: Progress = Progress { _, _, _ -> },
     ): WriteResult {
@@ -78,11 +95,19 @@ object ArchiveWriter {
         var done = 0
         var doneBytes = 0L
 
-        ZipOutputStream(into.outputStream().buffered()).use { zip ->
+        // A single file, or a splitter that rolls to the next part on the way
+        // through. The split is of the byte stream, not the zip's structure:
+        // ZipOutputStream only ever writes forward, so the pieces concatenate
+        // back to exactly the bytes a single file would have held.
+        val split = if (partBytes > 0) SplittingOutputStream(into, partBytes) else null
+        val sink = split ?: into.outputStream().buffered()
+        fun partsOf() = split?.parts.orEmpty()
+
+        ZipOutputStream(sink).use { zip ->
             zip.setLevel(Deflater.BEST_COMPRESSION)
             for ((file, name) in planned) {
                 if (cancelled()) {
-                    return WriteResult(done, cancelled = true, skipped = skipped)
+                    return WriteResult(done, cancelled = true, skipped = skipped, parts = partsOf())
                 }
                 onProgress.at(doneBytes, totalBytes, name)
                 var stoppedHere = false
@@ -102,14 +127,14 @@ object ArchiveWriter {
                     }
                 }
                 when {
-                    stoppedHere -> return WriteResult(done, cancelled = true, skipped = skipped)
+                    stoppedHere -> return WriteResult(done, cancelled = true, skipped = skipped, parts = partsOf())
                     written.isSuccess -> done++
                     else -> skipped += name
                 }
             }
         }
         onProgress.at(totalBytes, totalBytes, "")
-        return WriteResult(done, skipped = skipped)
+        return WriteResult(done, skipped = skipped, parts = partsOf())
     }
 
     /**
@@ -158,5 +183,64 @@ object ArchiveWriter {
             }
         }
         return out
+    }
+
+    /**
+     * A stream that fills one part file, then the next, cutting whatever is
+     * written across the boundary rather than at it -- a single `write` that
+     * would run past the end of a part is split, the rest going to the part
+     * after. So every part but the last is exactly [partBytes] long, which is
+     * what a volume split means and what lets the parts be joined back with no
+     * knowledge of where the cuts fell.
+     *
+     * Parts are named `base.001`, `base.002`, ... : three digits, so they sort
+     * in order past nine and past ninety-nine, and the numbering the split
+     * tools use. The base file itself is never opened; only its parts are.
+     */
+    private class SplittingOutputStream(
+        private val base: File,
+        private val partBytes: Long,
+    ) : OutputStream() {
+        val parts = mutableListOf<File>()
+        private var current: OutputStream? = null
+        private var inThisPart = 0L
+
+        private fun rollOver() {
+            current?.flush()
+            current?.close()
+            val part = File(base.parentFile, "%s.%03d".format(base.name, parts.size + 1))
+            parts += part
+            current = part.outputStream().buffered()
+            inThisPart = 0L
+        }
+
+        override fun write(b: Int) {
+            if (current == null || inThisPart >= partBytes) rollOver()
+            current!!.write(b)
+            inThisPart++
+        }
+
+        override fun write(b: ByteArray, off: Int, len: Int) {
+            var pos = off
+            var left = len
+            while (left > 0) {
+                if (current == null || inThisPart >= partBytes) rollOver()
+                val room = (partBytes - inThisPart).coerceAtMost(left.toLong()).toInt()
+                current!!.write(b, pos, room)
+                inThisPart += room
+                pos += room
+                left -= room
+            }
+        }
+
+        override fun flush() {
+            current?.flush()
+        }
+
+        override fun close() {
+            current?.flush()
+            current?.close()
+            current = null
+        }
     }
 }

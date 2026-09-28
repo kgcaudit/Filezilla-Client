@@ -312,6 +312,15 @@ class AppPreferences(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_COMPRESS_FLAT, value).apply()
 
     /**
+     * The size in bytes the last compress split its parts at, or 0 for no split
+     * -- so the choice a file was cut into pieces at is offered again next time,
+     * the same as bundling and structure are.
+     */
+    var compressSplitBytes: Long
+        get() = prefs.getLong(KEY_COMPRESS_SPLIT, 0L)
+        set(value) = prefs.edit().putLong(KEY_COMPRESS_SPLIT, value).apply()
+
+    /**
      * The narrow column's width as a percent of the screen, so a webtoon whose
      * lettering is small can be widened and one whose lettering is large pulled
      * in. Kept within a readable band rather than allowed to vanish or to fill
@@ -622,6 +631,7 @@ class AppPreferences(context: Context) {
         const val KEY_READER_WEBTOON_WIDTH = "reader_webtoon_width"
         const val KEY_COMPRESS_SEPARATE = "compress_separate"
         const val KEY_COMPRESS_FLAT = "compress_flat"
+        const val KEY_COMPRESS_SPLIT = "compress_split"
         const val KEY_RECENTS = "recents"
         const val KEY_TRASH = "trash"
 

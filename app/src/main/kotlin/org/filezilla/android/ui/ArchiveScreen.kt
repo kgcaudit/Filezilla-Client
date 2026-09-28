@@ -246,46 +246,93 @@ fun ExtractDestinationDialog(
 }
 
 /**
- * How to compress several picked items: how they are bundled, and their shape.
+ * How to compress picked items: how they are bundled, their shape, and whether
+ * to cut the result into parts.
  *
  * Bundling is one archive for all or one apiece -- a folder of chapters kept
  * together, or each chapter made its own book. Structure is whether a folder's
  * contents sit at the archive's root (so a comic opens straight onto its pages)
- * or stay under a folder. Both start on whatever was chosen last.
+ * or stay under a folder. Split cuts the archive into equal parts small enough
+ * to send over a channel that caps each upload. All start on whatever was
+ * chosen last.
+ *
+ * [bundled] is false for a lone file, whose bundling and structure are settled
+ * -- itself, at the root -- leaving only the split to ask, so those two groups
+ * are not shown and the compress runs with those settled answers.
  */
 @Composable
 fun CompressChoiceDialog(
     count: Int,
+    bundled: Boolean,
     separateDefault: Boolean,
     flatDefault: Boolean,
-    onCompress: (separate: Boolean, flat: Boolean) -> Unit,
+    splitDefault: Long,
+    onCompress: (separate: Boolean, flat: Boolean, splitBytes: Long) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var separate by remember { mutableStateOf(separateDefault) }
     var flat by remember { mutableStateOf(flatDefault) }
+    var split by remember { mutableStateOf(splitDefault) }
     OloDialog(
         title = stringResource(R.string.archive_compress_title, count),
         onDismiss = onDismiss,
         content = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                CompressGroup(
-                    label = R.string.archive_compress_bundle,
-                    firstLabel = R.string.archive_compress_one, firstChosen = !separate, onFirst = { separate = false },
-                    secondLabel = R.string.archive_compress_each, secondChosen = separate, onSecond = { separate = true },
-                )
-                CompressGroup(
-                    label = R.string.archive_compress_structure,
-                    firstLabel = R.string.archive_compress_flat, firstChosen = flat, onFirst = { flat = true },
-                    secondLabel = R.string.archive_compress_folder, secondChosen = !flat, onSecond = { flat = false },
-                )
+                if (bundled) {
+                    CompressGroup(
+                        label = R.string.archive_compress_bundle,
+                        firstLabel = R.string.archive_compress_one, firstChosen = !separate, onFirst = { separate = false },
+                        secondLabel = R.string.archive_compress_each, secondChosen = separate, onSecond = { separate = true },
+                    )
+                    CompressGroup(
+                        label = R.string.archive_compress_structure,
+                        firstLabel = R.string.archive_compress_flat, firstChosen = flat, onFirst = { flat = true },
+                        secondLabel = R.string.archive_compress_folder, secondChosen = !flat, onSecond = { flat = false },
+                    )
+                }
+                CompressSplitGroup(chosen = split, onChoose = { split = it })
             }
         },
         action = {
-            TextButton(onClick = { onCompress(separate, flat) }) {
+            TextButton(onClick = {
+                if (bundled) onCompress(separate, flat, split) else onCompress(false, true, split)
+            }) {
                 Text(stringResource(R.string.archive_compress))
             }
         },
     )
+}
+
+/** A megabyte, the unit the split sizes are offered in. */
+private const val SPLIT_MB = 1024L * 1024L
+
+/**
+ * The split-size choice: off, or one of a few sizes that clear the usual upload
+ * caps -- 25MB slips under a 30MB limit, the larger two for roomier channels.
+ * Laid two to a row like the other groups, the chosen one filled.
+ */
+@Composable
+private fun CompressSplitGroup(chosen: Long, onChoose: (Long) -> Unit) {
+    val options = listOf(
+        stringResource(R.string.archive_split_none) to 0L,
+        stringResource(R.string.archive_split_mb, 25) to 25 * SPLIT_MB,
+        stringResource(R.string.archive_split_mb, 50) to 50 * SPLIT_MB,
+        stringResource(R.string.archive_split_mb, 100) to 100 * SPLIT_MB,
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            stringResource(R.string.archive_compress_split),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        options.chunked(2).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                row.forEach { (label, bytes) ->
+                    ChoicePill(label, bytes == chosen, { onChoose(bytes) }, Modifier.weight(1f))
+                }
+            }
+        }
+    }
 }
 
 @Composable

@@ -297,6 +297,55 @@ class ArchiveWorkTest {
         }
     }
 
+    @Test
+    fun `a split archive is written as parts that join back into the whole zip`() {
+        val folder = temporary.newFolder("src")
+        // Random bytes, so deflate cannot shrink them: the zip stays about as
+        // big as the file and the split really has several parts. A patterned
+        // fill would compress to under one part and prove nothing.
+        File(folder, "big.bin").writeBytes(ByteArray(500_000).also { java.util.Random(42).nextBytes(it) })
+
+        // The unsplit zip, for the bytes the parts must add back up to.
+        val whole = File(temporary.root, "whole.zip")
+        ArchiveWriter.zip(listOf(folder), whole)
+
+        val split = File(temporary.root, "split.zip")
+        val result = ArchiveWriter.zip(listOf(folder), split, partBytes = 100_000)
+
+        // Several parts, named .001 upward, none over the part size, and the
+        // base name itself never written.
+        assertTrue("expected several parts, got ${result.parts.size}", result.parts.size > 1)
+        assertFalse(split.exists())
+        result.parts.forEachIndexed { i, part ->
+            assertEquals(File(temporary.root, "split.zip.%03d".format(i + 1)), part)
+            assertTrue("part ${part.name} is ${part.length()}", part.length() <= 100_000)
+        }
+
+        // Laid end to end, the parts are exactly the whole zip.
+        val joined = result.parts.fold(ByteArray(0)) { acc, part -> acc + part.readBytes() }
+        assertTrue("joined parts differ from the unsplit zip", joined.contentEquals(whole.readBytes()))
+    }
+
+    @Test
+    fun `the parts of a split archive rejoin into a zip the reader reads`() {
+        val folder = temporary.newFolder("papers")
+        File(folder, "한글 이름.txt").writeText("한글 내용입니다\n")
+        File(folder, "big.bin").writeBytes(ByteArray(300_000).also { java.util.Random(7).nextBytes(it) })
+
+        val split = File(temporary.root, "made.zip")
+        val result = ArchiveWriter.zip(listOf(folder), split, partBytes = 80_000)
+        assertTrue(result.parts.size > 1)
+
+        // Join the parts back the way a receiver would, and read it.
+        val rejoined = File(temporary.root, "rejoined.zip")
+        rejoined.outputStream().use { out -> result.parts.forEach { out.write(it.readBytes()) } }
+        ZipArchive.open(rejoined).use { archive ->
+            assertTrue(archive.entries.any { it.path == "papers/big.bin" })
+            val korean = archive.entries.first { it.path.endsWith("한글 이름.txt") }
+            assertEquals("한글 내용입니다\n", archive.open(korean).use { String(it.readBytes()) })
+        }
+    }
+
     /** An archive of exactly the entries given, all empty. */
     private class FakeArchive(vararg given: ArchiveEntry) : Archive {
         override val entries = given.toList()

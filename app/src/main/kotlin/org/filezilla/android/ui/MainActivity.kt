@@ -991,8 +991,10 @@ private fun AppScreen(
     model.compressRequest?.let { request ->
         CompressChoiceDialog(
             count = request.picks.size,
+            bundled = request.bundled,
             separateDefault = model.compressSeparateDefault,
             flatDefault = model.compressFlatDefault,
+            splitDefault = model.compressSplitDefault,
             onCompress = model::runCompress,
             onDismiss = model::dismissCompress,
         )
