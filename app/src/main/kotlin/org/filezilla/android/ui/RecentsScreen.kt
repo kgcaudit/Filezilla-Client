@@ -92,7 +92,10 @@ fun RecentsScreen(
         // is drawn the moment the group changes going down the list -- so the
         // three headings need no separate bookkeeping.
         LazyColumn(Modifier.fillMaxSize()) {
-            itemsIndexed(shown) { index, entry ->
+            // Keyed by path so a row's node, and the state remembered in it,
+            // moves with its file when the list reorders rather than staying
+            // put and taking on the next file.
+            itemsIndexed(shown, key = { _, entry -> entry.path }) { index, entry ->
                 val group = RecentDays.groupOf(entry.time, dayStart, yesterdayStart)
                 val prev = shown.getOrNull(index - 1)
                     ?.let { RecentDays.groupOf(it.time, dayStart, yesterdayStart) }
@@ -142,7 +145,12 @@ private fun RecentRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .pointerInput(Unit) {
+                // Keyed on the entry, not Unit: a LazyColumn reuses a row's
+                // node for a different entry as the list reorders, and a
+                // pointerInput keyed on Unit keeps the tap lambda it first
+                // captured -- so a tap opened whichever file the row used to
+                // hold, not the one now shown.
+                .pointerInput(entry.path) {
                     detectTapGestures(
                         onTap = { onOpen() },
                         onLongPress = {
