@@ -115,7 +115,7 @@ fun TextViewerScreen(viewer: MainViewModel.TextViewer, model: MainViewModel) {
                         val saveFailedText = stringResource(R.string.viewer_save_failed)
                         IconButton(onClick = {
                             loaded?.let { l ->
-                                model.saveText(viewer.file, l, value.text) { ok ->
+                                model.saveText(viewer.file, l, value.text, viewer.origin) { ok ->
                                     saved = ok
                                     // A save is silent otherwise: the button just
                                     // vanishes, which reads the same whether it

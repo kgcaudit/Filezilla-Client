@@ -21,6 +21,7 @@ import org.filezilla.android.storage.DownloadDestination
 import org.filezilla.android.storage.PartialFiles
 import java.io.File
 import org.filezilla.android.storage.SafStorage
+import org.filezilla.ftp.io.asTransferReader
 import org.filezilla.ftp.io.asTransferWriter
 import org.filezilla.ftp.journal.JournalledTransfer
 import org.filezilla.ftp.journal.RemoteFingerprint
@@ -1096,6 +1097,52 @@ class TransferManager(
                     writerFactory = { into.asTransferWriter() },
                 )
             }
+        }
+        Unit
+    }
+
+    /**
+     * Sends [from] back up to [remotePath], replacing what is there.
+     *
+     * The save side of [fetchForViewing]: a file looked at on a server, edited
+     * on the phone, and written straight back to the same place. It goes now
+     * rather than through the queue, so the editor can say at once whether the
+     * save reached the server, and it replaces rather than resumes -- an edit
+     * is a new whole file, never more bytes appended to the old one. The held
+     * listing for that server is dropped afterwards, however it went, so the
+     * pane shows the new size and time on its next look.
+     */
+    suspend fun uploadAfterEditing(
+        site: SiteEntity,
+        remotePath: String,
+        from: File,
+        abort: TransferAbort,
+        progress: (bytes: Long, total: Long?) -> Unit,
+    ): Unit = withContext(io) {
+        val settings = site.toSettings(passwords)
+        try {
+            WorkerConnection(capabilities, log).use { connection ->
+                connection.settings = settings
+                runInterruptible {
+                    ResilientTransfer(
+                        settings = settings,
+                        capabilities = capabilities,
+                        retryPolicy = RetryPolicy(maxAttempts = settings.maxRetries),
+                        logger = log,
+                        sleep = { millis -> networkGate.waitBeforeRetry(millis) { abort.isStopped } },
+                        connections = connection,
+                        abort = abort,
+                    ).upload(
+                        remoteFile = remotePath,
+                        // Replace, never resume: an edited file is not more of
+                        // the old one, so appending would splice the two.
+                        resume = false,
+                        progress = { transferred, _, total -> progress(transferred, total) },
+                    ) { from.asTransferReader() }
+                }
+            }
+        } finally {
+            listings.forgetServer(site.host, site.port, site.user)
         }
         Unit
     }

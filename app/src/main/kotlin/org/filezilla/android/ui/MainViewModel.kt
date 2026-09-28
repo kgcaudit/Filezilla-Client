@@ -1672,6 +1672,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var readyToOpen by mutableStateOf<java.io.File?>(null)
         private set
 
+    /**
+     * Where the file waiting in [readyToOpen] came from, when it came from a
+     * server -- so a text file fetched to be looked at can be edited and put
+     * back where it was. Null for a file unpacked from an archive, which has no
+     * one place to save to.
+     */
+    var readyToOpenOrigin by mutableStateOf<TextOrigin?>(null)
+        private set
+
     /** Said once, before the first server file is ever opened. */
     var warnReadOnly by mutableStateOf(false)
         private set
@@ -1681,6 +1690,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openedReady() {
         readyToOpen = null
+        readyToOpenOrigin = null
     }
 
     fun dismissViewingFailure() {
@@ -1700,8 +1710,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // -------------------------------------------------------- in-app viewers
 
-    /** A text file shown in the app's own reader, editable only on the phone. */
-    data class TextViewer(val file: java.io.File, val name: String, val editable: Boolean)
+    /**
+     * Where an edited text file must be written back when it lives on a server:
+     * the pane it was opened from, that pane's server, and the file's path there.
+     */
+    data class TextOrigin(val id: PaneId, val site: SiteEntity, val remotePath: String)
+
+    /**
+     * A text file shown in the app's own reader. Editable on the phone's own
+     * files, and on a server file once [origin] says where to save it back.
+     */
+    data class TextViewer(
+        val file: java.io.File,
+        val name: String,
+        val editable: Boolean,
+        val origin: TextOrigin? = null,
+    )
 
     var textViewer by mutableStateOf<TextViewer?>(null)
         private set
@@ -1945,9 +1969,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (explicit && key != null) graph.preferences.setComicWebtoon(key, webtoon)
     }
 
-    fun openTextViewer(file: java.io.File, editable: Boolean) {
+    fun openTextViewer(file: java.io.File, editable: Boolean, origin: TextOrigin? = null) {
         recordRecent(file)
-        textViewer = TextViewer(file, file.name, editable)
+        textViewer = TextViewer(file, file.name, editable, origin)
     }
 
     fun closeTextViewer() {
@@ -2621,19 +2645,50 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Writes edited text back to [file] in the encoding it came in.
+     * Writes edited text back where it came from, in the encoding it came in.
      *
-     * Only ever a phone file: the viewer offers editing on those alone, so
-     * there is no server round-trip to make here. The panes are re-listed
-     * because the size and time on the row have just changed.
+     * A phone file is written in place. A server file is written to the fetched
+     * copy first and then sent back up over the original, so the copy on the
+     * phone and the file on the server say the same thing; [onDone] hears false
+     * if either the write or the upload failed, leaving the editor's unsaved
+     * mark on so the work is not lost. Afterwards the panes are re-listed, the
+     * server one asked afresh, because the size and time on the row have just
+     * changed.
      */
-    fun saveText(file: java.io.File, loaded: TextFiles.Loaded, text: String, onDone: (Boolean) -> Unit) {
+    fun saveText(
+        file: java.io.File,
+        loaded: TextFiles.Loaded,
+        text: String,
+        origin: TextOrigin?,
+        onDone: (Boolean) -> Unit,
+    ) {
         viewModelScope.launch {
-            val ok = withContext(Dispatchers.IO) {
+            val wrote = withContext(Dispatchers.IO) {
                 runCatching { file.writeBytes(TextFiles.encode(text, loaded)) }.isSuccess
             }
-            if (ok) relistLocalPanes()
-            onDone(ok)
+            if (!wrote) {
+                onDone(false)
+                return@launch
+            }
+            if (origin == null) {
+                relistLocalPanes()
+                onDone(true)
+                return@launch
+            }
+            val sent = withContext(Dispatchers.IO) {
+                runCatching {
+                    graph.transfers.uploadAfterEditing(
+                        origin.site,
+                        origin.remotePath,
+                        file,
+                        TransferAbort(),
+                    ) { _, _ -> }
+                }.isSuccess
+            }
+            // Re-list the pane it came from, so its row shows the new size and
+            // time and the next open fetches the version just saved.
+            if (sent && pane(origin.id).site?.id == origin.site.id) open(origin.id)
+            onDone(sent)
         }
     }
 
@@ -2763,9 +2818,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
 
         val home = pane(id).path
+        val origin = TextOrigin(id, site, remotePath)
         graph.viewCache.readyFile(key)?.let { held ->
             graph.viewCache.touch(held)
-            offerToOpen(id, home, held)
+            offerToOpen(id, home, held, origin)
             return
         }
 
@@ -2793,7 +2849,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
                 graph.viewCache.evictDownTo(keep = held)
-                offerToOpen(id, home, held)
+                offerToOpen(id, home, held, origin)
             }.onFailure { error ->
                 viewing = null
                 partial.delete()
@@ -2802,7 +2858,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun offerToOpen(id: PaneId, home: String, file: java.io.File) {
+    private fun offerToOpen(id: PaneId, home: String, file: java.io.File, origin: TextOrigin) {
         // An archive fetched from a server is browsed in the pane it came
         // from, the same as one on the phone; backing out returns to the
         // server folder. Anything else is handed to whatever reads it, with
@@ -2811,8 +2867,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             openArchive(id, file, home)
             return
         }
-        if (!graph.preferences.warnedThatViewingIsReadOnly) warnReadOnly = true
+        // The read-only notice is for the copies that really are read-only --
+        // a picture, a film, a PDF. A text file small enough for the editor is
+        // no longer one of them: it saves straight back to the server now, so
+        // warning that edits will not reach it would be untrue.
+        val editableText = TextFiles.looksTextual(file.name) && file.length() <= TextFiles.MAX_BYTES
+        if (!editableText && !graph.preferences.warnedThatViewingIsReadOnly) warnReadOnly = true
         readyToOpen = file
+        // Remembered so an edited text file can be sent back to where it was
+        // fetched from; the screen uses it only for a text file, and ignores
+        // it for the pictures and films that stay read-only copies.
+        readyToOpenOrigin = origin
     }
 
     // ---------------------------------------------------------------- archives

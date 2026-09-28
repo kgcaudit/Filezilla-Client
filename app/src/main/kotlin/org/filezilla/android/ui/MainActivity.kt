@@ -933,6 +933,9 @@ private fun AppScreen(
     // The same door the phone's own files go through, so the remembered
     // app, the chooser and the APK guard are all the ones already written.
     val ready = model.readyToOpen
+    // Captured before openedReady() clears it: where a text file came from, so
+    // it can be edited and sent back. Null for one unpacked from an archive.
+    val readyOrigin = model.readyToOpenOrigin
     LaunchedEffect(ready, model.warnReadOnly) {
         if (ready != null && !model.warnReadOnly) {
             model.openedReady()
@@ -946,12 +949,13 @@ private fun AppScreen(
                     model.openArchiveOrComic(model.activePane, ready, ready.parent ?: "")
                 InstallApk.isPackage(ready.name) && !InstallApk.allowed(context) ->
                     installBlockedFor = ready
-                // A file fetched from a server, or unpacked from an archive, is
-                // a read-only copy: text opens in the viewer but not for
-                // editing, and an image opens on its own (its neighbours are
-                // still on the server, not here to swipe to).
+                // A text file fetched from a server opens for editing and is
+                // sent back where it came from on save; one unpacked from an
+                // archive has no single place to save to, so it opens read-only.
+                // An image opens on its own either way (its neighbours are still
+                // on the server, not here to swipe to).
                 TextFiles.looksTextual(ready.name) && ready.length() <= TextFiles.MAX_BYTES ->
-                    model.openTextViewer(ready, editable = false)
+                    model.openTextViewer(ready, editable = readyOrigin != null, origin = readyOrigin)
                 ImageFiles.looksImage(ready.name) ->
                     model.openImageViewer(listOf(MainViewModel.ImageRef.OnDisk(ready)), 0, comicKey = null)
                 // A server video or sound, fetched to the cache, opens in the

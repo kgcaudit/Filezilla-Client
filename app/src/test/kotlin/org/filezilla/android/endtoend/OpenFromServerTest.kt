@@ -144,26 +144,51 @@ class OpenFromServerTest : AppAgainstAServer() {
 
     @Test
     fun `the read-only notice is shown once and then not again`() {
-        File(onServer, "notes.txt").writeText("x")
-        File(onServer, "other.txt").writeText("y")
+        // Images: the copies that really are read-only, so the notice is theirs.
+        // A text file no longer shows it -- it saves back to the server now.
+        File(onServer, "poster.jpg").writeText("x")
+        File(onServer, "photo.png").writeText("y")
 
         val model = model()
         openOnServer(model, PaneId.LEFT, savedSite())
         waitFor("the rows") { model.pane(PaneId.LEFT).entries.size >= 2 }
 
-        tap(model, "notes.txt")
+        tap(model, "poster.jpg")
         waitFor("the copy") { model.readyToOpen != null }
         assertTrue("the first open should say what opening means", model.warnReadOnly)
 
         model.acknowledgeReadOnly()
         model.openedReady()
 
-        tap(model, "other.txt")
+        tap(model, "photo.png")
         waitFor("the second copy") { model.readyToOpen != null }
 
         // Said every time, it would be dismissed without reading, which is
         // the same as not saying it.
         assertEquals(false, model.warnReadOnly)
+    }
+
+    @Test
+    fun `a text file opened from a server is editable and shows no read-only notice`() {
+        File(onServer, "notes.txt").writeText("hello from the server")
+
+        val model = model()
+        openOnServer(model, PaneId.LEFT, savedSite())
+        waitFor("the row") { model.pane(PaneId.LEFT).entries.any { it.name == "notes.txt" } }
+
+        tap(model, "notes.txt")
+        waitFor("the copy") { model.readyToOpen != null }
+
+        // Editing a server text file now reaches the server, so the copy is not
+        // read-only and the notice that says edits are lost must not appear.
+        assertEquals(false, model.warnReadOnly)
+        // And it carries where to save back to: the pane, its server, the path.
+        val origin = model.readyToOpenOrigin
+        assertTrue("a server text file should know where to save back", origin != null)
+        assertTrue(
+            "save-back path should be the file's own",
+            origin?.remotePath?.endsWith("notes.txt") == true,
+        )
     }
 
     @Test
