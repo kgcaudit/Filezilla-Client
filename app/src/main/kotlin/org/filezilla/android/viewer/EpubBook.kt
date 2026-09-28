@@ -166,12 +166,21 @@ object EpubReader {
 
     private fun text(archive: Archive, entry: ArchiveEntry): String? = runCatching {
         val bytes = archive.open(entry).use { it.readBytes() }
-        // A leading byte-order mark would otherwise sit at the front of the
-        // first tag and stop the parser matching it.
-        val start = if (bytes.size >= 3 && bytes[0] == 0xEF.toByte() &&
-            bytes[1] == 0xBB.toByte() && bytes[2] == 0xBF.toByte()
-        ) 3 else 0
-        String(bytes, start, bytes.size - start, Charsets.UTF_8)
+        // Decoded by the byte-order mark the file leads with -- UTF-16 is a
+        // charset the EPUB spec allows, and forcing its bytes through UTF-8
+        // turns the whole file to mojibake the XML parser then rejects. The
+        // mark is dropped either way, so it does not sit in front of the first
+        // tag; with no mark, UTF-8, which is what the rest are.
+        when {
+            bytes.size >= 2 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xFE.toByte() ->
+                String(bytes, 2, bytes.size - 2, Charsets.UTF_16LE)
+            bytes.size >= 2 && bytes[0] == 0xFE.toByte() && bytes[1] == 0xFF.toByte() ->
+                String(bytes, 2, bytes.size - 2, Charsets.UTF_16BE)
+            bytes.size >= 3 && bytes[0] == 0xEF.toByte() &&
+                bytes[1] == 0xBB.toByte() && bytes[2] == 0xBF.toByte() ->
+                String(bytes, 3, bytes.size - 3, Charsets.UTF_8)
+            else -> String(bytes, Charsets.UTF_8)
+        }
     }.getOrNull()
 
     private fun parse(xml: String): Document? = runCatching {

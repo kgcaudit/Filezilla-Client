@@ -2069,6 +2069,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             removeRecent(entry.path)
             return null
         }
+        // A PDF and an EPUB are both DOCUMENT by kind, so they are asked about
+        // by name before that -- otherwise reopening one from recents would
+        // fall to the text viewer and show the binary as gibberish, opening it
+        // as something quite different from the reader the tap first used.
+        if (looksPdf(file.name)) {
+            openPdfViewer(file)
+            return null
+        }
+        if (looksEpub(file.name)) {
+            openEpubViewer(file)
+            return null
+        }
         return when (kindOf(file.name, false)) {
             FileKind.VIDEO, FileKind.AUDIO -> {
                 // Reopen with the folder's other media beside it, so a song's
@@ -2105,10 +2117,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * Where deleted local files wait until the trash is emptied. It sits
      * under the app's own external files, so it shares a volume with most
      * user files and a delete becomes an instant rename rather than a copy.
+     *
+     * Resolved once and kept: it is read for every trash row as the screen
+     * scrolls, and re-resolving -- and re-creating -- the folder on the main
+     * thread each time is disk work no row should pay for. The folder is made
+     * where something is actually written to it, not here.
      */
-    private fun trashDir(): java.io.File {
+    private val trashDir: java.io.File by lazy {
         val app = getApplication<Application>()
-        return java.io.File(app.getExternalFilesDir(null) ?: app.filesDir, "trash").also { it.mkdirs() }
+        java.io.File(app.getExternalFilesDir(null) ?: app.filesDir, "trash")
     }
 
     /**
@@ -2120,8 +2137,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun trashLocal(path: String) {
         val src = java.io.File(FilePath.normalize(path))
         if (!src.exists()) return
-        val name = Trash.stash(trashDir(), src)
-        graph.preferences.addTrash(name, src.absolutePath, System.currentTimeMillis())
+        val name = Trash.stash(trashDir.also { it.mkdirs() }, src)
+        graph.preferences.addTrash(name, src.absolutePath, src.isDirectory, System.currentTimeMillis())
     }
 
     /**
@@ -2138,7 +2155,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** The file on disk that backs a trash entry, for its thumbnail. */
-    fun trashFile(entry: TrashEntry): java.io.File = java.io.File(trashDir(), entry.trashName)
+    fun trashFile(entry: TrashEntry): java.io.File = java.io.File(trashDir, entry.trashName)
 
     /**
      * The volume a trashed file originally sat on, named the way the storage
@@ -2155,16 +2172,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun restoreFromTrash(entry: TrashEntry) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                runCatching {
-                    val stored = java.io.File(trashDir(), entry.trashName)
-                    if (!stored.exists()) return@runCatching
-                    val original = java.io.File(entry.originalPath)
-                    val parent = original.parentFile
-                    if (parent != null && !parent.exists()) parent.mkdirs()
-                    val into = parent?.absolutePath ?: FilePath.ROOT
-                    Trash.restore(stored, into, original.name)
+                val stored = java.io.File(trashDir, entry.trashName)
+                // The record is dropped only when the file is actually back
+                // where it belongs -- or was already gone. A failed move (a
+                // full card, an unwritable old folder) keeps the entry, so the
+                // file still shows in the trash and can be tried again rather
+                // than being orphaned in the trash folder with nothing naming it.
+                val done = if (!stored.exists()) {
+                    true
+                } else {
+                    runCatching {
+                        val original = java.io.File(entry.originalPath)
+                        val parent = original.parentFile
+                        if (parent != null && !parent.exists()) parent.mkdirs()
+                        Trash.restore(stored, parent?.absolutePath ?: FilePath.ROOT, original.name)
+                    }.isSuccess
                 }
-                graph.preferences.removeTrash(entry.trashName)
+                if (done) graph.preferences.removeTrash(entry.trashName)
             }
             trash = graph.preferences.trash()
             relistLocalPanes()
@@ -2175,8 +2199,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteFromTrashForever(entry: TrashEntry) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                runCatching { LocalOperations.delete(java.io.File(trashDir(), entry.trashName).absolutePath) }
-                graph.preferences.removeTrash(entry.trashName)
+                // Kept in the list if the erase failed, for the same reason a
+                // failed restore is: a record with no file is a row that cannot
+                // be acted on, and a file with no record cannot be reached.
+                val gone = runCatching {
+                    LocalOperations.delete(java.io.File(trashDir, entry.trashName).absolutePath)
+                }.isSuccess
+                if (gone) graph.preferences.removeTrash(entry.trashName)
             }
             trash = graph.preferences.trash()
         }
@@ -2187,7 +2216,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 runCatching {
-                    for (child in trashDir().listFiles().orEmpty()) {
+                    for (child in trashDir.listFiles().orEmpty()) {
                         LocalOperations.delete(child.absolutePath)
                     }
                 }

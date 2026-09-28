@@ -58,6 +58,9 @@ import java.io.File
 /** How far a single page may be pinched in. */
 private const val MAX_ZOOM = 4f
 
+/** The widest a page bitmap is ever rendered, to bound its memory. */
+private const val MAX_RENDER_PX = 2048
+
 /** Keeps a zoomed page's offset within its grown bounds; centred at fit size. */
 private fun clampOffset(offset: Offset, scale: Float, size: IntSize): Offset {
     if (scale <= 1f) return Offset.Zero
@@ -212,12 +215,16 @@ private fun PdfPage(doc: PdfDoc, index: Int, isCurrent: Boolean, onZoom: (Float)
 
     // Rendered at twice the fit width once zoomed past a little, so pinching
     // in reveals real detail rather than magnifying screen-width pixels. Only
-    // the page in front pays for that; the rest stay at fit width.
+    // the page in front pays for that; the rest stay at fit width. Capped, so
+    // a tall page on a high-density screen cannot ask for a bitmap of tens of
+    // megabytes -- 2x a 1440px screen is a 2880-wide page, and a full one at
+    // ARGB_8888 is ~45MB and an OutOfMemory waiting to happen.
     val renderScale = if (isCurrent && scale > 1.3f) 2 else 1
     LaunchedEffect(boxSize.width, renderScale) {
         val width = boxSize.width
         if (width <= 0) return@LaunchedEffect
-        bitmap = withContext(Dispatchers.IO) { doc.render(index, width * renderScale)?.asImageBitmap() }
+        val target = (width * renderScale).coerceAtMost(MAX_RENDER_PX)
+        bitmap = withContext(Dispatchers.IO) { doc.render(index, target)?.asImageBitmap() }
     }
 
     Box(

@@ -117,7 +117,10 @@ private fun TrashRow(
     val original = remember(entry.originalPath) { java.io.File(entry.originalPath) }
     val name = original.name
     val folder = original.parent
-    val kind = remember(entry.originalPath) { kindOf(name, false) }
+    // A trashed folder is a folder: its kind comes from the stored flag, not
+    // from guessing "file", so it wears the folder tile and no thumbnail of a
+    // directory is ever attempted for one whose name ends like a picture.
+    val kind = remember(entry.originalPath, entry.isDirectory) { kindOf(name, entry.isDirectory) }
     var menuOpen by remember { mutableStateOf(false) }
     var pressAt by remember { mutableStateOf(Offset.Zero) }
     val density = LocalDensity.current

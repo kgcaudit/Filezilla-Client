@@ -70,19 +70,31 @@ data class RecentEntry(val path: String, val time: Long) {
  * the trash when the list is shown, so nothing stored here can fall out of step
  * with it. The original path is what a restore puts it back to.
  */
-data class TrashEntry(val trashName: String, val originalPath: String, val time: Long) {
+data class TrashEntry(
+    val trashName: String,
+    val originalPath: String,
+    val isDirectory: Boolean,
+    val time: Long,
+) {
 
-    fun encode(): String = "$time\u0000$trashName\u0000$originalPath"
+    // The directory flag sits second, right after the time, so the original
+    // path can stay last and keep swallowing any stray separator. An entry
+    // written before the flag existed has a name there instead, which is not
+    // "d" or "f", so it reads back as the file it was -- old trash still opens.
+    fun encode(): String = "$time\u0000${if (isDirectory) "d" else "f"}\u0000$trashName\u0000$originalPath"
 
     companion object {
         fun decode(stored: String): TrashEntry? {
             val parts = stored.split('\u0000')
             if (parts.size < 3) return null
             val time = parts[0].toLongOrNull() ?: return null
-            val trashName = parts[1]
-            val originalPath = parts.subList(2, parts.size).joinToString("\u0000")
+            val hasFlag = parts.size >= 4 && (parts[1] == "d" || parts[1] == "f")
+            val isDirectory = hasFlag && parts[1] == "d"
+            val nameAt = if (hasFlag) 2 else 1
+            val trashName = parts[nameAt]
+            val originalPath = parts.subList(nameAt + 1, parts.size).joinToString("\u0000")
             if (trashName.isEmpty() || originalPath.isEmpty()) return null
-            return TrashEntry(trashName, originalPath, time)
+            return TrashEntry(trashName, originalPath, isDirectory, time)
         }
     }
 }
@@ -525,9 +537,9 @@ class AppPreferences(context: Context) {
             .orEmpty()
 
     /** Records a file just moved into the trash, at the front of the list. */
-    fun addTrash(trashName: String, originalPath: String, time: Long) {
+    fun addTrash(trashName: String, originalPath: String, isDirectory: Boolean, time: Long) {
         val kept = trash().toMutableList()
-        kept.add(0, TrashEntry(trashName, originalPath, time))
+        kept.add(0, TrashEntry(trashName, originalPath, isDirectory, time))
         writeTrash(kept)
     }
 
