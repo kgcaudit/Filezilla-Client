@@ -71,7 +71,13 @@ data class RecentEntry(val path: String, val time: Long) {
  * with it. The original path is what a restore puts it back to.
  */
 data class TrashEntry(
-    val trashName: String,
+    /**
+     * Where the file now sits in the trash. An absolute path since the trash
+     * lives on the same volume as the deleted file (so a delete is an instant
+     * rename); an old entry that stored only a bare name is read against the
+     * legacy app-private trash folder instead.
+     */
+    val trashPath: String,
     val originalPath: String,
     val isDirectory: Boolean,
     val time: Long,
@@ -81,7 +87,7 @@ data class TrashEntry(
     // path can stay last and keep swallowing any stray separator. An entry
     // written before the flag existed has a name there instead, which is not
     // "d" or "f", so it reads back as the file it was -- old trash still opens.
-    fun encode(): String = "$time\u0000${if (isDirectory) "d" else "f"}\u0000$trashName\u0000$originalPath"
+    fun encode(): String = "$time\u0000${if (isDirectory) "d" else "f"}\u0000$trashPath\u0000$originalPath"
 
     companion object {
         fun decode(stored: String): TrashEntry? {
@@ -91,10 +97,10 @@ data class TrashEntry(
             val hasFlag = parts.size >= 4 && (parts[1] == "d" || parts[1] == "f")
             val isDirectory = hasFlag && parts[1] == "d"
             val nameAt = if (hasFlag) 2 else 1
-            val trashName = parts[nameAt]
+            val trashPath = parts[nameAt]
             val originalPath = parts.subList(nameAt + 1, parts.size).joinToString("\u0000")
-            if (trashName.isEmpty() || originalPath.isEmpty()) return null
-            return TrashEntry(trashName, originalPath, isDirectory, time)
+            if (trashPath.isEmpty() || originalPath.isEmpty()) return null
+            return TrashEntry(trashPath, originalPath, isDirectory, time)
         }
     }
 }
@@ -537,14 +543,14 @@ class AppPreferences(context: Context) {
             .orEmpty()
 
     /** Records a file just moved into the trash, at the front of the list. */
-    fun addTrash(trashName: String, originalPath: String, isDirectory: Boolean, time: Long) {
+    fun addTrash(trashPath: String, originalPath: String, isDirectory: Boolean, time: Long) {
         val kept = trash().toMutableList()
-        kept.add(0, TrashEntry(trashName, originalPath, isDirectory, time))
+        kept.add(0, TrashEntry(trashPath, originalPath, isDirectory, time))
         writeTrash(kept)
     }
 
     /** Drops one entry from the trash list (the file itself is removed elsewhere). */
-    fun removeTrash(trashName: String) = writeTrash(trash().filterNot { it.trashName == trashName })
+    fun removeTrash(trashPath: String) = writeTrash(trash().filterNot { it.trashPath == trashPath })
 
     /** Forgets the whole trash list. */
     fun clearTrash() = prefs.edit().remove(KEY_TRASH).apply()

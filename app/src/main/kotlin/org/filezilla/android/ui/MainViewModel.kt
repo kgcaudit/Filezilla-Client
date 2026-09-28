@@ -2114,16 +2114,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // ------------------------------------------------------------ trash
 
     /**
-     * Where deleted local files wait until the trash is emptied. It sits
-     * under the app's own external files, so it shares a volume with most
-     * user files and a delete becomes an instant rename rather than a copy.
+     * The trash folder for the volume [path] is on -- a hidden folder at that
+     * volume's own root.
      *
-     * Resolved once and kept: it is read for every trash row as the screen
-     * scrolls, and re-resolving -- and re-creating -- the folder on the main
-     * thread each time is disk work no row should pay for. The folder is made
-     * where something is actually written to it, not here.
+     * On its own volume on purpose. The app's external files dir looked like
+     * the same volume but is a separate FUSE domain, so a rename into it
+     * failed and the move fell back to copying the whole file byte for byte:
+     * deleting a several-gigabyte video took as long as copying one. A trash
+     * beside the file, on the same volume, makes a delete the instant rename
+     * it should be, and a restore the same. A file on no known volume falls
+     * back to the app's own folder.
      */
-    private val trashDir: java.io.File by lazy {
+    private fun trashDirFor(path: String): java.io.File {
+        val volume = graph.volumes.volumePaths().firstOrNull { FilePath.isWithin(path, it) }
+        return if (volume != null) java.io.File(volume, TRASH_DIR_NAME) else legacyTrashDir
+    }
+
+    /** The old single trash folder, kept for reading entries stored before the move. */
+    private val legacyTrashDir: java.io.File by lazy {
         val app = getApplication<Application>()
         java.io.File(app.getExternalFilesDir(null) ?: app.filesDir, "trash")
     }
@@ -2137,8 +2145,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun trashLocal(path: String) {
         val src = java.io.File(FilePath.normalize(path))
         if (!src.exists()) return
-        val name = Trash.stash(trashDir.also { it.mkdirs() }, src)
-        graph.preferences.addTrash(name, src.absolutePath, src.isDirectory, System.currentTimeMillis())
+        val dir = trashDirFor(src.absolutePath).also { it.mkdirs() }
+        val name = Trash.stash(dir, src)
+        graph.preferences.addTrash(
+            java.io.File(dir, name).absolutePath,
+            src.absolutePath,
+            src.isDirectory,
+            System.currentTimeMillis(),
+        )
     }
 
     /**
@@ -2154,8 +2168,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         trash = graph.preferences.trash()
     }
 
-    /** The file on disk that backs a trash entry, for its thumbnail. */
-    fun trashFile(entry: TrashEntry): java.io.File = java.io.File(trashDir, entry.trashName)
+    /**
+     * The file on disk that backs a trash entry, for its thumbnail and its
+     * restore. An absolute path is taken as is; a bare name is an entry from
+     * before the per-volume move, read against the old app-private folder.
+     */
+    fun trashFile(entry: TrashEntry): java.io.File =
+        if (entry.trashPath.startsWith("/")) {
+            java.io.File(entry.trashPath)
+        } else {
+            java.io.File(legacyTrashDir, entry.trashPath)
+        }
 
     /**
      * The volume a trashed file originally sat on, named the way the storage
@@ -2172,7 +2195,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun restoreFromTrash(entry: TrashEntry) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                val stored = java.io.File(trashDir, entry.trashName)
+                val stored = trashFile(entry)
                 // The record is dropped only when the file is actually back
                 // where it belongs -- or was already gone. A failed move (a
                 // full card, an unwritable old folder) keeps the entry, so the
@@ -2188,7 +2211,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         Trash.restore(stored, parent?.absolutePath ?: FilePath.ROOT, original.name)
                     }.isSuccess
                 }
-                if (done) graph.preferences.removeTrash(entry.trashName)
+                if (done) graph.preferences.removeTrash(entry.trashPath)
             }
             trash = graph.preferences.trash()
             relistLocalPanes()
@@ -2203,9 +2226,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 // failed restore is: a record with no file is a row that cannot
                 // be acted on, and a file with no record cannot be reached.
                 val gone = runCatching {
-                    LocalOperations.delete(java.io.File(trashDir, entry.trashName).absolutePath)
+                    LocalOperations.delete(trashFile(entry).absolutePath)
                 }.isSuccess
-                if (gone) graph.preferences.removeTrash(entry.trashName)
+                if (gone) graph.preferences.removeTrash(entry.trashPath)
             }
             trash = graph.preferences.trash()
         }
@@ -2215,10 +2238,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun emptyTrash() {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                runCatching {
-                    for (child in trashDir.listFiles().orEmpty()) {
-                        LocalOperations.delete(child.absolutePath)
-                    }
+                // Each entry's own file, since the trash is now spread across a
+                // hidden folder per volume rather than one folder to list.
+                for (entry in graph.preferences.trash()) {
+                    runCatching { LocalOperations.delete(trashFile(entry).absolutePath) }
                 }
                 graph.preferences.clearTrash()
             }
@@ -4487,6 +4510,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private companion object {
         /** The slot the phone's own folder is remembered in, per pane. */
         const val LOCAL_SOURCE_KEY = "local"
+
+        /** The hidden folder each volume keeps its trash in, at its own root. */
+        const val TRASH_DIR_NAME = ".OloExplorerTrash"
 
         /** How many whole image files the band decoder keeps around at once. */
         const val IMAGE_BYTE_CACHE = 4

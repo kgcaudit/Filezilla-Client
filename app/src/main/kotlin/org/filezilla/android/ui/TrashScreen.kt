@@ -76,7 +76,7 @@ fun TrashScreen(
         LazyColumn(Modifier.fillMaxSize()) {
             // Keyed by the trash name (unique) so a row stays with its entry
             // as the list changes.
-            itemsIndexed(entries, key = { _, entry -> entry.trashName }) { index, entry ->
+            itemsIndexed(entries, key = { _, entry -> entry.trashPath }) { index, entry ->
                 val group = RecentDays.groupOf(entry.time, dayStart, yesterdayStart)
                 val prev = entries.getOrNull(index - 1)
                     ?.let { RecentDays.groupOf(it.time, dayStart, yesterdayStart) }
@@ -133,7 +133,7 @@ private fun TrashRow(
                 .fillMaxWidth()
                 // Keyed on the entry so a reused row's long-press belongs to
                 // the entry it now shows, not the one it first held.
-                .pointerInput(entry.trashName) {
+                .pointerInput(entry.trashPath) {
                     detectTapGestures(
                         onLongPress = {
                             pressAt = it
