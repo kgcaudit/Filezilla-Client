@@ -323,6 +323,7 @@
     <string name="pane_storage">Storage and servers</string>
     <string name="storage_section">Storage</string>
     <string name="storage_servers_section">Servers</string>
+    <string name="storage_tools_section">Tools</string>
     <string name="storage_not_granted">This app cannot read storage yet</string>
     <string name="storage_grant_action">Tap to allow it</string>
     <string name="storage_free_of">%1$s free of %2$s</string>

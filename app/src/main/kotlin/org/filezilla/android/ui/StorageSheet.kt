@@ -231,10 +231,12 @@ fun StoragePlaces(
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            // Headed like the two groups above it, so the four places below
+            // read as a section rather than a loose tail of rows after the
+            // servers. They are places you visit, not places you live -- what
+            // used to be tabs along the bottom, at 80dp of every screen.
+            SectionLabel(stringResource(R.string.storage_tools_section))
 
-            // The two screens that used to be tabs along the bottom. They are
-            // places you visit, not places you live, and a permanent seat for
-            // each cost 80dp of every screen in the app.
             PlaceRow(
                 // Its own mark, not a folder's: the folder tile is what the
                 // row above this one means, and two rows carrying the same
