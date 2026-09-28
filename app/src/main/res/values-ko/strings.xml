@@ -325,7 +325,6 @@
     <string name="storage_grant_action">눌러서 권한을 허용하세요</string>
     <string name="storage_free_of">%2$s 중 %1$s 사용 가능</string>
     <string name="storage_clear_pane">이 창 비우기</string>
-    <string name="storage_manage_servers">서버 추가·편집</string>
     <string name="storage_eject">꺼내기</string>
     <string name="storage_eject_hint">앱에서 직접 꺼낼 수 없습니다. 시스템 저장소 설정에서 꺼내세요.</string>
     <string name="chosen">선택됨</string>

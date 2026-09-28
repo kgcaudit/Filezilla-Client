@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Eject
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -195,7 +196,14 @@ fun StoragePlaces(
             }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            SectionLabel(stringResource(R.string.storage_servers_section))
+            SectionLabel(stringResource(R.string.storage_servers_section)) {
+                IconButton(onClick = {
+                    onOpenScreen(Screen.SITES)
+                    onDismiss()
+                }) {
+                    Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.sites_add))
+                }
+            }
 
             if (sites.isEmpty()) {
                 Text(
@@ -218,17 +226,6 @@ fun StoragePlaces(
                     },
                 )
             }
-
-            PlaceRow(
-                glyph = R.drawable.ic_tile_server,
-                colour = MaterialTheme.colorScheme.secondary,
-                title = stringResource(R.string.storage_manage_servers),
-                subtitle = null,
-                onClick = {
-                    onOpenScreen(Screen.SITES)
-                    onDismiss()
-                },
-            )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             // Headed like the two groups above it, so the four places below
@@ -292,14 +289,33 @@ fun StoragePlaces(
 }
 
 @Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelLarge,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 4.dp),
-    )
+private fun SectionLabel(text: String, action: (@Composable () -> Unit)? = null) {
+    if (action == null) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 4.dp),
+        )
+        return
+    }
+    // A heading that carries its own action -- the servers' "add" -- keeps the
+    // action on the section it belongs to rather than trailing the list as a
+    // row that reads like one more server.
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.weight(1f),
+        )
+        action()
+    }
 }
 
 /** One place a pane can be sent to, with room underneath for what it is. */

@@ -167,6 +167,9 @@ class WordingTest {
             // one control, so they are one word.
             "menu_more",
             "new_folder_detail", "new_folder_title", "pane_no_source",
+            // "Add a server": the sites screen's + button, and the + on the
+            // storage sheet's servers heading that opens that same screen.
+            "sites_add",
             // The button that opens the transfer settings and the heading of
             // the sheet it opens: one name for one place, said twice on
             // purpose so the sheet answers the button.
