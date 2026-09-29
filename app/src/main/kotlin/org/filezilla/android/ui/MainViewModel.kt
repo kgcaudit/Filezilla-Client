@@ -33,6 +33,7 @@ import org.filezilla.android.archive.SevenZipNative
 import org.filezilla.android.archive.ExtractResult
 import org.filezilla.android.data.RecentEntry
 import org.filezilla.android.data.TrashEntry
+import org.filezilla.android.data.Bookmark
 import org.filezilla.android.data.SiteEntity
 import org.filezilla.android.files.FileMode
 import org.filezilla.ftp.transfer.TransferAbort
@@ -408,6 +409,63 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         graph.preferences.setPaneSiteId(id.name, site.id)
         update(id) { BrowseState(source = PaneSource.Remote(site), loading = true) }
         loadRemote(id, site, site.initialPath?.takeIf { it.isNotBlank() })
+    }
+
+    /** Points a pane at a server and a particular folder on it -- a bookmark's target. */
+    fun showSiteAt(id: PaneId, site: SiteEntity, path: String) {
+        graph.preferences.setPaneIsLocal(id.name, false)
+        graph.preferences.setPaneSiteId(id.name, site.id)
+        update(id) { BrowseState(source = PaneSource.Remote(site), loading = true) }
+        loadRemote(id, site, path.takeIf { it.isNotBlank() })
+    }
+
+    // ------------------------------------------------------------ bookmarks
+
+    /** Saved places, newest first; mirrors what is stored so the sheet updates. */
+    var bookmarks by mutableStateOf(graph.preferences.bookmarks())
+        private set
+
+    /** Whether this pane is somewhere that can be saved -- a folder, not empty. */
+    fun canBookmark(id: PaneId): Boolean = pane(id).source != PaneSource.Empty
+
+    /**
+     * Saves the pane's current folder. The label is the folder's own name, or
+     * the server's name at a root where there is no folder name to take.
+     */
+    fun bookmarkCurrent(id: PaneId) {
+        val state = pane(id)
+        val site = state.site
+        val fallback = site?.name?.ifBlank { site.host } ?: state.path.ifEmpty { FilePath.ROOT }
+        val label = FilePath.name(state.path).ifEmpty { fallback }
+        val bookmark = when {
+            state.isLocal -> Bookmark(label, isLocal = true, path = state.path, siteId = "")
+            site != null -> Bookmark(label, isLocal = false, path = state.path, siteId = site.id)
+            else -> return
+        }
+        graph.preferences.addBookmark(bookmark)
+        bookmarks = graph.preferences.bookmarks()
+    }
+
+    fun removeBookmark(bookmark: Bookmark) {
+        graph.preferences.removeBookmark(bookmark)
+        bookmarks = graph.preferences.bookmarks()
+    }
+
+    /**
+     * Sends [id] to a saved place. A server bookmark whose site has since been
+     * deleted cannot be opened, so it is dropped rather than left a dead row.
+     */
+    fun openBookmark(id: PaneId, bookmark: Bookmark) {
+        if (bookmark.isLocal) {
+            showLocalAt(id, bookmark.path)
+            return
+        }
+        val site = sites.value.firstOrNull { it.id == bookmark.siteId }
+        if (site == null) {
+            removeBookmark(bookmark)
+            return
+        }
+        showSiteAt(id, site, bookmark.path)
     }
 
     /**

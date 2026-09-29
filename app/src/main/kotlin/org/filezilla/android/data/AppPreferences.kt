@@ -105,6 +105,43 @@ data class TrashEntry(
     }
 }
 
+/**
+ * A saved place a pane can jump to: a folder on the phone, or a folder on a
+ * server. The path is kept as it was when saved; a server bookmark also keeps
+ * the id of the site it belongs to, so it reopens on the same server.
+ */
+data class Bookmark(
+    val label: String,
+    val isLocal: Boolean,
+    val path: String,
+    /** The server's id for a server bookmark; empty for a phone folder. */
+    val siteId: String,
+) {
+    /** The same place, whatever it is called -- what makes two rows one. */
+    fun samePlace(other: Bookmark): Boolean =
+        isLocal == other.isLocal && siteId == other.siteId && path == other.path
+
+    // The path sits last so it can hold any stray separator; the kind, the
+    // site id and the label are fixed-shape fields up front. A newline cannot
+    // occur in a field (it separates whole entries), and NUL never appears in
+    // a name or path, so the split is unambiguous.
+    fun encode(): String =
+        "${if (isLocal) "L" else "S"}\u0000$siteId\u0000$label\u0000$path"
+
+    companion object {
+        fun decode(stored: String): Bookmark? {
+            val parts = stored.split('\u0000')
+            if (parts.size < 4) return null
+            val isLocal = parts[0] == "L"
+            val siteId = parts[1]
+            val label = parts[2]
+            val path = parts.subList(3, parts.size).joinToString("\u0000")
+            if (path.isEmpty()) return null
+            return Bookmark(label, isLocal, path, siteId)
+        }
+    }
+}
+
 class AppPreferences(context: Context) {
 
     private val prefs = context.getSharedPreferences("filezilla", Context.MODE_PRIVATE)
@@ -567,6 +604,30 @@ class AppPreferences(context: Context) {
     private fun writeTrash(entries: List<TrashEntry>) =
         prefs.edit().putString(KEY_TRASH, entries.joinToString(KEY_SEPARATOR) { it.encode() }).apply()
 
+    // --------------------------------------------------------------- bookmarks
+
+    /** The saved places, newest first. */
+    fun bookmarks(): List<Bookmark> =
+        prefs.getString(KEY_BOOKMARKS, null)
+            ?.split(KEY_SEPARATOR)
+            ?.filter { it.isNotEmpty() }
+            ?.mapNotNull(Bookmark::decode)
+            .orEmpty()
+
+    /** Saves a place at the front, replacing an earlier save of the same place. */
+    fun addBookmark(bookmark: Bookmark) {
+        val kept = bookmarks().filterNot { it.samePlace(bookmark) }.toMutableList()
+        kept.add(0, bookmark)
+        writeBookmarks(kept)
+    }
+
+    /** Forgets one saved place. */
+    fun removeBookmark(bookmark: Bookmark) =
+        writeBookmarks(bookmarks().filterNot { it.samePlace(bookmark) })
+
+    private fun writeBookmarks(entries: List<Bookmark>) =
+        prefs.edit().putString(KEY_BOOKMARKS, entries.joinToString(KEY_SEPARATOR) { it.encode() }).apply()
+
     private fun comicKeys(): List<String> =
         prefs.getString(KEY_COMIC_KEYS, null)
             ?.split(KEY_SEPARATOR)
@@ -634,6 +695,7 @@ class AppPreferences(context: Context) {
         const val KEY_COMPRESS_SPLIT = "compress_split"
         const val KEY_RECENTS = "recents"
         const val KEY_TRASH = "trash"
+        const val KEY_BOOKMARKS = "bookmarks"
 
         /** How many files the recents list keeps; the oldest goes first. */
         internal const val MAX_RECENTS = 100

@@ -84,7 +84,7 @@ class IconMeaningTest {
         // Closing. None of these destroys anything -- taking a transfer out
         // of the queue, which does, is Cancel below, and keeping the two
         // apart is most of what this test is for.
-        "Close" to setOf("action_cancel", "filter_clear", "menu_select_none", "search_close"),
+        "Close" to setOf("action_cancel", "filter_clear", "menu_select_none", "search_close", "bookmark_remove"),
         // Taking something out for good.
         "Cancel" to setOf("queue_remove"),
         "Delete" to setOf("action_delete_selected", "sites_delete"),
@@ -131,7 +131,7 @@ class IconMeaningTest {
         "Share" to setOf("action_share_selected"),
         "Download" to setOf("action_download_selected", "browse_download"),
         "Search" to setOf("menu_filter"),
-        "Add" to setOf("sites_add"),
+        "Add" to setOf("sites_add", "bookmark_add"),
         "ArrowBack" to setOf("action_back"),
         // The player's rotate switch: free to turn with the phone, or held.
         "ScreenRotation" to setOf("action_rotate"),

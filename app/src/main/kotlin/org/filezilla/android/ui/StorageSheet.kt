@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Eject
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -230,6 +231,59 @@ fun StoragePlaces(
             }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            // Saved places, phone or server. The heading carries a "+" that
+            // saves wherever the pane is now -- but only when it is somewhere,
+            // so an empty pane offers nothing to save.
+            SectionLabel(
+                stringResource(R.string.storage_bookmarks_section),
+                if (model.canBookmark(id)) {
+                    {
+                        IconButton(onClick = { model.bookmarkCurrent(id) }) {
+                            Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.bookmark_add))
+                        }
+                    }
+                } else {
+                    null
+                },
+            )
+
+            val bookmarks = model.bookmarks
+            if (bookmarks.isEmpty()) {
+                Text(
+                    stringResource(R.string.bookmarks_empty_detail),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                )
+            }
+
+            for (bookmark in bookmarks) {
+                // For a server bookmark, the server's name sits before the path
+                // so two folders of the same name on different servers are told
+                // apart; a phone bookmark shows its path alone.
+                val serverName = if (bookmark.isLocal) {
+                    null
+                } else {
+                    sites.firstOrNull { it.id == bookmark.siteId }?.let { it.name.ifBlank { it.host } }
+                }
+                PlaceRow(
+                    glyph = R.drawable.ic_tile_bookmark,
+                    colour = MaterialTheme.colorScheme.tertiary,
+                    title = bookmark.label,
+                    subtitle = if (bookmark.isLocal) {
+                        bookmark.path
+                    } else {
+                        listOfNotNull(serverName, bookmark.path).joinToString(" · ")
+                    },
+                    onClick = {
+                        model.openBookmark(id, bookmark)
+                        onDismiss()
+                    },
+                    onRemove = { model.removeBookmark(bookmark) },
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             // Headed like the two groups above it, so the four places below
             // read as a section rather than a loose tail of rows after the
             // servers. They are places you visit, not places you live -- what
@@ -350,6 +404,7 @@ private fun PlaceRow(
     subtitle: String?,
     onClick: () -> Unit,
     onEject: (() -> Unit)? = null,
+    onRemove: (() -> Unit)? = null,
     extra: @Composable () -> Unit = {},
 ) {
     Row(
@@ -386,6 +441,17 @@ private fun PlaceRow(
                 Icon(
                     Icons.Filled.Eject,
                     contentDescription = stringResource(R.string.storage_eject),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        // Removing a saved place, its own tap target at the row's end so it is
+        // not reached for when opening the place the row otherwise does.
+        onRemove?.let {
+            IconButton(onClick = it) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = stringResource(R.string.bookmark_remove),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
