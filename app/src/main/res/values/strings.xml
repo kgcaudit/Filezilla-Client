@@ -563,4 +563,10 @@
     <string name="reader_next_volume">Next volume</string>
     <string name="reader_continue">Continue</string>
     <string name="reader_series_end">That was the last volume.</string>
+
+    <!-- Folder sync -->
+    <string name="sync_needs_two_folders">Both panes need a folder to sync between</string>
+    <string name="sync_server_to_server">Syncing from one server to another is not supported yet</string>
+    <string name="sync_overlap">The source and target folders overlap, so one would eat the other</string>
+    <string name="sync_scan_failed">The folders could not be read</string>
 </resources>

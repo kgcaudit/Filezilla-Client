@@ -2,6 +2,7 @@ package org.filezilla.android.ui
 
 import org.filezilla.android.files.FilePath
 import org.filezilla.android.files.LocalOperations
+import org.filezilla.android.files.SyncAction
 import org.filezilla.android.storage.ConflictChoice
 import org.filezilla.android.storage.DownloadConflict
 import org.filezilla.android.storage.numberedName
@@ -95,6 +96,84 @@ fun pasteLocally(
             ClipboardMode.MOVE -> LocalOperations.move(path, target, asName)
         }
     }
+}
+
+/** What carrying a mirror out on the phone got through. */
+data class LocalSyncResult(
+    val made: Int = 0,
+    val copied: Int = 0,
+    val deleted: Int = 0,
+    /** Actions that threw, passed over so the rest still runs. */
+    val failed: Int = 0,
+)
+
+/**
+ * Carries a [org.filezilla.android.files.SyncDiff] plan out on the phone.
+ *
+ * The local half of folder sync, kept in the one file the paste's own copy and
+ * move live in so that every write inside the phone stays in a place the guard
+ * can see -- there is no second way to overwrite a file on the device hiding
+ * behind the mirror.
+ *
+ * [actions] arrive already ordered (folders shallowest-first, then copies, then
+ * deletes deepest-first), so running them in order makes a folder before the
+ * files in it and empties a folder before removing it. The source is the
+ * answer, so a copy that lands on a file already there replaces it -- deleted
+ * first, because [LocalOperations] refuses to write over anything, and
+ * replacing is a decision taken here rather than a rule bent down in them.
+ *
+ * [copyFiles] is false when the copies are somebody else's job -- a server →
+ * phone mirror fetches the files through the transfer queue, and this is left
+ * only the empty folders to make and the extras to remove. A folder that will
+ * not build or a file that will not copy is counted and passed over rather than
+ * ending the mirror, the same way a single unreadable folder does not end a
+ * scan.
+ */
+fun syncLocally(
+    actions: List<SyncAction>,
+    sourceRoot: String,
+    targetRoot: String,
+    copyFiles: Boolean,
+    cancelled: () -> Boolean = { false },
+    onProgress: (done: Int, total: Int) -> Unit = { _, _ -> },
+): LocalSyncResult {
+    var made = 0
+    var copied = 0
+    var deleted = 0
+    var failed = 0
+    var done = 0
+    for (action in actions) {
+        if (cancelled()) break
+        onProgress(done, actions.size)
+        runCatching {
+            when (action) {
+                is SyncAction.MakeDir -> {
+                    val dir = File(FilePath.child(targetRoot, action.rel))
+                    if (!dir.exists()) {
+                        LocalOperations.createDirectory(dir.parent ?: targetRoot, dir.name)
+                        made++
+                    }
+                }
+
+                is SyncAction.Copy -> if (copyFiles) {
+                    val parentRel = action.rel.substringBeforeLast('/', "")
+                    val intoDir = if (parentRel.isEmpty()) targetRoot else FilePath.child(targetRoot, parentRel)
+                    File(intoDir).mkdirs()
+                    val existing = File(FilePath.child(targetRoot, action.rel))
+                    if (existing.exists()) LocalOperations.delete(existing.absolutePath)
+                    LocalOperations.copy(FilePath.child(sourceRoot, action.rel), intoDir)
+                    copied++
+                }
+
+                is SyncAction.Delete -> {
+                    LocalOperations.delete(FilePath.child(targetRoot, action.rel))
+                    deleted++
+                }
+            }
+        }.onFailure { failed++ }
+        done++
+    }
+    return LocalSyncResult(made, copied, deleted, failed)
 }
 
 /**

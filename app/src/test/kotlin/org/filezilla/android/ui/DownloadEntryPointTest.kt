@@ -65,7 +65,10 @@ class DownloadEntryPointTest {
             membersContaining("findConflicts("),
         )
         assertEquals(
-            setOf("resolveConflicts", "enqueuePicks", "downloadHeld"),
+            // syncRemoteToLocal is the fourth: a folder mirror fetches its
+            // copies through the same checked path, having already shown the
+            // user the whole plan in its preview.
+            setOf("resolveConflicts", "enqueuePicks", "downloadHeld", "syncRemoteToLocal"),
             membersContaining("enqueuePlan("),
         )
     }
@@ -251,7 +254,10 @@ class DownloadEntryPointTest {
     @Test
     fun `queueing uploads is fed by the paths that looked at the server`() {
         assertEquals(
-            setOf("sendToServer", "resolveUploadConflicts"),
+            // syncLocalToRemote is the third: a folder mirror uploads its
+            // copies through the same path that asks the server first, forcing
+            // overwrite because the source is the answer.
+            setOf("sendToServer", "resolveUploadConflicts", "syncLocalToRemote"),
             membersContaining("queueUploads("),
         )
         // And the only way into that: a paste, or the app-bar picker.

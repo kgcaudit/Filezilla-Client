@@ -4487,6 +4487,323 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // ----------------------------------------------------------- folder sync
+
+    /**
+     * A mirror worked out and waiting on the preview, or null when none is.
+     *
+     * Set by [prepareSync] once both sides are scanned, shown by the preview
+     * dialog, and cleared by [dismissSync] or when [runSync] finishes.
+     */
+    var syncState by mutableStateOf<SyncState?>(null)
+        private set
+
+    /** How the last mirror turned out, for the line shown when it is done. */
+    var syncOutcome by mutableStateOf<SyncOutcome?>(null)
+        private set
+
+    /** Why a mirror could not even be planned, as a message, or null. */
+    @get:androidx.annotation.StringRes
+    var syncRefusal by mutableStateOf<Int?>(null)
+        private set
+
+    /** The run's stop, held so the preview's cancel can reach it mid-run. */
+    private var syncStop: Stoppable? = null
+
+    fun dismissSync() {
+        syncState = null
+    }
+
+    fun syncOutcomeShown() {
+        syncOutcome = null
+    }
+
+    fun syncRefusalShown() {
+        syncRefusal = null
+    }
+
+    /** Stops the mirror -- the scan through its work dialog, the run through this. */
+    fun stopSync() {
+        syncStop?.stop()
+    }
+
+    /** One end of a mirror, captured from a pane so the run does not depend on it. */
+    private fun endpointOf(state: BrowseState): SyncEndpoint? = when (val source = state.source) {
+        is PaneSource.Local -> SyncEndpoint.LocalDir(state.path, state.path)
+        is PaneSource.Remote -> SyncEndpoint.RemoteDir(
+            root = state.path,
+            label = "${source.site.name.ifBlank { source.site.host }}:${state.path}",
+            site = source.site,
+        )
+
+        PaneSource.Empty -> null
+    }
+
+    /**
+     * Scans both panes, works out the mirror, and hands it to the preview.
+     *
+     * [sourceId] is the pane that is the answer; the pane facing it is made to
+     * match. Refused before any scan when there is nothing to mirror between,
+     * when both sides are servers (v1 does not carry bytes server to server),
+     * or when two folders on the phone overlap -- mirroring a folder into
+     * itself or its own parent would delete or copy without end.
+     */
+    fun prepareSync(sourceId: PaneId, deleteExtras: Boolean) {
+        val targetId = facing(sourceId)
+        val source = endpointOf(pane(sourceId))
+        val target = endpointOf(pane(targetId))
+        if (source == null || target == null || source.root.isBlank() || target.root.isBlank()) {
+            syncRefusal = R.string.sync_needs_two_folders
+            return
+        }
+        if (source is SyncEndpoint.RemoteDir && target is SyncEndpoint.RemoteDir) {
+            syncRefusal = R.string.sync_server_to_server
+            return
+        }
+        if (source is SyncEndpoint.LocalDir && target is SyncEndpoint.LocalDir) {
+            val from = FilePath.normalize(source.root)
+            val to = FilePath.normalize(target.root)
+            if (from == to || FilePath.isWithin(from, to) || FilePath.isWithin(to, from)) {
+                syncRefusal = R.string.sync_overlap
+                return
+            }
+        }
+
+        val stop = Stoppable()
+        serverWork = ServerWork(ServerWork.Kind.SCANNING, stopper = stop::stop)
+        viewModelScope.launch {
+            val scanned = runCatching {
+                val sourceTree = scanEndpoint(source, stop)
+                val targetTree = scanEndpoint(target, stop)
+                sourceTree to targetTree
+            }
+            serverWork = null
+            scanned.onSuccess { (sourceTree, targetTree) ->
+                if (sourceTree.cancelled || targetTree.cancelled) {
+                    workOutcome = WorkOutcome(R.string.work_scan_stopped, 0, 0)
+                    return@onSuccess
+                }
+                val plan = org.filezilla.android.files.SyncDiff.diff(
+                    source = sourceTree.entries,
+                    target = targetTree.entries,
+                    deleteExtras = deleteExtras,
+                )
+                syncState = SyncState(
+                    source = source,
+                    target = target,
+                    plan = plan,
+                    deleteExtras = deleteExtras,
+                    truncated = sourceTree.truncated || targetTree.truncated,
+                    skippedLinks = sourceTree.skippedLinks + targetTree.skippedLinks,
+                )
+            }.onFailure {
+                syncRefusal = R.string.sync_scan_failed
+            }
+        }
+    }
+
+    /** Enumerates one end, on the phone directly or over a borrowed session. */
+    private suspend fun scanEndpoint(end: SyncEndpoint, stop: Stoppable): ScanResult {
+        val onFolder: (Int) -> Unit = { read ->
+            serverWork = ServerWork(ServerWork.Kind.SCANNING, foldersRead = read, stopper = stop::stop)
+        }
+        return when (end) {
+            is SyncEndpoint.LocalDir -> withContext(Dispatchers.IO) {
+                SyncScan.scan(
+                    root = end.root,
+                    lister = RemoteLister { org.filezilla.android.files.LocalFileSource("").list(it) },
+                    showHidden = options.showHidden,
+                    cancelled = stop::stopped,
+                    onFolder = onFolder,
+                )
+            }
+
+            is SyncEndpoint.RemoteDir -> graph.transfers.browse(end.site) { session ->
+                SyncScan.scan(
+                    root = end.root,
+                    // One session for the whole scan: a login per folder would
+                    // cost far more than the listings do.
+                    lister = RemoteLister { path ->
+                        session.changeDirectory(path)
+                        session.list()
+                    },
+                    showHidden = options.showHidden,
+                    cancelled = stop::stopped,
+                    onFolder = onFolder,
+                )
+            }
+        }
+    }
+
+    /**
+     * Carries out the mirror the user confirmed: make folders, move the files
+     * through the queue, and -- only if asked -- remove the extras afterwards.
+     */
+    fun runSync() {
+        val state = syncState ?: return
+        val stop = Stoppable()
+        syncStop = stop
+        syncState = state.copy(running = true)
+        viewModelScope.launch {
+            val outcome = runCatching { carryOutSync(state, stop) }
+                .getOrElse { SyncOutcome(failed = state.plan.copyCount) }
+            syncStop = null
+            syncState = null
+            syncOutcome = outcome
+            // Both panes: the target changed, and re-listing the source costs
+            // one listing and keeps the two sides honest with each other.
+            for (id in PaneId.entries) open(id)
+        }
+    }
+
+    private suspend fun carryOutSync(state: SyncState, stop: Stoppable): SyncOutcome {
+        val source = state.source
+        val target = state.target
+        return when {
+            source is SyncEndpoint.LocalDir && target is SyncEndpoint.LocalDir ->
+                withContext(Dispatchers.IO) {
+                    val result = syncLocally(
+                        actions = state.plan.actions,
+                        sourceRoot = source.root,
+                        targetRoot = target.root,
+                        copyFiles = true,
+                        cancelled = stop::stopped,
+                    )
+                    SyncOutcome(
+                        made = result.made,
+                        copied = result.copied,
+                        deleted = result.deleted,
+                        failed = result.failed,
+                        cancelled = stop.stopped(),
+                    )
+                }
+
+            source is SyncEndpoint.LocalDir && target is SyncEndpoint.RemoteDir ->
+                syncLocalToRemote(state, source, target, stop)
+
+            source is SyncEndpoint.RemoteDir && target is SyncEndpoint.LocalDir ->
+                syncRemoteToLocal(state, source, target, stop)
+
+            // Server to server was refused before the scan; nothing to do.
+            else -> SyncOutcome()
+        }
+    }
+
+    /** Uploads the plan's copies (folders first) and removes the extras after. */
+    private suspend fun syncLocalToRemote(
+        state: SyncState,
+        source: SyncEndpoint.LocalDir,
+        target: SyncEndpoint.RemoteDir,
+        stop: Stoppable,
+    ): SyncOutcome {
+        val folders = state.plan.actions.filterIsInstance<org.filezilla.android.files.SyncAction.MakeDir>()
+            .map { it.rel.split('/') }
+        val files = state.plan.actions.filterIsInstance<org.filezilla.android.files.SyncAction.Copy>()
+            .map { copy ->
+                val parentRel = copy.rel.substringBeforeLast('/', "")
+                Outgoing(
+                    source = Uri.fromFile(java.io.File(FilePath.child(source.root, copy.rel))),
+                    name = copy.rel.substringAfterLast('/'),
+                    size = copy.size,
+                    subPath = if (parentRel.isEmpty()) emptyList() else parentRel.split('/'),
+                )
+            }
+        // The source is the answer, so every file replaces what the server has
+        // rather than resuming onto it: named as clashing, with overwrite chosen.
+        val queued = queueUploads(
+            files = files,
+            folders = folders,
+            site = target.site,
+            remoteDirectory = target.root,
+            choice = ConflictChoice.OVERWRITE,
+            clashing = files.map { it.name }.toSet(),
+        )
+        val deleted = if (state.deleteExtras) {
+            deleteRemoteExtras(target, topLevelExtras(state.plan.actions), stop)
+        } else {
+            0
+        }
+        return SyncOutcome(made = folders.size, copied = queued, deleted = deleted)
+    }
+
+    /**
+     * Fetches the plan's copies through the download queue, makes the empty
+     * folders the queue would not, and removes the extras after.
+     */
+    private suspend fun syncRemoteToLocal(
+        state: SyncState,
+        source: SyncEndpoint.RemoteDir,
+        target: SyncEndpoint.LocalDir,
+        stop: Stoppable,
+    ): SyncOutcome {
+        val copies = state.plan.actions.filterIsInstance<org.filezilla.android.files.SyncAction.Copy>()
+        val plan = DownloadPlan(
+            files = copies.map { copy ->
+                val parentRel = copy.rel.substringBeforeLast('/', "")
+                PlannedDownload(
+                    remotePath = FilePath.child(source.root, copy.rel),
+                    size = copy.size,
+                    subPath = if (parentRel.isEmpty()) emptyList() else parentRel.split('/'),
+                )
+            },
+        )
+        val folder = Uri.fromFile(java.io.File(target.root))
+        val queued = enqueuePlan(plan, source.site, folder, ConflictChoice.OVERWRITE)
+        // The queue makes the folders a file needs, but not the empty ones, and
+        // it never removes anything -- so the local side handles those two here,
+        // with the copies left to the queue.
+        val local = withContext(Dispatchers.IO) {
+            syncLocally(
+                actions = state.plan.actions,
+                sourceRoot = source.root,
+                targetRoot = target.root,
+                copyFiles = false,
+                cancelled = stop::stopped,
+            )
+        }
+        return SyncOutcome(
+            made = local.made,
+            copied = queued.files.size,
+            deleted = local.deleted,
+            failed = local.failed,
+        )
+    }
+
+    /**
+     * The extras to remove as whole subtrees: a deleted path whose parent is
+     * also deleted is already covered by removing the parent, so only the
+     * shallowest of each run is asked for.
+     */
+    private fun topLevelExtras(
+        actions: List<org.filezilla.android.files.SyncAction>,
+    ): List<org.filezilla.android.files.SyncAction.Delete> {
+        val deleted = actions.filterIsInstance<org.filezilla.android.files.SyncAction.Delete>()
+        val rels = deleted.map { it.rel }.toSet()
+        return deleted.filter { it.rel.substringBeforeLast('/', "").let { p -> p.isEmpty() || p !in rels } }
+    }
+
+    /** Removes each extra on the server, contents and all, through the delete walk. */
+    private suspend fun deleteRemoteExtras(
+        target: SyncEndpoint.RemoteDir,
+        extras: List<org.filezilla.android.files.SyncAction.Delete>,
+        stop: Stoppable,
+    ): Int {
+        if (extras.isEmpty()) return 0
+        return graph.transfers.browse(target.site) { session ->
+            var removed = 0
+            for (extra in extras) {
+                if (stop.stopped()) break
+                val parentRel = extra.rel.substringBeforeLast('/', "")
+                val directory = if (parentRel.isEmpty()) target.root else FilePath.child(target.root, parentRel)
+                val row = DirectoryEntry(name = extra.rel.substringAfterLast('/'), isDirectory = extra.isDir)
+                // Through the same recursive delete a selection uses, so an
+                // extra folder with anything in it does not fail a bare RMD.
+                runCatching { deleteRemoteTree(session, directory, row) }.onSuccess { removed++ }
+            }
+            removed
+        }
+    }
+
     // ------------------------------------------------------------ properties
 
     fun showProperties(entry: DirectoryEntry?) {
