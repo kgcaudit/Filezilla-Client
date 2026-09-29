@@ -433,6 +433,10 @@
     <string name="field_protocol">프로토콜</string>
     <string name="protocol_ftp">FTP / FTPS</string>
     <string name="protocol_sftp">SFTP (SSH)</string>
+    <string name="field_private_key">개인키 (SFTP)</string>
+    <string name="private_key_hint">비밀번호 대신 PEM 개인키를 붙여넣어 로그인합니다</string>
+    <string name="field_passphrase">키 암호</string>
+    <string name="passphrase_hint">개인키에 암호가 걸려 있으면 입력</string>
 
     <string name="fail_certificate">서버의 인증서를 확인할 수 없습니다.</string>
     <string name="cert_changed_short">서버의 인증서가 바뀌었습니다</string>

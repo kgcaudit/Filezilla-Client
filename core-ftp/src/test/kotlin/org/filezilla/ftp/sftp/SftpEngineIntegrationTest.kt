@@ -72,6 +72,29 @@ class SftpEngineIntegrationTest {
     }
 
     @Test
+    fun `logs in with a private key`() {
+        // A key pair the server is told to accept, given to the engine as a
+        // PKCS#8 PEM -- the shape a user pastes out of a key file.
+        val pair = java.security.KeyPairGenerator.getInstance("RSA")
+            .apply { initialize(2048) }
+            .generateKeyPair()
+        server.authorizePublicKey(pair.public)
+        val pem = "-----BEGIN PRIVATE KEY-----\n" +
+            java.util.Base64.getMimeEncoder(64, "\n".toByteArray()).encodeToString(pair.private.encoded) +
+            "\n-----END PRIVATE KEY-----\n"
+
+        server.putFile("keyed.bin", 128)
+        val settings = server.settings(knownHostKey = server.discoverHostKey())
+            .copy(password = "", privateKeyPem = pem)
+
+        val names = SftpEngine(settings).use {
+            it.connect()
+            it.list().map { entry -> entry.name }
+        }
+        assertTrue("keyed.bin" in names)
+    }
+
+    @Test
     fun `reports a changed host key`() {
         val refused = assertThrows<HostKeyNotTrusted> {
             SftpEngine(server.settings(knownHostKey = "SHA256:this-is-not-the-real-key")).use { it.connect() }

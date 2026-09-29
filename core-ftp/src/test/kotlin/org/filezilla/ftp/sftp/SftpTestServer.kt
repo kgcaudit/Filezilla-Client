@@ -2,11 +2,13 @@ package org.filezilla.ftp.sftp
 
 import org.apache.sshd.server.SshServer
 import org.apache.sshd.server.auth.password.PasswordAuthenticator
+import org.apache.sshd.server.auth.pubkey.PublickeyAuthenticator
 import org.apache.sshd.server.keyprovider.SimpleGeneratorHostKeyProvider
 import org.apache.sshd.common.file.virtualfs.VirtualFileSystemFactory
 import org.apache.sshd.sftp.server.SftpSubsystemFactory
 import java.io.File
 import java.nio.file.Files
+import java.security.PublicKey
 
 /**
  * A real SSH/SFTP server, in process, for the engine's integration tests.
@@ -32,6 +34,18 @@ class SftpTestServer(
         passwordAuthenticator = PasswordAuthenticator { u, p, _ -> u == user && p == password }
         subsystemFactories = listOf(SftpSubsystemFactory())
         fileSystemFactory = VirtualFileSystemFactory(root.toPath())
+    }
+
+    /** A public key the server will accept, for the private-key auth test. */
+    @Volatile
+    private var authorizedKey: PublicKey? = null
+
+    /** Makes the server accept a login that proves possession of [key]'s pair. */
+    fun authorizePublicKey(key: PublicKey) {
+        authorizedKey = key
+        sshd.publickeyAuthenticator = PublickeyAuthenticator { _, offered, _ ->
+            authorizedKey?.let { offered.encoded.contentEquals(it.encoded) } ?: false
+        }
     }
 
     var port: Int = 0

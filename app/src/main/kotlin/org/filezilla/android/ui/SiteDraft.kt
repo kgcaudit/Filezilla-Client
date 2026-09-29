@@ -38,6 +38,13 @@ data class SiteDraft(
      * the key when the server presents it, and cleared by the editor's button.
      */
     val knownHostKey: String?,
+    /**
+     * An SFTP private key in PEM form, in plaintext while the form is open --
+     * the key parallel of [password]. Blank or null means password
+     * authentication; a key present means the login uses it, with the password
+     * as its passphrase.
+     */
+    val privateKeyPem: String?,
     val initialPath: String?,
     /** Null means "negotiate", which is what most servers want. */
     val encoding: String? = null,
@@ -66,6 +73,9 @@ data class SiteDraft(
         pinnedCertificate = pinnedCertificate,
         protocol = protocol.name,
         knownHostKey = knownHostKey,
+        // Encrypted like the password, and only when there is one; a blank field
+        // stores nothing and leaves the site on password authentication.
+        privateKeyCipher = privateKeyPem?.ifBlank { null }?.let { passwords.encrypt(it) },
         initialPath = initialPath?.ifBlank { null },
         encoding = encoding?.ifBlank { null },
     )
@@ -90,6 +100,7 @@ data class SiteDraft(
             transferMode = TransferMode.DEFAULT,
             pinnedCertificate = null,
             knownHostKey = null,
+            privateKeyPem = null,
             initialPath = null,
             encoding = null,
         )
@@ -108,6 +119,7 @@ data class SiteDraft(
                 transferMode = enumValueOf(site.transferMode),
                 pinnedCertificate = site.pinnedCertificate,
                 knownHostKey = site.knownHostKey,
+                privateKeyPem = site.privateKeyCipher?.let { passwords.decrypt(it) },
                 initialPath = site.initialPath,
                 encoding = site.encoding,
                 passwordUnreadable = plaintext == null,

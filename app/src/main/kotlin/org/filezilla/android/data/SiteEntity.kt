@@ -60,6 +60,14 @@ data class SiteEntity(
      * recognised yet, so the next connection stops and asks.
      */
     @ColumnInfo(name = "known_host_key") val knownHostKey: String? = null,
+    /**
+     * An SFTP private key in PEM form, held as ciphertext exactly like the
+     * password -- see [passwordCipher]. Null means password authentication; a
+     * key present means the login uses it, with the password taken as the key's
+     * passphrase. A private key is a credential, so it never sits in a column
+     * in the clear any more than the password does.
+     */
+    @ColumnInfo(name = "private_key_cipher") val privateKeyCipher: String? = null,
     val initialPath: String?,
     /** Null negotiates UTF-8; a name pins it. See [FtpSettings.encoding]. */
     val encoding: String? = null,
@@ -110,5 +118,8 @@ data class SiteEntity(
         user = user,
         password = passwords.decrypt(passwordCipher).orEmpty(),
         knownHostKey = knownHostKey,
+        // A key that cannot be decrypted becomes null -- password auth -- rather
+        // than an exception, the same forgiving path the password takes.
+        privateKeyPem = privateKeyCipher?.let { passwords.decrypt(it) }?.takeIf { it.isNotBlank() },
     )
 }

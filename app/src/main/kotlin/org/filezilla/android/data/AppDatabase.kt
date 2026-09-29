@@ -26,7 +26,7 @@ abstract class AppDatabase : RoomDatabase() {
          * test went stale the moment a column was added -- so every existing
          * database looked unmigratable from a test that was only out of date.
          */
-        const val VERSION = 7
+        const val VERSION = 8
 
         /**
          * Every migration, in one list.
@@ -43,6 +43,7 @@ abstract class AppDatabase : RoomDatabase() {
                 ADD_REMOVE_SOURCE,
                 PIN_CERTIFICATES,
                 ADD_SFTP,
+                ADD_PRIVATE_KEY,
             )
 
         fun open(context: Context, passwords: PasswordCipher): AppDatabase =
@@ -57,6 +58,20 @@ abstract class AppDatabase : RoomDatabase() {
                 // would turn a schema change into silently re-downloading
                 // everything in the queue -- and now the saved passwords too.
                 .build()
+
+        /**
+         * Version 8 adds an SFTP private key, held encrypted like the password.
+         *
+         * A plain added column, nullable, defaulting to null -- which is
+         * password authentication, what every SFTP site so far has used. A
+         * private key is a credential, so the column holds ciphertext under the
+         * keystore key, never the key itself; see [encryptPasswords].
+         */
+        internal val ADD_PRIVATE_KEY = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `sites` ADD COLUMN `private_key_cipher` TEXT")
+            }
+        }
 
         /**
          * Version 7 adds SFTP: which protocol a site speaks, and the SSH host

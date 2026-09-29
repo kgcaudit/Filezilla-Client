@@ -441,6 +441,10 @@
     <string name="field_protocol">Protocol</string>
     <string name="protocol_ftp">FTP / FTPS</string>
     <string name="protocol_sftp">SFTP (SSH)</string>
+    <string name="field_private_key">Private key (SFTP)</string>
+    <string name="private_key_hint">Paste a PEM key to log in with it instead of a password</string>
+    <string name="field_passphrase">Passphrase</string>
+    <string name="passphrase_hint">For the private key, if it has one</string>
 
     <string name="fail_certificate">The server\'s certificate could not be verified.</string>
     <string name="cert_changed_short">The server\'s certificate has changed</string>

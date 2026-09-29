@@ -65,6 +65,11 @@ fun OloTextField(
      */
     interactions: MutableInteractionSource? = null,
     minHeight: Dp = 48.dp,
+    /**
+     * Off for a box that holds more than a line, such as a pasted PEM key: a
+     * single-line field drops the newlines out of one, which for a key ruins it.
+     */
+    singleLine: Boolean = true,
 ) {
     val own = remember { MutableInteractionSource() }
     val interactionSource = interactions ?: own
@@ -72,7 +77,7 @@ fun OloTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier.heightIn(min = minHeight),
-        singleLine = true,
+        singleLine = singleLine,
         readOnly = readOnly,
         textStyle = oloTextStyle(),
         cursorBrush = oloCursor(),

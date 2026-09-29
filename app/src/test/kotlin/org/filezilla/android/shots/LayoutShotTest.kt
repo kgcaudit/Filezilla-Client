@@ -544,6 +544,7 @@ class LayoutShotTest {
                     transferMode = TransferMode.DEFAULT,
                     pinnedCertificate = null,
                     knownHostKey = null,
+                    privateKeyPem = null,
                     initialPath = null,
                 ),
                 onDismiss = {},

@@ -77,6 +77,7 @@ fun SiteEditor(
     var encoding by remember { mutableStateOf(initial.encoding) }
     var pinned by remember { mutableStateOf(initial.pinnedCertificate) }
     var knownHostKey by remember { mutableStateOf(initial.knownHostKey) }
+    var privateKey by remember { mutableStateOf(initial.privateKeyPem.orEmpty()) }
     var initialPath by remember { mutableStateOf(initial.initialPath.orEmpty()) }
 
     OloDialog(
@@ -187,11 +188,18 @@ fun SiteEditor(
                     placeholder = SiteDraft.ANONYMOUS_USER,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                // With a private key present the password box is the key's
+                // passphrase, not an account password, so it says so.
+                val usingKey = protocol == SiteProtocol.SFTP && privateKey.isNotBlank()
                 OloTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = stringResource(R.string.field_password),
-                    placeholder = stringResource(R.string.password_hint),
+                    label = stringResource(
+                        if (usingKey) R.string.field_passphrase else R.string.field_password,
+                    ),
+                    placeholder = stringResource(
+                        if (usingKey) R.string.passphrase_hint else R.string.password_hint,
+                    ),
                     visualTransformation = PasswordVisualTransformation(),
                     isError = initial.passwordUnreadable,
                     supportingText = if (initial.passwordUnreadable) {
@@ -201,6 +209,20 @@ fun SiteEditor(
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                // SFTP only, and last in the login section: paste a PEM private
+                // key to log in with it instead of a password. Left blank, the
+                // site authenticates with the password above.
+                if (protocol == SiteProtocol.SFTP) {
+                    OloTextField(
+                        value = privateKey,
+                        onValueChange = { privateKey = it },
+                        label = stringResource(R.string.field_private_key),
+                        placeholder = stringResource(R.string.private_key_hint),
+                        singleLine = false,
+                        minHeight = 96.dp,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 SectionLabel(R.string.site_section_extra)
                 OloTextField(
                     value = initialPath,
@@ -240,6 +262,7 @@ fun SiteEditor(
                             encoding = encoding,
                             pinnedCertificate = pinned,
                             knownHostKey = knownHostKey,
+                            privateKeyPem = privateKey,
                             initialPath = initialPath,
                         ),
                     )

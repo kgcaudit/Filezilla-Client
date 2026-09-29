@@ -106,4 +106,31 @@ class SiteDraftTest {
         assertEquals("SFTP", edited.protocol)
         assertEquals(key, edited.knownHostKey)
     }
+
+    @Test
+    fun `a private key is stored encrypted and comes back through a round trip`() {
+        val pem = "-----BEGIN PRIVATE KEY-----\nMIIabc\n-----END PRIVATE KEY-----\n"
+        val entity = SiteDraft.blank()
+            .copy(
+                host = "nas.home",
+                protocol = org.filezilla.android.data.SiteProtocol.SFTP,
+                privateKeyPem = pem,
+            )
+            .toEntity(passwords)
+
+        // Not in the clear on the row...
+        org.junit.Assert.assertFalse("BEGIN PRIVATE KEY" in entity.privateKeyCipher!!)
+        // ...and recoverable, and preserved across an edit.
+        assertEquals(pem, passwords.decrypt(entity.privateKeyCipher!!))
+        val edited = SiteDraft.of(entity, passwords).copy(name = "renamed").toEntity(passwords)
+        assertEquals(pem, passwords.decrypt(edited.privateKeyCipher!!))
+    }
+
+    @Test
+    fun `a blank private key field stores nothing`() {
+        val entity = SiteDraft.blank()
+            .copy(host = "nas.home", protocol = org.filezilla.android.data.SiteProtocol.SFTP, privateKeyPem = "")
+            .toEntity(passwords)
+        assertNull(entity.privateKeyCipher)
+    }
 }
