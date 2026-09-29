@@ -557,8 +557,26 @@
     <string name="reader_series_end">마지막 편입니다.</string>
 
     <!-- Folder sync -->
+    <string name="sync_title">동기화</string>
     <string name="sync_needs_two_folders">동기화하려면 양쪽 창에 폴더가 있어야 합니다</string>
     <string name="sync_server_to_server">서버에서 서버로 동기화하는 기능은 아직 지원하지 않습니다</string>
     <string name="sync_overlap">원본 폴더와 대상 폴더가 겹칩니다. 이대로면 한쪽이 다른 쪽을 삼킵니다</string>
     <string name="sync_scan_failed">폴더를 살펴보지 못했습니다</string>
+    <string name="sync_direction">%1$s → %2$s</string>
+    <string name="sync_copy_count">복사할 파일 %1$d개</string>
+    <string name="sync_make_count">만들 폴더 %1$d개</string>
+    <string name="sync_delete_count">삭제할 항목 %1$d개</string>
+    <string name="sync_skip_count">그대로 둘 파일 %1$d개</string>
+    <string name="sync_delete_extras">대상에만 있는 항목 삭제</string>
+    <string name="sync_delete_extras_detail">원본에 없는 파일과 폴더를 대상에서 삭제합니다. 되돌릴 수 없습니다.</string>
+    <string name="sync_conflicts_note">폴더와 파일로 엇갈리는 항목 %1$d개는 건너뜁니다</string>
+    <string name="sync_truncated_note">폴더가 너무 많아 일부만 살펴봤습니다</string>
+    <string name="sync_links_note">링크 %1$d개는 따라가지 않았습니다</string>
+    <string name="sync_more">외 %1$d개 더</string>
+    <string name="sync_run">동기화 시작</string>
+    <string name="sync_running">동기화하는 중</string>
+    <string name="sync_nothing">이미 같아서 할 일이 없습니다</string>
+    <string name="sync_done">동기화함 — 복사 %1$d개, 삭제 %2$d개</string>
+    <string name="sync_done_failed">동기화함 — 복사 %1$d개, 삭제 %2$d개, 실패 %3$d개</string>
+    <string name="sync_cancelled">동기화를 멈췄습니다</string>
 </resources>

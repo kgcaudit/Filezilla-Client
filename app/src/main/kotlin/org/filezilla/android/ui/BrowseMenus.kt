@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.ViewHeadline
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.automirrored.filled.ViewList
@@ -75,6 +76,8 @@ fun BrowseOverflow(
     onUpload: (() -> Unit)? = null,
     /** Set only inside an archive: unpack the whole of it. */
     onExtractAll: (() -> Unit)? = null,
+    /** Null where a mirror makes no sense -- an empty pane, or inside an archive. */
+    onSync: (() -> Unit)? = null,
 ) {
     var open by remember { mutableStateOf(false) }
 
@@ -107,7 +110,13 @@ fun BrowseOverflow(
                     action()
                 }
             }
-            if (onNewDirectory != null || onUpload != null) HorizontalDivider()
+            onSync?.let { action ->
+                Item(R.string.sync_title, Icons.Filled.Sync) {
+                    open = false
+                    action()
+                }
+            }
+            if (onNewDirectory != null || onUpload != null || onSync != null) HorizontalDivider()
             // One picture per entry. These two were the same checklist icon,
             // and the folder options below them were the same eye twice --
             // so the column of icons told the reader nothing that the words

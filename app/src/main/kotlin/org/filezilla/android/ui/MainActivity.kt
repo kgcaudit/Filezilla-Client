@@ -928,6 +928,44 @@ private fun AppScreen(
         }
     }
 
+    // The folder-sync preview, above its pane for the same reason the work
+    // dialog is: while it scans or runs, the server it is on cannot answer
+    // anything else.
+    model.syncState?.let { state ->
+        SyncPreviewDialog(
+            state = state,
+            onToggleDelete = model::setSyncDeleteExtras,
+            onRun = model::runSync,
+            onStop = model::stopSync,
+            onDismiss = model::dismissSync,
+        )
+    }
+
+    model.syncRefusal?.let { message ->
+        LaunchedEffect(message) {
+            model.syncRefusalShown()
+            snackbars.showSnackbar(context.getString(message))
+        }
+    }
+
+    model.syncOutcome?.let { outcome ->
+        LaunchedEffect(outcome) {
+            model.syncOutcomeShown()
+            val text = when {
+                outcome.cancelled -> context.getString(R.string.sync_cancelled)
+                outcome.failed > 0 -> context.getString(
+                    R.string.sync_done_failed,
+                    outcome.copied,
+                    outcome.deleted,
+                    outcome.failed,
+                )
+
+                else -> context.getString(R.string.sync_done, outcome.copied, outcome.deleted)
+            }
+            snackbars.showSnackbar(text)
+        }
+    }
+
     model.viewing?.let { ViewingDialog(it, onCancel = model::cancelViewing) }
 
     model.viewingFailure?.let {

@@ -57,7 +57,7 @@ class DialogShellTest {
             listOf("ArchiveScreen.kt", "BrowseMenus.kt", "BrowseScreen.kt", "CertificateUi.kt",
                    "ConflictDialog.kt", "FilePanes.kt", "HostKeyUi.kt", "MainActivity.kt",
                    "OpenWith.kt", "PdfViewerScreen.kt", "PermissionsDialog.kt", "ServerWork.kt",
-                   "SiteEditor.kt", "ViewingDialogs.kt"),
+                   "SiteEditor.kt", "SyncPreviewDialog.kt", "ViewingDialogs.kt"),
             users,
         )
     }

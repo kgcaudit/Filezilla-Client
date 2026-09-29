@@ -200,6 +200,10 @@ class WordingTest {
             // how far through a run of things the app is. Three ways of
             // counting to the same number would read as three features.
             "work_counted",
+            // "Sync": the pane overflow's menu item that starts a mirror, and
+            // the title of the preview it opens -- the preview answers the menu,
+            // same as the share and change-mode pairs above.
+            "sync_title",
         ).sorted()
 
         assertEquals(allowed, shared)

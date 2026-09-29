@@ -167,6 +167,14 @@ fun PaneHeader(
                     },
                     onUpload = if (state.site != null && state.archive == null) here(onUpload) else null,
                     onExtractAll = if (state.archive != null) here { model.extractSelected(id) } else null,
+                    // Mirror this pane onto the one facing it. Offered where the
+                    // pane is a real folder -- not an archive, which is read only,
+                    // and not an empty pane, which has nothing to mirror.
+                    onSync = if (state.source !is PaneSource.Empty && state.archive == null) {
+                        here { model.prepareSync(id) }
+                    } else {
+                        null
+                    },
                 )
             }
         }

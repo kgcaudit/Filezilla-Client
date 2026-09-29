@@ -4522,6 +4522,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         syncRefusal = null
     }
 
+    /**
+     * Turns the extras-deletion switch on or off in the waiting preview.
+     *
+     * The plan always knows the extras -- they are worked out once, when both
+     * sides are scanned -- so the switch only decides whether [runSync] carries
+     * the deletions out. Nothing is rescanned, and the preview highlights or
+     * greys the deletions from this flag.
+     */
+    fun setSyncDeleteExtras(on: Boolean) {
+        syncState = syncState?.copy(deleteExtras = on)
+    }
+
     /** Stops the mirror -- the scan through its work dialog, the run through this. */
     fun stopSync() {
         syncStop?.stop()
@@ -4547,8 +4559,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * when both sides are servers (v1 does not carry bytes server to server),
      * or when two folders on the phone overlap -- mirroring a folder into
      * itself or its own parent would delete or copy without end.
+     *
+     * The plan is always worked out with the extras in it, so the preview can
+     * show them; whether they are actually removed is the preview's switch,
+     * off to begin with -- see [setSyncDeleteExtras] and [runSync].
      */
-    fun prepareSync(sourceId: PaneId, deleteExtras: Boolean) {
+    fun prepareSync(sourceId: PaneId) {
         val targetId = facing(sourceId)
         val source = endpointOf(pane(sourceId))
         val target = endpointOf(pane(targetId))
@@ -4586,13 +4602,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val plan = org.filezilla.android.files.SyncDiff.diff(
                     source = sourceTree.entries,
                     target = targetTree.entries,
-                    deleteExtras = deleteExtras,
+                    deleteExtras = true,
                 )
                 syncState = SyncState(
                     source = source,
                     target = target,
                     plan = plan,
-                    deleteExtras = deleteExtras,
+                    // Off until the user says otherwise in the preview.
+                    deleteExtras = false,
                     truncated = sourceTree.truncated || targetTree.truncated,
                     skippedLinks = sourceTree.skippedLinks + targetTree.skippedLinks,
                 )
@@ -4663,7 +4680,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             source is SyncEndpoint.LocalDir && target is SyncEndpoint.LocalDir ->
                 withContext(Dispatchers.IO) {
                     val result = syncLocally(
-                        actions = state.plan.actions,
+                        actions = effectiveActions(state),
                         sourceRoot = source.root,
                         targetRoot = target.root,
                         copyFiles = true,
@@ -4754,7 +4771,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // with the copies left to the queue.
         val local = withContext(Dispatchers.IO) {
             syncLocally(
-                actions = state.plan.actions,
+                actions = effectiveActions(state),
                 sourceRoot = source.root,
                 targetRoot = target.root,
                 copyFiles = false,
@@ -4768,6 +4785,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             failed = local.failed,
         )
     }
+
+    /**
+     * The plan's actions with deletions dropped unless the user asked for them.
+     *
+     * The plan always carries the extras; this is where the preview's switch
+     * decides whether the local carry-out acts on them.
+     */
+    private fun effectiveActions(state: SyncState): List<org.filezilla.android.files.SyncAction> =
+        if (state.deleteExtras) {
+            state.plan.actions
+        } else {
+            state.plan.actions.filterNot { it is org.filezilla.android.files.SyncAction.Delete }
+        }
 
     /**
      * The extras to remove as whole subtrees: a deleted path whose parent is

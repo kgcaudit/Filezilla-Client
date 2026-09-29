@@ -123,6 +123,8 @@ class IconMeaningTest {
         // that usually does it is hidden while the bar is up.
         "CreateNewFolder" to setOf("new_folder_title", "fab_new_folder"),
         "Upload" to setOf("browse_upload"),
+        // Mirroring one pane's folder onto the other's.
+        "Sync" to setOf("sync_title"),
         "CheckCircle" to setOf("menu_select"),
         "DoneAll" to setOf("menu_select_all"),
         "Tune" to setOf("menu_view_options"),
