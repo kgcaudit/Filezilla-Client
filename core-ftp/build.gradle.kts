@@ -31,14 +31,15 @@ dependencies {
     // tests here in the plain-JVM module just like the rest of the engine does.
     implementation(libs.jsch)
 
-    // The FTPS harness is plain JDK, but the SFTP harness in testFixtures is a
-    // real in-process SSH server, so it needs MINA SSHD to compile. Shared with
-    // the app module, which browses and transfers against it too.
-    testFixturesImplementation(libs.sshd.core)
-    testFixturesImplementation(libs.sshd.sftp)
-
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.kotlinx.coroutines.test)
+    // A real in-process SSH/SFTP server (Apache MINA SSHD) for the SFTP engine
+    // and its resilient transfer, in this module's own tests. Kept out of the
+    // app module: MINA on the app's Robolectric test classpath destabilises
+    // Robolectric's native runtime, and core-ftp is plain JVM with no such
+    // constraint, so the SFTP transfer path is proven against a real server here.
+    testImplementation(libs.sshd.core)
+    testImplementation(libs.sshd.sftp)
     testRuntimeOnly(libs.junit.platform.launcher)
 }
 

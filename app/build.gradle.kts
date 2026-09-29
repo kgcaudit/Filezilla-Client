@@ -218,12 +218,13 @@ dependencies {
 
     // The live FTPS server, shared from :core-ftp. The app's resume path is
     // checked against a real server for the same reason the engine's is.
+    //
+    // SFTP is deliberately not tested against a live server from here. MINA
+    // SSHD on this Robolectric test classpath destabilises Robolectric's native
+    // runtime across the single-fork app suite, so the SFTP transfer engine and
+    // its resume/retry are exercised against a real SSH server in :core-ftp,
+    // which is plain JVM and has no such constraint.
     testImplementation(testFixtures(project(":core-ftp")))
-
-    // A real SSH/SFTP server, in process, so the SFTP browse and transfer
-    // wiring is checked against a real server too, not a mock.
-    testImplementation(libs.sshd.core)
-    testImplementation(libs.sshd.sftp)
 }
 
 // Room's generated code carries the schema, and exporting it turns a schema

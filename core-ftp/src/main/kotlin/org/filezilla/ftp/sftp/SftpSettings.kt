@@ -47,4 +47,7 @@ data class SftpSettings(
 
     /** Whether to carry the source file's modification time to the server. */
     val preserveTimestamps: Boolean = true,
+
+    /** How many times a failed transfer is reconnected and resumed. */
+    val maxRetries: Int = 5,
 )

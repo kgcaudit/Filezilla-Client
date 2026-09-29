@@ -16,6 +16,7 @@ import kotlinx.coroutines.withContext
 import org.filezilla.android.data.AppDatabase
 import org.filezilla.android.data.PasswordCipher
 import org.filezilla.android.data.SiteEntity
+import org.filezilla.android.data.SiteProtocol
 import org.filezilla.android.storage.ConflictChoice
 import org.filezilla.android.storage.DownloadDestination
 import org.filezilla.android.storage.PartialFiles
@@ -32,6 +33,7 @@ import org.filezilla.ftp.journal.TransferState
 import org.filezilla.ftp.protocol.FtpSettings
 import org.filezilla.ftp.protocol.LogLevel
 import org.filezilla.ftp.protocol.ServerCapabilities
+import org.filezilla.ftp.sftp.SftpResilientTransfer
 import org.filezilla.ftp.transfer.ResilientTransfer
 import org.filezilla.ftp.transfer.RetryPolicy
 import org.filezilla.ftp.transfer.TransferAbort
@@ -413,13 +415,27 @@ class TransferManager(
             ),
         )
 
-        val settings = site.toSettings(passwords)
-        connection.settings = settings
         var stopped: StopReason? = null
         try {
-            when (record.direction) {
-                TransferDirection.DOWNLOAD -> runDownload(record, settings, connection, abort)
-                TransferDirection.UPLOAD -> runUpload(record, settings, connection, abort)
+            when (site.protocolEnum) {
+                SiteProtocol.FTP -> {
+                    val settings = site.toSettings(passwords)
+                    // Set on the worker's connection so the transfer reuses it.
+                    // SFTP has no such reuse and never touches this connection.
+                    connection.settings = settings
+                    when (record.direction) {
+                        TransferDirection.DOWNLOAD -> runDownload(record, settings, connection, abort)
+                        TransferDirection.UPLOAD -> runUpload(record, settings, connection, abort)
+                    }
+                }
+
+                SiteProtocol.SFTP -> {
+                    val settings = site.toSftpSettings(passwords)
+                    when (record.direction) {
+                        TransferDirection.DOWNLOAD -> runSftpDownload(record, settings, abort)
+                        TransferDirection.UPLOAD -> runSftpUpload(record, settings, abort)
+                    }
+                }
             }
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
@@ -706,6 +722,185 @@ class TransferManager(
             log.log(
                 LogLevel.ERROR,
                 "Sent ${file.name} to the server but could not remove it from this phone",
+            )
+        }
+    }
+
+    // ------------------------------------------------------------ SFTP transfers
+
+    /**
+     * The SFTP counterpart of [runDownload].
+     *
+     * The same shape -- check the remote file, decide the safe resume offset,
+     * journal as bytes arrive, then hand a finished file to [publish] -- over
+     * the SFTP engine instead of the FTP one. The resume-safety check is the
+     * same [ResumeSafety] the FTP path uses; only how the bytes move differs.
+     *
+     * The remote file is probed on a connection of its own rather than on the
+     * transfer's: SFTP has no worker connection to borrow the way FTP does, and
+     * resuming from a wrong offset is worse than the cost of one connect.
+     */
+    private fun runSftpDownload(
+        record: TransferRecord,
+        settings: org.filezilla.ftp.sftp.SftpSettings,
+        abort: TransferAbort,
+    ) {
+        val currentRemote = org.filezilla.ftp.sftp.SftpEngine(settings, log).use {
+            it.connect()
+            it.fingerprint(record.remotePath)
+        }
+        val partial = partials.forTransfer(record.id)
+        val startOffset = when (val decision =
+            org.filezilla.ftp.journal.ResumeSafety.decide(record, currentRemote, partials.sizeOf(record.id))) {
+            is org.filezilla.ftp.journal.ResumeDecision.AlreadyComplete -> {
+                log.log(LogLevel.STATUS, "${record.remotePath} is already complete")
+                val done = record.copy(
+                    state = TransferState.COMPLETED,
+                    fingerprint = currentRemote,
+                    updatedAtMillis = System.currentTimeMillis(),
+                )
+                journal.put(done)
+                val delivered = publish(done, partial)
+                if (MovedSource.mayRemoveRemote(done, delivered)) removeRemoteSourceSftp(done, settings)
+                return
+            }
+            is org.filezilla.ftp.journal.ResumeDecision.ResumeFrom -> {
+                log.log(LogLevel.STATUS, "Resuming ${record.remotePath} from ${decision.offset} bytes")
+                decision.offset
+            }
+            is org.filezilla.ftp.journal.ResumeDecision.RestartFromZero -> {
+                log.log(
+                    LogLevel.STATUS,
+                    "Restarting ${record.remotePath} from the beginning: ${decision.reason}",
+                )
+                0L
+            }
+        }
+
+        var running = record.copy(
+            state = TransferState.RUNNING,
+            bytesTransferred = startOffset,
+            fingerprint = currentRemote,
+            attempts = record.attempts + 1,
+            lastError = null,
+            updatedAtMillis = System.currentTimeMillis(),
+        )
+        journal.put(running)
+
+        var lastJournalled = startOffset
+        val base = progressListener(record)
+        val recording = TransferProgressListener { transferred, resumeOffset, totalSize ->
+            val position = resumeOffset + transferred
+            // Every megabyte, matching JournalledTransfer, so a kill mid-transfer
+            // leaves a recent offset to resume from without journalling each 64 KB.
+            if (position - lastJournalled >= (1L shl 20)) {
+                lastJournalled = position
+                running = running.copy(
+                    bytesTransferred = position,
+                    totalBytes = totalSize ?: running.totalBytes,
+                    updatedAtMillis = System.currentTimeMillis(),
+                )
+                journal.put(running)
+            }
+            base.onProgress(transferred, resumeOffset, totalSize)
+        }
+
+        val finished = try {
+            val result = SftpResilientTransfer(
+                settings = settings,
+                retryPolicy = RetryPolicy(maxAttempts = settings.maxRetries),
+                logger = log,
+                sleep = { millis -> networkGate.waitBeforeRetry(millis) { abort.isStopped } },
+                abort = abort,
+            ).download(
+                remoteFile = record.remotePath,
+                forcedResumeOffset = startOffset,
+                progress = recording,
+            ) { partial.asTransferWriter() }
+            val total = result.outcome.totalSize
+                ?: (result.outcome.resumeOffset + result.outcome.bytesTransferred)
+            running.copy(
+                state = TransferState.COMPLETED,
+                bytesTransferred = total,
+                totalBytes = total,
+                fingerprint = currentRemote,
+                updatedAtMillis = System.currentTimeMillis(),
+            ).also { journal.put(it) }
+        } catch (e: Exception) {
+            // INTERRUPTED, not FAILED: the partial file is still a valid prefix
+            // and worth picking up again, exactly as JournalledTransfer records
+            // it for FTP.
+            journal.put(
+                running.copy(
+                    state = TransferState.INTERRUPTED,
+                    lastError = e.message ?: e.javaClass.simpleName,
+                    updatedAtMillis = System.currentTimeMillis(),
+                ),
+            )
+            throw e
+        }
+
+        val delivered = publish(finished, partial)
+        if (MovedSource.mayRemoveRemote(finished, delivered)) removeRemoteSourceSftp(finished, settings)
+    }
+
+    /** The SFTP counterpart of [runUpload]. */
+    private fun runSftpUpload(
+        record: TransferRecord,
+        settings: org.filezilla.ftp.sftp.SftpSettings,
+        abort: TransferAbort,
+    ) = changingTheServer(record) {
+        val source = Uri.parse(record.localPath)
+        var running = record.copy(
+            state = TransferState.RUNNING,
+            attempts = record.attempts + 1,
+            lastError = null,
+            updatedAtMillis = System.currentTimeMillis(),
+        )
+        journal.put(running)
+
+        val result = SftpResilientTransfer(
+            settings = settings,
+            retryPolicy = RetryPolicy(maxAttempts = settings.maxRetries),
+            logger = log,
+            sleep = { millis -> networkGate.waitBeforeRetry(millis) { abort.isStopped } },
+            abort = abort,
+        ).upload(
+            remoteFile = record.remotePath,
+            resume = uploadResumes(record.destination),
+            progress = progressListener(record),
+        ) { storage.readerFor(source) }
+
+        running = running.copy(
+            state = TransferState.COMPLETED,
+            bytesTransferred = result.outcome.resumeOffset + result.outcome.bytesTransferred,
+            totalBytes = result.outcome.totalSize ?: running.totalBytes,
+            updatedAtMillis = System.currentTimeMillis(),
+        )
+        journal.put(running)
+
+        if (MovedSource.isDue(running)) removeLocalSource(running)
+    }
+
+    /** The SFTP counterpart of [removeRemoteSource]. */
+    private fun removeRemoteSourceSftp(
+        record: TransferRecord,
+        settings: org.filezilla.ftp.sftp.SftpSettings,
+    ) = changingTheServer(record) {
+        val name = record.remotePath.substringAfterLast('/')
+        val removed = runCatching {
+            org.filezilla.ftp.sftp.SftpEngine(settings, log).use {
+                it.connect()
+                it.deleteFile(record.remotePath)
+            }
+        }
+        if (removed.isSuccess) {
+            log.log(LogLevel.STATUS, "Moved $name from the server; removed the copy there")
+        } else {
+            log.log(
+                LogLevel.ERROR,
+                "Fetched $name but could not remove it from the server " +
+                    "(${removed.exceptionOrNull()?.message})",
             )
         }
     }
@@ -1073,29 +1268,52 @@ class TransferManager(
         abort: TransferAbort,
         progress: (bytes: Long, total: Long?) -> Unit,
     ): Unit = withContext(io) {
-        val settings = site.toSettings(passwords)
-        WorkerConnection(capabilities, log).use { connection ->
-            connection.settings = settings
-            runInterruptible {
-                ResilientTransfer(
-                    settings = settings,
-                    capabilities = capabilities,
-                    retryPolicy = RetryPolicy(maxAttempts = settings.maxRetries),
-                    logger = log,
-                    sleep = { millis -> networkGate.waitBeforeRetry(millis) { abort.isStopped } },
-                    connections = connection,
-                    abort = abort,
-                ).download(
-                    remoteFile = remotePath,
-                    // Always from the beginning. A half-fetched copy from a
-                    // cancelled look is not something to resume onto: the
-                    // file may have changed since, and the only thing worse
-                    // than fetching it again is opening two halves of two
-                    // different files spliced together.
-                    forcedResumeOffset = 0,
-                    progress = { transferred, _, total -> progress(transferred, total) },
-                    writerFactory = { into.asTransferWriter() },
-                )
+        when (site.protocolEnum) {
+            SiteProtocol.SFTP -> {
+                val settings = site.toSftpSettings(passwords)
+                runInterruptible {
+                    SftpResilientTransfer(
+                        settings = settings,
+                        retryPolicy = RetryPolicy(maxAttempts = settings.maxRetries),
+                        logger = log,
+                        sleep = { millis -> networkGate.waitBeforeRetry(millis) { abort.isStopped } },
+                        abort = abort,
+                    ).download(
+                        remoteFile = remotePath,
+                        // Always from the beginning, as for FTP: a half-fetched
+                        // copy from a cancelled look is not something to resume onto.
+                        forcedResumeOffset = 0,
+                        progress = { transferred, _, total -> progress(transferred, total) },
+                    ) { into.asTransferWriter() }
+                }
+            }
+
+            SiteProtocol.FTP -> {
+                val settings = site.toSettings(passwords)
+                WorkerConnection(capabilities, log).use { connection ->
+                    connection.settings = settings
+                    runInterruptible {
+                        ResilientTransfer(
+                            settings = settings,
+                            capabilities = capabilities,
+                            retryPolicy = RetryPolicy(maxAttempts = settings.maxRetries),
+                            logger = log,
+                            sleep = { millis -> networkGate.waitBeforeRetry(millis) { abort.isStopped } },
+                            connections = connection,
+                            abort = abort,
+                        ).download(
+                            remoteFile = remotePath,
+                            // Always from the beginning. A half-fetched copy from a
+                            // cancelled look is not something to resume onto: the
+                            // file may have changed since, and the only thing worse
+                            // than fetching it again is opening two halves of two
+                            // different files spliced together.
+                            forcedResumeOffset = 0,
+                            progress = { transferred, _, total -> progress(transferred, total) },
+                            writerFactory = { into.asTransferWriter() },
+                        )
+                    }
+                }
             }
         }
         Unit
@@ -1119,26 +1337,49 @@ class TransferManager(
         abort: TransferAbort,
         progress: (bytes: Long, total: Long?) -> Unit,
     ): Unit = withContext(io) {
-        val settings = site.toSettings(passwords)
         try {
-            WorkerConnection(capabilities, log).use { connection ->
-                connection.settings = settings
-                runInterruptible {
-                    ResilientTransfer(
-                        settings = settings,
-                        capabilities = capabilities,
-                        retryPolicy = RetryPolicy(maxAttempts = settings.maxRetries),
-                        logger = log,
-                        sleep = { millis -> networkGate.waitBeforeRetry(millis) { abort.isStopped } },
-                        connections = connection,
-                        abort = abort,
-                    ).upload(
-                        remoteFile = remotePath,
-                        // Replace, never resume: an edited file is not more of
-                        // the old one, so appending would splice the two.
-                        resume = false,
-                        progress = { transferred, _, total -> progress(transferred, total) },
-                    ) { from.asTransferReader() }
+            when (site.protocolEnum) {
+                SiteProtocol.SFTP -> {
+                    val settings = site.toSftpSettings(passwords)
+                    runInterruptible {
+                        SftpResilientTransfer(
+                            settings = settings,
+                            retryPolicy = RetryPolicy(maxAttempts = settings.maxRetries),
+                            logger = log,
+                            sleep = { millis -> networkGate.waitBeforeRetry(millis) { abort.isStopped } },
+                            abort = abort,
+                        ).upload(
+                            remoteFile = remotePath,
+                            // Replace, never resume: an edited file is not more
+                            // of the old one, so appending would splice the two.
+                            resume = false,
+                            progress = { transferred, _, total -> progress(transferred, total) },
+                        ) { from.asTransferReader() }
+                    }
+                }
+
+                SiteProtocol.FTP -> {
+                    val settings = site.toSettings(passwords)
+                    WorkerConnection(capabilities, log).use { connection ->
+                        connection.settings = settings
+                        runInterruptible {
+                            ResilientTransfer(
+                                settings = settings,
+                                capabilities = capabilities,
+                                retryPolicy = RetryPolicy(maxAttempts = settings.maxRetries),
+                                logger = log,
+                                sleep = { millis -> networkGate.waitBeforeRetry(millis) { abort.isStopped } },
+                                connections = connection,
+                                abort = abort,
+                            ).upload(
+                                remoteFile = remotePath,
+                                // Replace, never resume: an edited file is not more of
+                                // the old one, so appending would splice the two.
+                                resume = false,
+                                progress = { transferred, _, total -> progress(transferred, total) },
+                            ) { from.asTransferReader() }
+                        }
+                    }
                 }
             }
         } finally {
