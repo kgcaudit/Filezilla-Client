@@ -1230,7 +1230,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * emptied depth first before it can go.
      */
     private fun deleteRemoteTree(
-        session: org.filezilla.android.transfer.FtpSession,
+        session: org.filezilla.android.transfer.RemoteSession,
         directory: String,
         row: org.filezilla.ftp.listing.DirectoryEntry,
     ) {
@@ -1750,7 +1750,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * the part before that.
      */
     private fun planDownload(
-        session: org.filezilla.android.transfer.FtpSession,
+        session: org.filezilla.android.transfer.RemoteSession,
         directory: String,
         picks: List<DirectoryEntry>,
         stop: Stoppable,
@@ -4724,7 +4724,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun mutate(
         id: PaneId = activePane,
-        block: (org.filezilla.android.transfer.FtpSession) -> Unit,
+        block: (org.filezilla.android.transfer.RemoteSession) -> Unit,
     ) {
         val site = pane(id).site ?: return
         val path = pane(id).path

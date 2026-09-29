@@ -63,4 +63,15 @@ class SftpTestServer(
         password = password,
         knownHostKey = knownHostKey,
     )
+
+    /**
+     * The fingerprint this server presents, learned the way the app learns it:
+     * the first connection is refused and carries the key.
+     */
+    fun discoverHostKey(): String = try {
+        SftpEngine(settings()).use { it.connect() }
+        error("expected the first connection to be refused for an unknown host key")
+    } catch (e: HostKeyNotTrusted) {
+        e.hostKey.fingerprint
+    }
 }

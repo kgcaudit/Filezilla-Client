@@ -31,15 +31,14 @@ dependencies {
     // tests here in the plain-JVM module just like the rest of the engine does.
     implementation(libs.jsch)
 
-    // The harness is plain JDK; it needs nothing from the engine but its
-    // package, so the fixtures carry no extra dependencies.
+    // The FTPS harness is plain JDK, but the SFTP harness in testFixtures is a
+    // real in-process SSH server, so it needs MINA SSHD to compile. Shared with
+    // the app module, which browses and transfers against it too.
+    testFixturesImplementation(libs.sshd.core)
+    testFixturesImplementation(libs.sshd.sftp)
 
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.kotlinx.coroutines.test)
-    // A real SSH/SFTP server for the SFTP engine's integration tests, in
-    // process so no external setup is needed.
-    testImplementation(libs.sshd.core)
-    testImplementation(libs.sshd.sftp)
     testRuntimeOnly(libs.junit.platform.launcher)
 }
 

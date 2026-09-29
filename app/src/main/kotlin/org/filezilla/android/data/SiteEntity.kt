@@ -6,6 +6,17 @@ import androidx.room.PrimaryKey
 import org.filezilla.ftp.protocol.FtpSecurity
 import org.filezilla.ftp.protocol.FtpSettings
 import org.filezilla.ftp.protocol.TransferMode
+import org.filezilla.ftp.sftp.SftpSettings
+
+/**
+ * Which protocol a saved server speaks.
+ *
+ * FTP (plain or FTPS, told apart by [SiteEntity.security]) and SFTP are two
+ * different protocols behind the same app surface, so this is stored rather
+ * than inferred. Stored as its name so a value added later does not renumber
+ * the existing rows.
+ */
+enum class SiteProtocol { FTP, SFTP }
 
 /**
  * A saved server, the app's equivalent of a FileZilla Site Manager entry.
@@ -37,6 +48,18 @@ data class SiteEntity(
      * instead of accepting all of them.
      */
     @ColumnInfo(name = "pinned_certificate") val pinnedCertificate: String? = null,
+    /**
+     * Which protocol this server speaks: `"FTP"` (with [security] telling plain
+     * from FTPS) or `"SFTP"`. Defaults to `"FTP"`, which is what every server
+     * saved before SFTP existed was.
+     */
+    val protocol: String = SiteProtocol.FTP.name,
+    /**
+     * The SSH host key fingerprint accepted for this server, if any. The SFTP
+     * parallel of [pinnedCertificate]: null means the server has not been
+     * recognised yet, so the next connection stops and asks.
+     */
+    @ColumnInfo(name = "known_host_key") val knownHostKey: String? = null,
     val initialPath: String?,
     /** Null negotiates UTF-8; a name pins it. See [FtpSettings.encoding]. */
     val encoding: String? = null,
@@ -69,4 +92,23 @@ data class SiteEntity(
     )
 
     val securityEnum: FtpSecurity get() = enumValueOf<FtpSecurity>(security)
+
+    /** Which protocol this server speaks; [SiteProtocol.FTP] for anything unset. */
+    val protocolEnum: SiteProtocol
+        get() = runCatching { enumValueOf<SiteProtocol>(protocol) }.getOrDefault(SiteProtocol.FTP)
+
+    /**
+     * The SFTP connection settings, with the password decrypted for the moment
+     * it is needed -- the SFTP parallel of [toSettings].
+     *
+     * As there, a password that cannot be decrypted becomes an empty one rather
+     * than an exception: the login then fails where the user can see and fix it.
+     */
+    fun toSftpSettings(passwords: PasswordCipher): SftpSettings = SftpSettings(
+        host = host,
+        port = port,
+        user = user,
+        password = passwords.decrypt(passwordCipher).orEmpty(),
+        knownHostKey = knownHostKey,
+    )
 }

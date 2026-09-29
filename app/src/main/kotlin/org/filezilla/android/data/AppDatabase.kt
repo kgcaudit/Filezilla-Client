@@ -26,7 +26,7 @@ abstract class AppDatabase : RoomDatabase() {
          * test went stale the moment a column was added -- so every existing
          * database looked unmigratable from a test that was only out of date.
          */
-        const val VERSION = 6
+        const val VERSION = 7
 
         /**
          * Every migration, in one list.
@@ -42,6 +42,7 @@ abstract class AppDatabase : RoomDatabase() {
                 ADD_POSITION,
                 ADD_REMOVE_SOURCE,
                 PIN_CERTIFICATES,
+                ADD_SFTP,
             )
 
         fun open(context: Context, passwords: PasswordCipher): AppDatabase =
@@ -56,6 +57,26 @@ abstract class AppDatabase : RoomDatabase() {
                 // would turn a schema change into silently re-downloading
                 // everything in the queue -- and now the saved passwords too.
                 .build()
+
+        /**
+         * Version 7 adds SFTP: which protocol a site speaks, and the SSH host
+         * key accepted for it.
+         *
+         * Both are plain added columns. `protocol` defaults to `"FTP"`, which
+         * every site saved before this was, so nothing changes for them --
+         * `known_host_key` is theirs to leave null, since FTP does not use it.
+         * A rebuild would be needless here: nothing is being dropped, only
+         * added, so `ALTER TABLE ADD COLUMN` is the whole migration, exactly as
+         * for the encoding and position columns before it.
+         */
+        internal val ADD_SFTP = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE `sites` ADD COLUMN `protocol` TEXT NOT NULL DEFAULT 'FTP'",
+                )
+                db.execSQL("ALTER TABLE `sites` ADD COLUMN `known_host_key` TEXT")
+            }
+        }
 
         /**
          * Version 6 trades "accept any certificate" for accepting one.

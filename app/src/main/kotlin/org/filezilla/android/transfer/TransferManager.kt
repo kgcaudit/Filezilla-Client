@@ -1030,7 +1030,7 @@ class TransferManager(
      * A blocking browse, run so that coroutine cancellation interrupts the
      * socket rather than leaving it parked on a read.
      */
-    suspend fun <T> browse(site: SiteEntity, block: (FtpSession) -> T): T = withContext(io) {
+    suspend fun <T> browse(site: SiteEntity, block: (RemoteSession) -> T): T = withContext(io) {
         // Through the pool, so a folder tap is one command rather than a
         // whole login. See BrowseConnections for what makes reusing one
         // safe; the short version is that it is held one caller at a time

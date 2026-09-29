@@ -4,6 +4,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.filezilla.android.data.PasswordCipher
 import org.filezilla.android.data.SiteEntity
+import org.filezilla.android.data.SiteProtocol
 import org.filezilla.ftp.protocol.FtpLogger
 import org.filezilla.ftp.protocol.LogLevel
 import org.filezilla.ftp.protocol.ServerCapabilities
@@ -136,10 +137,12 @@ class BrowseConnections<S : java.io.Closeable>(
         site.host,
         site.port.toString(),
         site.user,
+        site.protocol,
         site.security,
         site.transferMode,
         site.encoding.orEmpty(),
         site.pinnedCertificate.orEmpty(),
+        site.knownHostKey.orEmpty(),
     ).joinToString("\u0000")
 
     companion object {
@@ -153,13 +156,23 @@ class BrowseConnections<S : java.io.Closeable>(
          */
         const val IDLE_LIMIT_MILLIS = 60_000L
 
-        /** The pool the app uses: sessions opened against a real server. */
+        /**
+         * The pool the app uses: sessions opened against a real server, of
+         * whichever protocol the site speaks.
+         *
+         * The one place browsing picks FTP or SFTP. Both sides are a
+         * [RemoteSession], so nothing above here has to know which it got.
+         */
         fun forServers(
             capabilities: ServerCapabilities,
             passwords: PasswordCipher,
             log: FtpLogger = FtpLogger.NONE,
-        ): BrowseConnections<FtpSession> = BrowseConnections(log = log) { site ->
-            FtpSession(site.toSettings(passwords), capabilities, log).also { it.connect() }
+        ): BrowseConnections<RemoteSession> = BrowseConnections(log = log) { site ->
+            val session: RemoteSession = when (site.protocolEnum) {
+                SiteProtocol.SFTP -> SftpSession(site.toSftpSettings(passwords), log)
+                SiteProtocol.FTP -> FtpSession(site.toSettings(passwords), capabilities, log)
+            }
+            session.also { it.connect() }
         }
     }
 }

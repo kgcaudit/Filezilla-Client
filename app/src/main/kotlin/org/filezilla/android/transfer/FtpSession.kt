@@ -8,7 +8,6 @@ import org.filezilla.ftp.protocol.FtpLogger
 import org.filezilla.ftp.protocol.FtpSettings
 import org.filezilla.ftp.protocol.ServerCapabilities
 import org.filezilla.ftp.transfer.FtpTransferEngine
-import java.io.Closeable
 
 /**
  * One connected control connection, with the browsing operations the UI needs
@@ -22,40 +21,40 @@ class FtpSession(
     settings: FtpSettings,
     private val capabilities: ServerCapabilities,
     private val logger: FtpLogger = FtpLogger.NONE,
-) : Closeable {
+) : RemoteSession {
 
     private val control = FtpControlConnection(settings, capabilities, logger)
     private val operations = FtpFileOperations(control)
     private val engine = FtpTransferEngine(control, capabilities, logger)
 
-    fun connect() {
+    override fun connect() {
         control.connect()
         control.login()
     }
 
-    fun currentDirectory(): String = operations.currentDirectory()
+    override fun currentDirectory(): String = operations.currentDirectory()
 
     /** Returns where the server says that landed, or null if it did not say. */
-    fun changeDirectory(path: String): String? = operations.changeDirectory(path)
+    override fun changeDirectory(path: String): String? = operations.changeDirectory(path)
 
-    fun changeToParent() = operations.changeToParentDirectory()
+    override fun changeToParent() = operations.changeToParentDirectory()
 
-    fun list(): List<DirectoryEntry> = engine.list()
+    override fun list(): List<DirectoryEntry> = engine.list()
 
-    fun createDirectory(name: String) = writing { operations.createDirectory(name) }
+    override fun createDirectory(name: String) = writing { operations.createDirectory(name) }
 
-    fun removeDirectory(name: String) = writing { operations.removeDirectory(name) }
+    override fun removeDirectory(name: String) = writing { operations.removeDirectory(name) }
 
-    fun deleteFile(name: String) = writing { operations.deleteFile(name) }
+    override fun deleteFile(name: String) = writing { operations.deleteFile(name) }
 
-    fun rename(from: String, to: String) = writing { operations.rename(from, to) }
+    override fun rename(from: String, to: String) = writing { operations.rename(from, to) }
 
     /**
      * `SITE CHMOD`, which most Unix servers accept even though no standard
      * requires it. A server that does not answers with an error, which is
      * the honest outcome -- there is nothing to fall back to.
      */
-    fun changeMode(path: String, mode: String) = writing { operations.changeMode(path, mode) }
+    override fun changeMode(path: String, mode: String) = writing { operations.changeMode(path, mode) }
 
     /**
      * How many times this session has been asked to change the server.
@@ -72,7 +71,7 @@ class FtpSession(
      * borrow, so a flag would need clearing by whoever cleared it last,
      * and a count needs nothing.
      */
-    var writes: Int = 0
+    override var writes: Int = 0
         private set
 
     /**
@@ -98,7 +97,7 @@ class FtpSession(
      * and a difference in precision read as a difference in time would restart
      * a perfectly good transfer.
      */
-    fun fingerprint(remotePath: String): RemoteFingerprint =
+    override fun fingerprint(remotePath: String): RemoteFingerprint =
         fingerprintOf(control, capabilities, logger, remotePath)
 
     override fun close() {
