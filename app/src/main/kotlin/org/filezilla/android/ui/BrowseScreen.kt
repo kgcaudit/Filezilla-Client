@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.aspectRatio
@@ -25,9 +27,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,7 +39,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -50,18 +56,24 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.filezilla.android.files.Checksums
 import org.filezilla.android.files.FilePath
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.filezilla.android.R
+import org.filezilla.android.ui.theme.status
 import org.filezilla.ftp.listing.DirectoryEntry
 
 /** What a row can have done to it, gathered so the two layouts share one set. */
@@ -96,6 +108,14 @@ class EntryActions(
      * set, so the item is absent rather than present and refused.
      */
     val onChangeMode: (DirectoryEntry) -> Unit = {},
+    /**
+     * Sums a file on the phone, to check it against a published hash or a copy.
+     *
+     * The phone's files only: a server file would have to be fetched whole
+     * first, which is a download the user should ask for outright, not one a
+     * menu item quietly starts.
+     */
+    val onChecksum: (DirectoryEntry) -> Unit = {},
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -567,6 +587,17 @@ private fun EntryRow(
                             },
                         )
                     }
+                    // A file on the phone can be summed, to check it against a
+                    // published hash or a copy that should be the same bytes.
+                    if (isLocal && !entry.isDirectory) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.checksum_menu)) },
+                            onClick = {
+                                menuOpen = false
+                                actions.onChecksum(entry)
+                            },
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.menu_properties)) },
                         onClick = {
@@ -803,3 +834,140 @@ private fun GridTile(
 }
 
 
+
+/**
+ * The checksum dialog: a file's fingerprint, the algorithm it is read in, and
+ * a box to paste a published value into so a match or a mismatch is plain.
+ *
+ * The hash is tapped to copy -- a hash is for pasting, and reading forty hex
+ * digits back by eye is exactly what this saves. Comparing is forgiving of
+ * case and stray spaces, the two ways a pasted sum differs without meaning to.
+ */
+@Composable
+internal fun ChecksumDialog(
+    state: MainViewModel.ChecksumState,
+    onAlgorithm: (Checksums.Algorithm) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    OloDialog(
+        title = state.name,
+        onDismiss = onDismiss,
+        content = {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    for (algorithm in Checksums.Algorithm.entries) {
+                        AlgorithmChip(
+                            label = algorithm.label,
+                            chosen = algorithm == state.algorithm,
+                            onClick = { onAlgorithm(algorithm) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                when {
+                    state.hash == null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            stringResource(R.string.checksum_computing),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+
+                    state.hash.isEmpty() -> Text(
+                        stringResource(R.string.checksum_unreadable),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.status.failed,
+                    )
+
+                    else -> {
+                        val clipboard = LocalClipboardManager.current
+                        val context = LocalContext.current
+                        val copied = stringResource(R.string.checksum_copied)
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = MaterialTheme.shapes.small,
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        clipboard.setText(AnnotatedString(state.hash))
+                                        android.widget.Toast
+                                            .makeText(context, copied, android.widget.Toast.LENGTH_SHORT)
+                                            .show()
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    state.hash,
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Icon(
+                                    Icons.Filled.ContentCopy,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+
+                        var expected by remember { mutableStateOf("") }
+                        OloTextField(
+                            value = expected,
+                            onValueChange = { expected = it },
+                            label = stringResource(R.string.checksum_expected),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        val cleaned = expected.trim().replace(" ", "")
+                        if (cleaned.isNotEmpty()) {
+                            val matches = cleaned.equals(state.hash, ignoreCase = true)
+                            Text(
+                                stringResource(
+                                    if (matches) R.string.checksum_match else R.string.checksum_mismatch,
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (matches) MaterialTheme.status.done else MaterialTheme.status.failed,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        action = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }
+        },
+    )
+}
+
+/** One algorithm to pick, filled when chosen -- the compress dialog's pill. */
+@Composable
+private fun AlgorithmChip(
+    label: String,
+    chosen: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = if (chosen) MaterialTheme.colorScheme.primary else Color.Transparent,
+        contentColor = if (chosen) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        border = if (chosen) null else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        modifier = modifier,
+    ) {
+        Row(
+            modifier = Modifier.clickable(onClick = onClick).padding(vertical = 10.dp),
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        }
+    }
+}

@@ -472,6 +472,13 @@
     <string name="archive_joining">Joining</string>
     <string name="archive_joined">Joined %2$d parts into %1$s</string>
     <string name="archive_join_stopped">Stopped; %1$s is unfinished</string>
+    <string name="checksum_menu">Checksum</string>
+    <string name="checksum_computing">Computing…</string>
+    <string name="checksum_unreadable">The file could not be read.</string>
+    <string name="checksum_expected">Paste an expected value</string>
+    <string name="checksum_match">Matches</string>
+    <string name="checksum_mismatch">Does not match</string>
+    <string name="checksum_copied">Copied</string>
     <string name="archive_compress_stopped">Stopped; %1$s is unfinished</string>
     <string name="archive_compress_title">Compress %1$d items</string>
     <string name="archive_compress_bundle">Bundling</string>

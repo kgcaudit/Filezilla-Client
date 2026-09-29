@@ -992,6 +992,14 @@ private fun AppScreen(
         )
     }
 
+    model.checksum?.let { state ->
+        ChecksumDialog(
+            state = state,
+            onAlgorithm = model::setChecksumAlgorithm,
+            onDismiss = model::closeChecksum,
+        )
+    }
+
     model.compressRequest?.let { request ->
         CompressChoiceDialog(
             count = request.picks.size,

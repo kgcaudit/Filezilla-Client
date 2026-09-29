@@ -550,6 +550,7 @@ private fun PaneBody(
                         onOpenLocalFileWith(FilePath.child(model.pane(id).path, entry.name))
                     },
                     onChangeMode = { model.changeModeOf(id, it) },
+                    onChecksum = { model.openChecksum(id, it) },
                 ),
             )
         }

@@ -17,6 +17,7 @@ import org.filezilla.android.storage.DownloadConflict
 import org.filezilla.android.storage.DownloadDestination
 import org.filezilla.android.storage.numberedName
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.filezilla.android.AppGraph
 import org.filezilla.android.R
@@ -41,6 +42,7 @@ import org.filezilla.ftp.transfer.TransferAbort
 import org.filezilla.android.storage.ViewCache
 import org.filezilla.ftp.net.CertificateNotTrusted
 import org.filezilla.android.files.AccessRoute
+import org.filezilla.android.files.Checksums
 import org.filezilla.android.files.FilePath
 import org.filezilla.android.files.LocalOperations
 import org.filezilla.android.files.LocalWalk
@@ -467,6 +469,64 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         showSiteAt(id, site, bookmark.path)
+    }
+
+    // ------------------------------------------------------------ checksum
+
+    /**
+     * What the checksum dialog shows: the file's name, the algorithm chosen,
+     * the hash once it is computed, and how far a running hash has got. A null
+     * hash means still computing; an empty one means the file could not be read.
+     */
+    data class ChecksumState(
+        val name: String,
+        val algorithm: Checksums.Algorithm,
+        val hash: String?,
+        val progress: Float,
+    )
+
+    var checksum by mutableStateOf<ChecksumState?>(null)
+        private set
+
+    private var checksumFile: java.io.File? = null
+    private var checksumJob: kotlinx.coroutines.Job? = null
+
+    /** Opens the checksum dialog for a local file and starts summing it. */
+    fun openChecksum(id: PaneId, entry: DirectoryEntry) {
+        val folder = pane(id).path.takeIf { it.isNotEmpty() && pane(id).isLocal } ?: return
+        if (entry.isDirectory) return
+        val file = java.io.File(folder, entry.name)
+        checksumFile = file
+        startChecksum(file, Checksums.Algorithm.SHA256)
+    }
+
+    /** Re-sums the same file with a different algorithm. */
+    fun setChecksumAlgorithm(algorithm: Checksums.Algorithm) {
+        checksumFile?.let { startChecksum(it, algorithm) }
+    }
+
+    fun closeChecksum() {
+        checksumJob?.cancel()
+        checksumJob = null
+        checksumFile = null
+        checksum = null
+    }
+
+    private fun startChecksum(file: java.io.File, algorithm: Checksums.Algorithm) {
+        checksumJob?.cancel()
+        checksum = ChecksumState(file.name, algorithm, hash = null, progress = 0f)
+        checksumJob = viewModelScope.launch {
+            val digest = withContext(Dispatchers.IO) {
+                Checksums.of(file, algorithm, cancelled = { !isActive }) { done, total ->
+                    val fraction = if (total > 0) (done.toFloat() / total) else 0f
+                    checksum = checksum?.copy(progress = fraction)
+                }
+            }
+            // Only the current run writes the answer: a run cancelled because
+            // the algorithm changed or the dialog closed leaves the newer state
+            // alone.
+            if (isActive) checksum = checksum?.copy(hash = digest ?: "", progress = 1f)
+        }
     }
 
     /**

@@ -464,6 +464,13 @@
     <string name="archive_joining">합치는 중</string>
     <string name="archive_joined">%2$d개를 합쳐 %1$s을(를) 만들었습니다</string>
     <string name="archive_join_stopped">중지했습니다. %1$s은(는) 완성되지 않았습니다</string>
+    <string name="checksum_menu">체크섬 확인</string>
+    <string name="checksum_computing">계산 중…</string>
+    <string name="checksum_unreadable">파일을 읽을 수 없습니다.</string>
+    <string name="checksum_expected">예상 값 붙여넣기</string>
+    <string name="checksum_match">일치합니다</string>
+    <string name="checksum_mismatch">일치하지 않습니다</string>
+    <string name="checksum_copied">복사했습니다</string>
     <string name="archive_compress_stopped">중지했습니다. %1$s은(는) 완성되지 않았습니다</string>
     <string name="archive_compress_title">%1$d개 항목 압축</string>
     <string name="archive_compress_bundle">묶기</string>
