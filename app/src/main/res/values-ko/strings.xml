@@ -414,6 +414,26 @@
     <string name="cert_changed_detail">인증서 갱신일 수도, 연결 가로채기일 수도 있습니다. 서버를 직접 바꾼 게 아니라면 수락하지 마세요.</string>
     <string name="cert_changed_was">전에 수락한 지문: %1$s</string>
     <string name="cert_accept_changed">새 인증서 수락</string>
+
+    <string name="hostkey_none_title">서버 키를 아직 확인하지 않음</string>
+    <string name="hostkey_none_detail">처음 접속할 때 서버 키를 확인합니다.</string>
+    <string name="hostkey_pinned_title">이 서버의 키를 확인함</string>
+    <string name="hostkey_forget">해제</string>
+    <string name="hostkey_fingerprint">지문 (SHA-256)</string>
+    <string name="hostkey_fingerprint_md5">지문 (MD5)</string>
+    <string name="hostkey_algorithm">키 종류</string>
+    <string name="hostkey_ask_title">%1$s의 서버 키가 맞습니까?</string>
+    <string name="hostkey_ask_detail">SSH 서버 키는 보증 기관이 없으며, 이는 정상입니다. 아래 지문이 서버가 알려준 지문과 같을 때만 수락하세요. 다르면 다른 무언가가 대신 응답하는 것일 수 있습니다.</string>
+    <string name="hostkey_accept">내 서버가 맞습니다</string>
+    <string name="hostkey_changed_title">%1$s의 서버 키가 전과 다릅니다</string>
+    <string name="hostkey_changed_detail">키 교체일 수도, 연결 가로채기일 수도 있습니다. 서버를 직접 바꾼 게 아니라면 수락하지 마세요.</string>
+    <string name="hostkey_changed_was">전에 수락한 지문: %1$s</string>
+    <string name="hostkey_accept_changed">새 서버 키 수락</string>
+
+    <string name="field_protocol">프로토콜</string>
+    <string name="protocol_ftp">FTP / FTPS</string>
+    <string name="protocol_sftp">SFTP (SSH)</string>
+
     <string name="fail_certificate">서버의 인증서를 확인할 수 없습니다.</string>
     <string name="cert_changed_short">서버의 인증서가 바뀌었습니다</string>
     <string name="fail_certificate_advice">서버를 다시 눌러 인증서를 확인하고, 맞는 인증서인지 판단해 주세요.</string>

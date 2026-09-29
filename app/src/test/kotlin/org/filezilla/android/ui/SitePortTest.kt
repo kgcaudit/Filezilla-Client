@@ -1,5 +1,6 @@
 package org.filezilla.android.ui
 
+import org.filezilla.android.data.SiteProtocol
 import org.filezilla.ftp.protocol.FtpSecurity
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -50,5 +51,27 @@ class SitePortTest {
         val blank = SiteDraft.blank()
         assertEquals(FtpSecurity.PLAIN, blank.security)
         assertEquals(21, blank.port)
+    }
+
+    private fun afterProtocol(port: String, from: SiteProtocol, fromSec: FtpSecurity, to: SiteProtocol) =
+        portAfterProtocolChange(port, from, fromSec, to)
+
+    @Test
+    fun `switching to SFTP fills in 22 over an untouched FTP port`() {
+        assertEquals("22", afterProtocol("21", SiteProtocol.FTP, FtpSecurity.PLAIN, SiteProtocol.SFTP))
+        // And back: SFTP's 22 gives way to FTP's default.
+        assertEquals("21", afterProtocol("22", SiteProtocol.SFTP, FtpSecurity.PLAIN, SiteProtocol.FTP))
+    }
+
+    @Test
+    fun `switching protocol keeps a port the user typed`() {
+        assertEquals("2222", afterProtocol("2222", SiteProtocol.FTP, FtpSecurity.PLAIN, SiteProtocol.SFTP))
+    }
+
+    @Test
+    fun `the standard port follows the protocol`() {
+        assertEquals(22, defaultPortForProtocol(SiteProtocol.SFTP, FtpSecurity.PLAIN))
+        assertEquals(21, defaultPortForProtocol(SiteProtocol.FTP, FtpSecurity.PLAIN))
+        assertEquals(990, defaultPortForProtocol(SiteProtocol.FTP, FtpSecurity.IMPLICIT_TLS))
     }
 }

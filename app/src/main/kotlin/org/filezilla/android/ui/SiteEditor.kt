@@ -35,6 +35,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import org.filezilla.android.R
+import org.filezilla.android.data.SiteProtocol
 import org.filezilla.ftp.protocol.FtpSecurity
 import org.filezilla.ftp.protocol.TransferMode
 
@@ -70,10 +71,12 @@ fun SiteEditor(
     var port by remember { mutableStateOf(initial.port.toString()) }
     var user by remember { mutableStateOf(initial.user) }
     var password by remember { mutableStateOf(initial.password) }
+    var protocol by remember { mutableStateOf(initial.protocol) }
     var security by remember { mutableStateOf(initial.security) }
     var mode by remember { mutableStateOf(initial.transferMode) }
     var encoding by remember { mutableStateOf(initial.encoding) }
     var pinned by remember { mutableStateOf(initial.pinnedCertificate) }
+    var knownHostKey by remember { mutableStateOf(initial.knownHostKey) }
     var initialPath by remember { mutableStateOf(initial.initialPath.orEmpty()) }
 
     OloDialog(
@@ -128,34 +131,50 @@ fun SiteEditor(
                 )
 
                 SectionLabel(R.string.site_section_connection)
+                // The one choice that reshapes the rest of the form. FTP (plain
+                // or FTPS, chosen just below) and SFTP share no connection
+                // settings, so the FTP-only pickers appear only for FTP and the
+                // host key only for SFTP.
                 Picker(
-                    label = stringResource(R.string.field_encryption),
-                    selected = securityLabel(security),
-                    options = FtpSecurity.entries.map { it to securityLabel(it) },
+                    label = stringResource(R.string.field_protocol),
+                    selected = protocolLabel(protocol),
+                    options = SiteProtocol.entries.map { it to protocolLabel(it) },
                     onSelect = { chosen ->
-                        port = portAfterSecurityChange(port, security, chosen)
-                        security = chosen
+                        port = portAfterProtocolChange(port, protocol, security, chosen)
+                        protocol = chosen
                     },
                 )
 
-                Picker(
-                    label = stringResource(R.string.field_transfer_mode),
-                    selected = modeLabel(mode),
-                    options = TransferMode.entries.map { it to modeLabel(it) },
-                    onSelect = { mode = it },
-                )
-                if (mode == TransferMode.ACTIVE) {
-                    Hint(stringResource(R.string.mode_active_note))
-                }
+                if (protocol == SiteProtocol.FTP) {
+                    Picker(
+                        label = stringResource(R.string.field_encryption),
+                        selected = securityLabel(security),
+                        options = FtpSecurity.entries.map { it to securityLabel(it) },
+                        onSelect = { chosen ->
+                            port = portAfterSecurityChange(port, security, chosen)
+                            security = chosen
+                        },
+                    )
 
-                Picker(
-                    label = stringResource(R.string.field_encoding),
-                    selected = encodingLabel(encoding),
-                    options = ENCODINGS.map { (value, _) -> value to encodingLabel(value) },
-                    onSelect = { encoding = it },
-                )
-                if (encoding != null) {
-                    Hint(stringResource(R.string.encoding_note))
+                    Picker(
+                        label = stringResource(R.string.field_transfer_mode),
+                        selected = modeLabel(mode),
+                        options = TransferMode.entries.map { it to modeLabel(it) },
+                        onSelect = { mode = it },
+                    )
+                    if (mode == TransferMode.ACTIVE) {
+                        Hint(stringResource(R.string.mode_active_note))
+                    }
+
+                    Picker(
+                        label = stringResource(R.string.field_encoding),
+                        selected = encodingLabel(encoding),
+                        options = ENCODINGS.map { (value, _) -> value to encodingLabel(value) },
+                        onSelect = { encoding = it },
+                    )
+                    if (encoding != null) {
+                        Hint(stringResource(R.string.encoding_note))
+                    }
                 }
 
                 SectionLabel(R.string.site_section_login)
@@ -191,11 +210,16 @@ fun SiteEditor(
                 )
 
                 // Not a setting. There is nothing here to choose -- a
-                // certificate is accepted by recognising one when the server
-                // presents it, which happens on connecting, not in a form.
-                // What this offers is the other direction: seeing what was
-                // accepted, and taking it back.
-                CertificateStatus(pinned = pinned, onForget = { pinned = null })
+                // certificate or host key is accepted by recognising one when
+                // the server presents it, which happens on connecting, not in a
+                // form. What this offers is the other direction: seeing what was
+                // accepted, and taking it back. FTP shows the certificate; SFTP
+                // shows the host key.
+                if (protocol == SiteProtocol.FTP) {
+                    CertificateStatus(pinned = pinned, onForget = { pinned = null })
+                } else {
+                    HostKeyStatus(known = knownHostKey, onForget = { knownHostKey = null })
+                }
             }
         },
         action = {
@@ -207,13 +231,15 @@ fun SiteEditor(
                         initial.copy(
                             name = name,
                             host = host,
-                            port = port.toIntOrNull() ?: defaultPortFor(security),
+                            port = port.toIntOrNull() ?: defaultPortForProtocol(protocol, security),
                             user = user,
                             password = password,
+                            protocol = protocol,
                             security = security,
                             transferMode = mode,
                             encoding = encoding,
                             pinnedCertificate = pinned,
+                            knownHostKey = knownHostKey,
                             initialPath = initialPath,
                         ),
                     )
@@ -299,6 +325,29 @@ private fun Hint(text: String) {
 fun defaultPortFor(security: FtpSecurity): Int =
     if (security == FtpSecurity.IMPLICIT_TLS) 990 else 21
 
+/** The standard port for a protocol: 22 for SFTP, the FTP default otherwise. */
+fun defaultPortForProtocol(protocol: SiteProtocol, security: FtpSecurity): Int =
+    if (protocol == SiteProtocol.SFTP) 22 else defaultPortFor(security)
+
+/**
+ * The port to show after the user switches protocol.
+ *
+ * Follows the same rule as [portAfterSecurityChange]: a port the user typed by
+ * hand is theirs and is kept; a port still sitting on the default for the
+ * protocol being left is nobody's choice and moves to the new default -- so
+ * switching to SFTP fills in 22, but only over an untouched 21.
+ */
+fun portAfterProtocolChange(
+    current: String,
+    from: SiteProtocol,
+    fromSecurity: FtpSecurity,
+    to: SiteProtocol,
+): String {
+    val typed = current.toIntOrNull()
+    val wasUntouched = typed == null || typed == defaultPortForProtocol(from, fromSecurity)
+    return if (wasUntouched) defaultPortForProtocol(to, fromSecurity).toString() else current
+}
+
 /**
  * The port to show after the user changes the encryption setting.
  *
@@ -316,6 +365,14 @@ fun portAfterSecurityChange(current: String, from: FtpSecurity, to: FtpSecurity)
     val wasUntouched = typed == null || typed == defaultPortFor(from)
     return if (wasUntouched) defaultPortFor(to).toString() else current
 }
+
+@Composable
+fun protocolLabel(protocol: SiteProtocol): String = stringResource(
+    when (protocol) {
+        SiteProtocol.FTP -> R.string.protocol_ftp
+        SiteProtocol.SFTP -> R.string.protocol_sftp
+    },
+)
 
 @Composable
 fun securityLabel(security: FtpSecurity): String = stringResource(

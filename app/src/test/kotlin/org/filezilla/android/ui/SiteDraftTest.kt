@@ -80,4 +80,30 @@ class SiteDraftTest {
         assertNull(SiteDraft.blank().pinnedCertificate)
     }
 
+    @Test
+    fun `a new site speaks FTP until told otherwise`() {
+        assertEquals(org.filezilla.android.data.SiteProtocol.FTP, SiteDraft.blank().protocol)
+        assertEquals("FTP", SiteDraft.blank().toEntity(passwords).protocol)
+    }
+
+    @Test
+    fun `editing an SFTP site keeps its protocol and accepted host key`() {
+        // The SSH parallel of keeping the certificate: a round trip through the
+        // form must not drop the host key or quietly turn the site back into FTP.
+        val key = "SHA256:abc123"
+        val saved = SiteDraft.blank()
+            .copy(
+                host = "nas.home",
+                protocol = org.filezilla.android.data.SiteProtocol.SFTP,
+                knownHostKey = key,
+            )
+            .toEntity(FakePasswordCipher())
+
+        val edited = SiteDraft.of(saved, FakePasswordCipher())
+            .copy(name = "renamed")
+            .toEntity(FakePasswordCipher())
+
+        assertEquals("SFTP", edited.protocol)
+        assertEquals(key, edited.knownHostKey)
+    }
 }

@@ -4083,6 +4083,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 replacing = refused.previouslyTrusted,
             )
         }
+        // The SSH parallel: an unrecognised or changed host key is the same
+        // kind of question, and reaches the user the same way rather than as a
+        // bare "could not connect".
+        val unknownHostKey = generateSequence(error) { it.cause }
+            .filterIsInstance<org.filezilla.ftp.sftp.HostKeyNotTrusted>()
+            .firstOrNull()
+        if (unknownHostKey != null && site != null && hostKeyQuestion == null) {
+            hostKeyQuestion = HostKeyQuestion(
+                site = site,
+                hostKey = unknownHostKey.hostKey,
+                replacing = unknownHostKey.previouslyTrusted,
+            )
+        }
         return describeFailure(error, graph.networkGate.currentlyOnline())
     }
 
@@ -4112,6 +4125,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             // site object each pane holds is the one from before the pin,
             // so it is replaced rather than reused -- a stale copy would
             // reconnect with no pin and be refused again.
+            for (id in PaneId.entries) {
+                val source = pane(id).source
+                if (source is PaneSource.Remote && source.site.id == pinned.id) {
+                    update(id) { it.copy(source = PaneSource.Remote(pinned), error = null) }
+                    loadRemote(id, pinned, pane(id).path.takeIf { it.isNotEmpty() }, fresh = true)
+                }
+            }
+        }
+    }
+
+    // -------------------------------------------------- the server's host key
+
+    /**
+     * The SSH host key somebody is being asked to recognise, if any. The SSH
+     * parallel of [certificateQuestion]; one at a time and app-wide for the
+     * same reasons.
+     */
+    var hostKeyQuestion by mutableStateOf<HostKeyQuestion?>(null)
+        private set
+
+    fun dismissHostKeyQuestion() {
+        hostKeyQuestion = null
+    }
+
+    /**
+     * Records that this host key is the server, and goes back in -- the SSH
+     * parallel of [trustCertificate]. The fingerprint is saved against the site
+     * before anything reconnects, and the pooled connection is dropped, because
+     * its key includes the pin and a connection opened under the old settings
+     * would otherwise be handed to the retry.
+     */
+    fun trustHostKey() {
+        val question = hostKeyQuestion ?: return
+        hostKeyQuestion = null
+        viewModelScope.launch {
+            val pinned = question.site.copy(knownHostKey = question.hostKey.fingerprint)
+            graph.database.sites().upsert(pinned)
+            graph.transfers.forget(question.site)
+
             for (id in PaneId.entries) {
                 val source = pane(id).source
                 if (source is PaneSource.Remote && source.site.id == pinned.id) {

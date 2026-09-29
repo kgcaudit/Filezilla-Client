@@ -898,6 +898,16 @@ private fun AppScreen(
         )
     }
 
+    // The SSH parallel, above everything for the same reason: until the host
+    // key is answered, nothing can reach that server.
+    model.hostKeyQuestion?.let { question ->
+        HostKeyDialog(
+            question = question,
+            onTrust = model::trustHostKey,
+            onDismiss = model::dismissHostKeyQuestion,
+        )
+    }
+
     // Above the pane it belongs to, because until it ends nothing else can
     // reach that server: the browse connection is held by one caller at a
     // time, so the pane underneath could not have answered anyway.

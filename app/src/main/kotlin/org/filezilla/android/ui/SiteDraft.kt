@@ -2,6 +2,7 @@ package org.filezilla.android.ui
 
 import org.filezilla.android.data.PasswordCipher
 import org.filezilla.android.data.SiteEntity
+import org.filezilla.android.data.SiteProtocol
 import org.filezilla.ftp.protocol.FtpSecurity
 import org.filezilla.ftp.protocol.TransferMode
 import java.util.UUID
@@ -20,6 +21,8 @@ data class SiteDraft(
     val port: Int,
     val user: String,
     val password: String,
+    /** FTP (plain or FTPS, told apart by [security]) or SFTP. */
+    val protocol: SiteProtocol,
     val security: FtpSecurity,
     val transferMode: TransferMode,
     /**
@@ -29,6 +32,12 @@ data class SiteDraft(
      * button -- but editing and saving a site must not silently drop it.
      */
     val pinnedCertificate: String?,
+    /**
+     * The SSH host key accepted for this server, carried through the editor
+     * untouched -- the SFTP parallel of [pinnedCertificate]. Set by recognising
+     * the key when the server presents it, and cleared by the editor's button.
+     */
+    val knownHostKey: String?,
     val initialPath: String?,
     /** Null means "negotiate", which is what most servers want. */
     val encoding: String? = null,
@@ -55,6 +64,8 @@ data class SiteDraft(
         security = security.name,
         transferMode = transferMode.name,
         pinnedCertificate = pinnedCertificate,
+        protocol = protocol.name,
+        knownHostKey = knownHostKey,
         initialPath = initialPath?.ifBlank { null },
         encoding = encoding?.ifBlank { null },
     )
@@ -74,9 +85,11 @@ data class SiteDraft(
             // substituted at save time only if the fields are still empty.
             user = "",
             password = "",
+            protocol = SiteProtocol.FTP,
             security = FtpSecurity.PLAIN,
             transferMode = TransferMode.DEFAULT,
             pinnedCertificate = null,
+            knownHostKey = null,
             initialPath = null,
             encoding = null,
         )
@@ -90,9 +103,11 @@ data class SiteDraft(
                 port = site.port,
                 user = site.user,
                 password = plaintext.orEmpty(),
+                protocol = site.protocolEnum,
                 security = site.securityEnum,
                 transferMode = enumValueOf(site.transferMode),
                 pinnedCertificate = site.pinnedCertificate,
+                knownHostKey = site.knownHostKey,
                 initialPath = site.initialPath,
                 encoding = site.encoding,
                 passwordUnreadable = plaintext == null,

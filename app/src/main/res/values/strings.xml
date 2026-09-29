@@ -422,6 +422,26 @@
     <string name="cert_changed_detail">A renewed certificate and an intercepted connection look the same from here. Only you know which this is. Do not accept it unless you changed the server yourself.</string>
     <string name="cert_changed_was">Accepted before: %1$s</string>
     <string name="cert_accept_changed">Accept the new certificate</string>
+
+    <string name="hostkey_none_title">Host key not yet accepted</string>
+    <string name="hostkey_none_detail">The first time you connect, this server\'s host key is shown for you to check.</string>
+    <string name="hostkey_pinned_title">This server\'s host key is accepted</string>
+    <string name="hostkey_forget">Forget</string>
+    <string name="hostkey_fingerprint">Fingerprint (SHA-256)</string>
+    <string name="hostkey_fingerprint_md5">Fingerprint (MD5)</string>
+    <string name="hostkey_algorithm">Key type</string>
+    <string name="hostkey_ask_title">Is this %1$s?</string>
+    <string name="hostkey_ask_detail">No authority vouches for an SSH host key, which is normal. Compare the fingerprint with the one your server shows, and accept it only if they match. If they differ, something else may be answering in its place.</string>
+    <string name="hostkey_accept">This is my server</string>
+    <string name="hostkey_changed_title">%1$s is not showing the host key you accepted</string>
+    <string name="hostkey_changed_detail">A rotated host key and an intercepted connection look the same from here. Only you know which this is. Do not accept it unless you changed the server yourself.</string>
+    <string name="hostkey_changed_was">Accepted before: %1$s</string>
+    <string name="hostkey_accept_changed">Accept the new host key</string>
+
+    <string name="field_protocol">Protocol</string>
+    <string name="protocol_ftp">FTP / FTPS</string>
+    <string name="protocol_sftp">SFTP (SSH)</string>
+
     <string name="fail_certificate">The server\'s certificate could not be verified.</string>
     <string name="cert_changed_short">The server\'s certificate has changed</string>
     <string name="fail_certificate_advice">Tap the server again to see the certificate and decide whether it is the right one.</string>
