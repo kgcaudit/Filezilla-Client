@@ -1408,6 +1408,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         LocalOperations.rename(FilePath.child(pane(id).path, entry.name), newName)
     }
 
+    /**
+     * Renames many files on the phone at once, by the changes the bulk-rename
+     * dialog worked out. Only the ones whose name really changes are touched.
+     *
+     * Done in two passes -- everything to a temporary name first, then each to
+     * its final one -- so a new name that is also another file's old name in
+     * the same batch (numbers shifting, two files swapping names) does not
+     * collide with a file not yet renamed. Rename refuses to overwrite, so
+     * without the temporary pass such a batch would fail half-done.
+     */
+    fun bulkRename(id: PaneId, changes: List<org.filezilla.android.files.BulkRename.Change>) {
+        val folder = pane(id).path.takeIf { it.isNotEmpty() && pane(id).isLocal } ?: return
+        val real = changes.filter { it.from != it.to }
+        if (real.isEmpty()) {
+            clearSelectionIn(id)
+            return
+        }
+        clearSelectionIn(id)
+        writeThen(id) {
+            val stamp = System.nanoTime()
+            val staged = real.mapIndexed { index, change ->
+                val temp = ".olo_rename_${stamp}_$index"
+                LocalOperations.rename(FilePath.child(folder, change.from), temp)
+                temp to change.to
+            }
+            for ((temp, to) in staged) {
+                LocalOperations.rename(FilePath.child(folder, temp), to)
+            }
+        }
+    }
+
     /** Removes the pane's selection, folders and all. */
     fun deleteSelection(id: PaneId) {
         val names = pane(id).selection.toList()

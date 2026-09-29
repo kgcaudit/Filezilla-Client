@@ -94,6 +94,7 @@ fun FilePanes(
     var dialOpen by remember { mutableStateOf(false) }
     var naming by remember { mutableStateOf<NewThing?>(null) }
     var renaming by remember { mutableStateOf(false) }
+    var bulkRenaming by remember { mutableStateOf(false) }
     var confirmingDelete by remember { mutableStateOf(false) }
 
     // No inset taken here. The Scaffold already applies its content window
@@ -209,7 +210,11 @@ fun FilePanes(
                 }
                 SelectionBar(
                     count = state.selection.size,
-                    canRename = state.selection.size == 1,
+                    // One row renames the one; several rows on the phone rename
+                    // by a rule. Both are the rename button -- it is what
+                    // "rename" means for one file or for many.
+                    canRename = state.selection.size == 1 ||
+                        (state.isLocal && state.selection.size >= 2),
                     // Only on the phone's side. The rows on a server pane are
                     // not files on this device, and sharing one would mean
                     // downloading it first.
@@ -231,7 +236,7 @@ fun FilePanes(
                     onCut = { model.cutSelection(active) },
                     onCopy = { model.copySelection(active) },
                     onDelete = { confirmingDelete = true },
-                    onRename = { renaming = true },
+                    onRename = { if (state.selection.size == 1) renaming = true else bulkRenaming = true },
                     onClear = model::clearSelection,
                     onDownload = if (state.site != null) onDownloadSelected else null,
                 )
@@ -340,6 +345,26 @@ fun FilePanes(
                     model.renameIn(active, entry, name)
                     model.clearSelectionIn(active)
                     renaming = false
+                },
+            )
+        }
+    }
+
+    if (bulkRenaming) {
+        // The selected files, and every name in the folder so the preview can
+        // tell a new name that is free from one that already sits there.
+        val targets = state.entries
+            .filter { it.name in state.selection }
+            .map { org.filezilla.android.files.BulkRename.Target(it.name, it.isDirectory) }
+        LaunchedEffect(targets.isEmpty()) { if (targets.isEmpty()) bulkRenaming = false }
+        if (targets.isNotEmpty()) {
+            BulkRenameDialog(
+                targets = targets,
+                existingNames = state.entries.map { it.name }.toSet(),
+                onDismiss = { bulkRenaming = false },
+                onRename = { changes ->
+                    model.bulkRename(active, changes)
+                    bulkRenaming = false
                 },
             )
         }

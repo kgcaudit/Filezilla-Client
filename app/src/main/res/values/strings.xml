@@ -479,6 +479,16 @@
     <string name="checksum_match">Matches</string>
     <string name="checksum_mismatch">Does not match</string>
     <string name="checksum_copied">Copied</string>
+    <string name="bulk_rename_title">Rename %1$d files</string>
+    <string name="bulk_rename_prefix">Prefix</string>
+    <string name="bulk_rename_suffix">Suffix</string>
+    <string name="bulk_rename_find">Find</string>
+    <string name="bulk_rename_replace">Replace</string>
+    <string name="bulk_rename_number">Number them</string>
+    <string name="bulk_rename_start">Start</string>
+    <string name="bulk_rename_conflict">Some names would collide</string>
+    <string name="bulk_rename_empty">A name would be empty</string>
+    <string name="bulk_rename_none">No names change</string>
     <string name="archive_compress_stopped">Stopped; %1$s is unfinished</string>
     <string name="archive_compress_title">Compress %1$d items</string>
     <string name="archive_compress_bundle">Bundling</string>

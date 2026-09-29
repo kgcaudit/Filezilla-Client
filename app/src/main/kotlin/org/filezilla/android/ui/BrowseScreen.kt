@@ -10,8 +10,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.aspectRatio
@@ -970,4 +973,131 @@ private fun AlgorithmChip(
             Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
         }
     }
+}
+
+/**
+ * Renaming a batch of files by one rule, with the result shown before it runs.
+ *
+ * The rule is find-and-replace, a prefix, a suffix, and optional numbering --
+ * applied to each name's stem so extensions are never disturbed (see
+ * [BulkRename]). The preview below the fields is the very answer the rename
+ * will produce, and it turns the confirm off when two files would end up with
+ * the same name, when a new name is already taken by a file not being renamed,
+ * or when nothing changes -- the three ways a batch rename goes wrong.
+ */
+@Composable
+internal fun BulkRenameDialog(
+    targets: List<org.filezilla.android.files.BulkRename.Target>,
+    existingNames: Set<String>,
+    onDismiss: () -> Unit,
+    onRename: (List<org.filezilla.android.files.BulkRename.Change>) -> Unit,
+) {
+    var prefix by remember { mutableStateOf("") }
+    var suffix by remember { mutableStateOf("") }
+    var find by remember { mutableStateOf("") }
+    var replace by remember { mutableStateOf("") }
+    var numbered by remember { mutableStateOf(false) }
+    var startText by remember { mutableStateOf("1") }
+
+    val rule = org.filezilla.android.files.BulkRename.Rule(
+        prefix = prefix,
+        suffix = suffix,
+        find = find,
+        replace = replace,
+        numberFrom = (startText.toIntOrNull() ?: 1).takeIf { numbered },
+    )
+    val changes = remember(targets, rule) {
+        org.filezilla.android.files.BulkRename.apply(targets, rule)
+    }
+    val oldNames = remember(targets) { targets.map { it.name }.toSet() }
+    val newNames = changes.map { it.to }
+    val duplicate = newNames.size != newNames.toSet().size
+    val empties = changes.any { it.to.isBlank() }
+    val collision = changes.any { it.to != it.from && it.to !in oldNames && it.to in existingNames }
+    val changedCount = changes.count { it.from != it.to }
+    val problem = when {
+        empties -> R.string.bulk_rename_empty
+        duplicate || collision -> R.string.bulk_rename_conflict
+        changedCount == 0 -> R.string.bulk_rename_none
+        else -> null
+    }
+
+    OloDialog(
+        title = stringResource(R.string.bulk_rename_title, targets.size),
+        onDismiss = onDismiss,
+        content = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    OloTextField(prefix, { prefix = it }, stringResource(R.string.bulk_rename_prefix), Modifier.weight(1f))
+                    OloTextField(suffix, { suffix = it }, stringResource(R.string.bulk_rename_suffix), Modifier.weight(1f))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    OloTextField(find, { find = it }, stringResource(R.string.bulk_rename_find), Modifier.weight(1f))
+                    OloTextField(replace, { replace = it }, stringResource(R.string.bulk_rename_replace), Modifier.weight(1f))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = numbered, onCheckedChange = { numbered = it })
+                    Text(
+                        stringResource(R.string.bulk_rename_number),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    androidx.compose.animation.AnimatedVisibility(visible = numbered) {
+                        OloTextField(
+                            startText,
+                            { startText = it.filter { c -> c.isDigit() }.take(6) },
+                            stringResource(R.string.bulk_rename_start),
+                            Modifier.width(96.dp),
+                        )
+                    }
+                }
+
+                HorizontalDivider()
+                // The result, capped so a big selection scrolls rather than
+                // pushing the buttons off the screen.
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 190.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    for (change in changes) {
+                        val unchanged = change.from == change.to
+                        val clashes = !unchanged && change.to != change.from &&
+                            change.to !in oldNames && change.to in existingNames
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                change.to.ifBlank { "—" },
+                                style = MaterialTheme.typography.bodySmall
+                                    .copy(fontFamily = FontFamily.Monospace),
+                                color = when {
+                                    clashes || change.to.isBlank() -> MaterialTheme.status.failed
+                                    unchanged -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    else -> MaterialTheme.colorScheme.onSurface
+                                },
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
+                problem?.let {
+                    Text(
+                        stringResource(it),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.status.failed,
+                    )
+                }
+            }
+        },
+        action = {
+            ConfirmButton(
+                text = stringResource(R.string.action_change),
+                onClick = { onRename(changes) },
+                enabled = problem == null,
+            )
+        },
+    )
 }

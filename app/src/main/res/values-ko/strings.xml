@@ -471,6 +471,16 @@
     <string name="checksum_match">일치합니다</string>
     <string name="checksum_mismatch">일치하지 않습니다</string>
     <string name="checksum_copied">복사했습니다</string>
+    <string name="bulk_rename_title">%1$d개 이름 변경</string>
+    <string name="bulk_rename_prefix">접두사</string>
+    <string name="bulk_rename_suffix">접미사</string>
+    <string name="bulk_rename_find">찾기</string>
+    <string name="bulk_rename_replace">바꾸기</string>
+    <string name="bulk_rename_number">연번 붙이기</string>
+    <string name="bulk_rename_start">시작</string>
+    <string name="bulk_rename_conflict">이름이 겹칩니다</string>
+    <string name="bulk_rename_empty">이름이 비게 됩니다</string>
+    <string name="bulk_rename_none">바뀌는 이름이 없습니다</string>
     <string name="archive_compress_stopped">중지했습니다. %1$s은(는) 완성되지 않았습니다</string>
     <string name="archive_compress_title">%1$d개 항목 압축</string>
     <string name="archive_compress_bundle">묶기</string>
