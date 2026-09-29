@@ -27,11 +27,19 @@ kotlin {
 dependencies {
     implementation(libs.kotlinx.coroutines.core)
 
+    // SFTP: the SSH transport for the SFTP engine. Pure Java, so it builds and
+    // tests here in the plain-JVM module just like the rest of the engine does.
+    implementation(libs.jsch)
+
     // The harness is plain JDK; it needs nothing from the engine but its
     // package, so the fixtures carry no extra dependencies.
 
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.kotlinx.coroutines.test)
+    // A real SSH/SFTP server for the SFTP engine's integration tests, in
+    // process so no external setup is needed.
+    testImplementation(libs.sshd.core)
+    testImplementation(libs.sshd.sftp)
     testRuntimeOnly(libs.junit.platform.launcher)
 }
 
@@ -40,6 +48,14 @@ val ftpsServerDir: String =
 
 tasks.test {
     useJUnitPlatform()
+
+    // A larger thread stack for the test JVM. NoBlanketTrustTest scans every
+    // source file with a regex that recurses once per character of each string
+    // literal, and one viewer source embeds a multi-kilobyte literal that
+    // pushes that recursion past the default stack -- a StackOverflowError in
+    // the guard rather than a verdict from it. The extra stack lets the guard
+    // finish reading a legitimately large source instead of falling over on it.
+    jvmArgs("-Xss4m")
 
     // Where the harness finds the Python server and its virtual environment.
     systemProperty("ftps.server.dir", ftpsServerDir)
