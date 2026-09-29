@@ -28,6 +28,7 @@ import org.filezilla.android.archive.ArchiveEntry
 import org.filezilla.android.archive.ArchiveExtract
 import org.filezilla.android.archive.ArchiveWriter
 import org.filezilla.android.archive.Archives
+import org.filezilla.android.archive.SplitParts
 import org.filezilla.android.archive.RarNative
 import org.filezilla.android.archive.SevenZipNative
 import org.filezilla.android.archive.ExtractResult
@@ -3819,6 +3820,52 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }.onFailure {
                 deleteArchiveParts(target)
                 archiveOutcome = ArchiveOutcome(R.string.archive_compress_stopped, listOf(target.name))
+            }
+        }
+    }
+
+    /**
+     * Joins a split archive back into one file, from its first part [name]
+     * (a `.001`) sitting in [id]'s folder.
+     *
+     * The counterpart to a split compress: the consecutive parts beside the
+     * `.001` are laid end to end into the file they rebuild to, given a free
+     * name so nothing is overwritten. Stoppable partway, and a stopped or
+     * failed join takes its half-written file with it.
+     */
+    fun joinParts(id: PaneId, name: String) {
+        val folder = pane(id).path.takeIf { it.isNotEmpty() && pane(id).isLocal } ?: return
+        val first = java.io.File(folder, name)
+        val parts = SplitParts.partsFor(first)
+        val target = java.io.File(folder, freeNameIn(folder, SplitParts.baseNameOf(name)))
+
+        val stop = java.util.concurrent.atomic.AtomicBoolean(false)
+        val joining = getApplication<android.app.Application>().getString(R.string.archive_joining)
+        archiveBusy = ArchiveBusy(joining, "", 0L, 0L, onStop = { stop.set(true) }, bytes = true)
+
+        viewModelScope.launch {
+            val written = withContext(Dispatchers.IO) {
+                runCatching {
+                    SplitParts.join(parts, target, cancelled = { stop.get() }) { done, total ->
+                        archiveBusy = archiveBusy?.copy(done = done, total = total, path = target.name)
+                    }
+                }
+            }
+            archiveBusy = null
+            written.onSuccess { bytes ->
+                if (bytes < 0) {
+                    // A half-joined file opens and is wrong, so it goes rather
+                    // than being left to be found later.
+                    runCatching { target.delete() }
+                    archiveOutcome = ArchiveOutcome(R.string.archive_join_stopped, listOf(target.name))
+                } else {
+                    archiveOutcome = ArchiveOutcome(R.string.archive_joined, listOf(target.name, parts.size))
+                }
+                clearSelectionIn(id)
+                relistLocalPanes()
+            }.onFailure {
+                runCatching { target.delete() }
+                archiveOutcome = ArchiveOutcome(R.string.archive_join_stopped, listOf(target.name))
             }
         }
     }

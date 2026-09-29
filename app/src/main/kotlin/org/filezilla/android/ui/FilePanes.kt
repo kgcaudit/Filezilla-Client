@@ -199,6 +199,14 @@ fun FilePanes(
                     org.filezilla.android.archive.ArchiveNav.browsable(name) &&
                         state.entries.any { it.name == name && !it.isDirectory }
                 }
+                // One `.001` part picked on the phone: offer to join the split
+                // back into the file it rebuilds to. A single file only -- the
+                // rest of the run is found from it, not picked by hand.
+                val joinFirst = state.selection.singleOrNull()?.takeIf { name ->
+                    state.isLocal &&
+                        org.filezilla.android.archive.SplitParts.isFirstPart(name) &&
+                        state.entries.any { it.name == name && !it.isDirectory }
+                }
                 SelectionBar(
                     count = state.selection.size,
                     canRename = state.selection.size == 1,
@@ -219,6 +227,7 @@ fun FilePanes(
                     } else {
                         null
                     },
+                    onJoin = joinFirst?.let { first -> { model.joinParts(active, first) } },
                     onCut = { model.cutSelection(active) },
                     onCopy = { model.copySelection(active) },
                     onDelete = { confirmingDelete = true },

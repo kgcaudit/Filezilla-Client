@@ -143,6 +143,7 @@ class IconMeaningTest {
         // are the app's own tiles, not these.
         "FolderZip" to setOf("archive_compress"),
         "Unarchive" to setOf("archive_extract_all", "archive_extract_picked"),
+        "Merge" to setOf("archive_join"),
         "KeyboardArrowUp" to setOf("sites_move_up"),
         "KeyboardArrowDown" to setOf("sites_move_down"),
         // Taking a removable volume out.

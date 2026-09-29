@@ -468,6 +468,10 @@
     <string name="archive_compressed">Made %1$s from %2$d files</string>
     <string name="archive_compressed_each">Made %1$d archives</string>
     <string name="archive_compressed_split">Split %1$s into %2$d parts</string>
+    <string name="archive_join">Join</string>
+    <string name="archive_joining">Joining</string>
+    <string name="archive_joined">Joined %2$d parts into %1$s</string>
+    <string name="archive_join_stopped">Stopped; %1$s is unfinished</string>
     <string name="archive_compress_stopped">Stopped; %1$s is unfinished</string>
     <string name="archive_compress_title">Compress %1$d items</string>
     <string name="archive_compress_bundle">Bundling</string>

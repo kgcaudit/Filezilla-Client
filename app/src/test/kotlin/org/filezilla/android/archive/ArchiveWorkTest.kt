@@ -346,6 +346,51 @@ class ArchiveWorkTest {
         }
     }
 
+    @Test
+    fun `a split archive is joined back into the original file`() {
+        val folder = temporary.newFolder("src")
+        File(folder, "big.bin").writeBytes(ByteArray(400_000).also { java.util.Random(11).nextBytes(it) })
+
+        // The unsplit zip, and the same content written split into parts.
+        val whole = File(temporary.root, "whole.zip")
+        ArchiveWriter.zip(listOf(folder), whole)
+        val split = File(temporary.root, "photos.zip")
+        val parts = ArchiveWriter.zip(listOf(folder), split, partBytes = 90_000).parts
+        assertTrue("expected several parts", parts.size > 1)
+
+        // The first part is recognised, names the file it rebuilds to, and the
+        // run is found from it alone.
+        assertTrue(SplitParts.isFirstPart(parts.first().name))
+        assertEquals("photos.zip", SplitParts.baseNameOf(parts.first().name))
+        assertEquals(parts, SplitParts.partsFor(parts.first()))
+
+        val rejoined = File(temporary.root, "rejoined.zip")
+        val written = SplitParts.join(parts, rejoined)
+        assertEquals(rejoined.length(), written)
+        // The joined file is exactly the zip a single write would have made,
+        // and the reader opens it.
+        assertTrue(rejoined.readBytes().contentEquals(whole.readBytes()))
+        ZipArchive.open(rejoined).use { archive ->
+            assertTrue(archive.entries.any { it.path == "src/big.bin" })
+        }
+    }
+
+    @Test
+    fun `a lone part with a gap after it joins only what runs unbroken`() {
+        val dir = temporary.newFolder("parts")
+        File(dir, "clip.mp4.001").writeText("one")
+        File(dir, "clip.mp4.002").writeText("two")
+        // A gap: .003 is missing, .004 is a stray that must not be swept in.
+        File(dir, "clip.mp4.004").writeText("four")
+
+        val parts = SplitParts.partsFor(File(dir, "clip.mp4.001"))
+        assertEquals(listOf("clip.mp4.001", "clip.mp4.002"), parts.map { it.name })
+
+        val out = File(dir, "clip.mp4")
+        SplitParts.join(parts, out)
+        assertEquals("onetwo", out.readText())
+    }
+
     /** An archive of exactly the entries given, all empty. */
     private class FakeArchive(vararg given: ArchiveEntry) : Archive {
         override val entries = given.toList()

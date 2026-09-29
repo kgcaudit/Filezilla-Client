@@ -460,6 +460,10 @@
     <string name="archive_compressed">파일 %2$d개로 %1$s을(를) 만들었습니다</string>
     <string name="archive_compressed_each">압축 파일 %1$d개를 만들었습니다</string>
     <string name="archive_compressed_split">%1$s을(를) %2$d개로 나눴습니다</string>
+    <string name="archive_join">합치기</string>
+    <string name="archive_joining">합치는 중</string>
+    <string name="archive_joined">%2$d개를 합쳐 %1$s을(를) 만들었습니다</string>
+    <string name="archive_join_stopped">중지했습니다. %1$s은(는) 완성되지 않았습니다</string>
     <string name="archive_compress_stopped">중지했습니다. %1$s은(는) 완성되지 않았습니다</string>
     <string name="archive_compress_title">%1$d개 항목 압축</string>
     <string name="archive_compress_bundle">묶기</string>

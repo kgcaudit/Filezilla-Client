@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderZip
+import androidx.compose.material.icons.filled.Merge
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.automirrored.filled.NoteAdd
 import androidx.compose.material.icons.filled.Share
@@ -173,6 +174,8 @@ fun SelectionBar(
     onCompress: (() -> Unit)? = null,
     /** On a phone pane, when every picked row is an archive: unpack them. */
     onExtract: (() -> Unit)? = null,
+    /** On a phone pane, when one `.001` part is picked: join the split back. */
+    onJoin: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -236,6 +239,14 @@ fun SelectionBar(
                         Icon(
                             Icons.Filled.Unarchive,
                             contentDescription = stringResource(R.string.archive_extract_all),
+                        )
+                    }
+                }
+                onJoin?.let { join ->
+                    IconButton(onClick = join) {
+                        Icon(
+                            Icons.Filled.Merge,
+                            contentDescription = stringResource(R.string.archive_join),
                         )
                     }
                 }
