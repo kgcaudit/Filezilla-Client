@@ -82,6 +82,11 @@ fun FilePanes(
             // no longer filled by being swiped to.
             for (id in PaneId.entries) model.ensureOpen(id)
         } else {
+            // Folding back to one pane: put the pane that was active while both
+            // showed in front, rather than whatever page the pager last rested
+            // on. Otherwise closing the device could switch which pane the
+            // toolbar acts on without the user having asked.
+            pager.scrollToPage(pageOf(model.activePane))
             snapshotFlow { pager.currentPage }.collect { model.showPane(paneAt(it)) }
         }
     }

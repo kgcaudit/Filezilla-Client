@@ -52,16 +52,18 @@ fun QueueSettingsSheet(
 ) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
-        QueueSettings(
-            wifiOnly = wifiOnly,
-            onWifiOnly = onWifiOnly,
-            serverThumbnails = serverThumbnails,
-            onServerThumbnails = onServerThumbnails,
-            serverThumbnailsWifiOnly = serverThumbnailsWifiOnly,
-            onServerThumbnailsWifiOnly = onServerThumbnailsWifiOnly,
-            cacheBytes = cacheBytes,
-            onEmptyCache = onEmptyCache,
-        )
+        SheetContent {
+            QueueSettings(
+                wifiOnly = wifiOnly,
+                onWifiOnly = onWifiOnly,
+                serverThumbnails = serverThumbnails,
+                onServerThumbnails = onServerThumbnails,
+                serverThumbnailsWifiOnly = serverThumbnailsWifiOnly,
+                onServerThumbnailsWifiOnly = onServerThumbnailsWifiOnly,
+                cacheBytes = cacheBytes,
+                onEmptyCache = onEmptyCache,
+            )
+        }
     }
 }
 

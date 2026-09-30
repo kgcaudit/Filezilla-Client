@@ -66,6 +66,7 @@ fun StorageSheet(
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
+        SheetContent {
         StoragePlaces(
             id = id,
             model = model,
@@ -73,6 +74,7 @@ fun StorageSheet(
             onOpenScreen = onOpenScreen,
             onDismiss = onDismiss,
         )
+        }
     }
 }
 

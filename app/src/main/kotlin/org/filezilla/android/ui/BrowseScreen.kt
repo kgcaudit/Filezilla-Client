@@ -237,7 +237,10 @@ fun BrowseScreen(
                 // square, no name -- for a folder of photos. A long press picks,
                 // the same as the tile does elsewhere.
                 options.viewMode == ViewMode.GALLERY -> LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
+                    // Adaptive rather than a fixed three, so a wide pane on the
+                    // fold's main display fills with more squares instead of
+                    // three oversized ones, and a narrow phone still gets three.
+                    columns = GridCells.Adaptive(minSize = GALLERY_MIN_CELL),
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(2.dp),
                 ) {
@@ -674,6 +677,12 @@ private fun EntryRow(
 // A gallery cell is about a third of the screen, so its thumbnail is decoded
 // larger than the list's small tile -- but still far under the full photo.
 private const val GALLERY_THUMB_PX = 320
+
+// The smallest a gallery square is allowed to get before a column is dropped.
+// Three across on a phone (~360dp), four on the fold's cover (~466dp) and each
+// pane of its opened-out main display (~485dp) -- so a wide pane shows more
+// squares rather than bigger ones.
+private val GALLERY_MIN_CELL = 110.dp
 
 /**
  * One square of the gallery: a big thumbnail filling the cell for a local
