@@ -50,10 +50,17 @@ fun pageOf(pane: PaneId): Int = if (pane == PaneId.LEFT) 0 else 1
  *
  * Two listings need room for two file names, and a file manager whose names
  * are all truncated is one nobody can use -- so the panes only sit together
- * once there is space for both to stay readable. 720dp is a folded phone
- * opened out, or a tablet; a phone on its own is nowhere near it.
+ * once there is space for both to stay readable. 700dp is a folded phone
+ * opened out, a tablet, or a phone turned landscape; a phone held upright is
+ * nowhere near it.
+ *
+ * Sat at 720 before, which cleared the fold's main display (~732dp across in
+ * portrait) by only 12dp -- close enough that a hinge or cutout inset could
+ * shave the reported width under it and fold the opened-out tablet back to a
+ * single pane. 700 leaves ~30dp of headroom for that, and is still far above
+ * any phone held upright.
  */
-const val SIDE_BY_SIDE_WIDTH_DP = 720
+const val SIDE_BY_SIDE_WIDTH_DP = 700
 
 /**
  * Whether to show both panes at once.

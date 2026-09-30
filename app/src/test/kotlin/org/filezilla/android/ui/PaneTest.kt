@@ -117,4 +117,27 @@ class PaneTest {
         assertTrue(showsBothPanes(800))
         assertFalse(showsBothPanes(400))
     }
+
+    /**
+     * The fold this was tuned for: the cover is one pane, the opened-out main
+     * display is two.
+     */
+    @Test
+    fun `the fold's cover shows one pane and its main display shows both`() {
+        // Cover ~466dp; main ~732dp portrait, ~970dp landscape.
+        assertFalse(showsBothPanes(466))
+        assertTrue(showsBothPanes(732))
+        assertTrue(showsBothPanes(970))
+    }
+
+    /**
+     * The whole reason the threshold sits below the main display's width: a few
+     * dp lost to a hinge or a cutout must not fold the opened-out tablet back
+     * to a single pane.
+     */
+    @Test
+    fun `the main display keeps both panes with a small inset`() {
+        assertTrue(showsBothPanes(710))
+        assertTrue(showsBothPanes(705))
+    }
 }
