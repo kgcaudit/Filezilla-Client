@@ -27,15 +27,29 @@ class ServerThumbEligibilityTest {
     }
 
     @Test
-    fun `video and other kinds never are`() {
-        for (kind in listOf(FileKind.VIDEO, FileKind.DOCUMENT, FileKind.FOLDER, FileKind.ARCHIVE, FileKind.CODE)) {
+    fun `video is eligible at any size`() {
+        // Only a prefix is fetched, so the file's own size is not the limit --
+        // a 2 GB clip is as eligible as a small one.
+        assertTrue(serverThumbEligible(true, FileKind.VIDEO, underCap))
+        assertTrue(serverThumbEligible(true, FileKind.VIDEO, overCap))
+        assertTrue(serverThumbEligible(true, FileKind.VIDEO, 2_000_000_000L))
+        assertTrue(serverThumbEligible(true, FileKind.VIDEO, -1))
+    }
+
+    @Test
+    fun `non-media kinds never are`() {
+        for (kind in listOf(
+            FileKind.DOCUMENT, FileKind.FOLDER, FileKind.ARCHIVE,
+            FileKind.CODE, FileKind.APP, FileKind.OTHER, FileKind.COMIC,
+        )) {
             assertFalse("$kind should not be eligible", serverThumbEligible(true, kind, underCap))
         }
     }
 
     @Test
-    fun `a file over the cap is not`() {
+    fun `an image over the cap is not`() {
         assertFalse(serverThumbEligible(true, FileKind.IMAGE, overCap))
+        assertFalse(serverThumbEligible(true, FileKind.AUDIO, overCap))
     }
 
     @Test
@@ -52,6 +66,7 @@ class ServerThumbEligibilityTest {
     fun `nothing is eligible when the switch is off`() {
         assertFalse(serverThumbEligible(enabled = false, kind = FileKind.IMAGE, sizeBytes = underCap))
         assertFalse(serverThumbEligible(enabled = false, kind = FileKind.AUDIO, sizeBytes = -1))
+        assertFalse(serverThumbEligible(enabled = false, kind = FileKind.VIDEO, sizeBytes = underCap))
     }
 
     @Test

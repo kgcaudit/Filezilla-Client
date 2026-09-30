@@ -7,18 +7,13 @@ import android.media.ThumbnailUtils
 import android.os.Build
 import android.util.LruCache
 import android.util.Size
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import java.io.File
@@ -150,14 +145,9 @@ fun EntryThumb(
     }
     val bitmap = thumb
     if (bitmap != null) {
-        Image(
-            bitmap = bitmap,
-            contentDescription = contentDescription,
-            contentScale = ContentScale.Crop,
-            modifier = modifier
-                .size(size)
-                .clip(RoundedCornerShape(cornerRadius)),
-        )
+        // Shared with the server path, so a video frame carries the same play
+        // badge whether the file is on the phone or on a server.
+        ThumbImage(bitmap, kind, contentDescription, modifier, size, cornerRadius)
     } else {
         FileTile(
             kind = kind,

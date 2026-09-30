@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.size
@@ -58,7 +57,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -743,12 +741,7 @@ private fun GalleryCell(
     ) {
         when {
             thumbFile != null -> GalleryThumb(thumbFile, kind, description)
-            serverBitmap != null -> Image(
-                bitmap = serverBitmap,
-                contentDescription = description,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
+            serverBitmap != null -> GalleryThumbImage(serverBitmap, kind, description)
 
             serverState is ServerThumbState.Loading -> {
                 Box(Modifier.fillMaxSize().background(colourFor(kind).copy(alpha = 0.35f)))
@@ -794,12 +787,7 @@ private fun GalleryThumb(file: java.io.File, kind: FileKind, description: String
     }.value
     val bitmap = thumb
     if (bitmap != null) {
-        Image(
-            bitmap = bitmap,
-            contentDescription = description,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize(),
-        )
+        GalleryThumbImage(bitmap, kind, description)
     } else {
         // While it loads (or if it has none), a muted wash of the kind's colour
         // rather than a flash of black.

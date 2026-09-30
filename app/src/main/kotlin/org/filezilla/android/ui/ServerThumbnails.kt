@@ -5,9 +5,17 @@ import android.util.LruCache
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -15,6 +23,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -57,8 +66,14 @@ class ServerThumbnails(
     private val enabled: () -> Boolean,
     /** Whether the connection right now allows a fetch (the Wi-Fi-only rule). */
     private val allowedNow: () -> Boolean,
-    /** Fetches [remotePath] on [site] into the scratch file; may be cancelled. */
-    private val fetch: suspend (site: SiteEntity, remotePath: String, into: File) -> Unit,
+    /**
+     * Fetches [remotePath] on [site] into the scratch file; may be cancelled.
+     *
+     * [maxBytes] null means the whole file (a picture or song). A limit means
+     * fetch only that much and stop -- the video prefix, enough for a frame in
+     * a faststart file without paying to download a 128 MB clip.
+     */
+    private val fetch: suspend (site: SiteEntity, remotePath: String, into: File, maxBytes: Long?) -> Unit,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     // Stored for a file with no picture, so a second look does not fetch and
@@ -106,9 +121,11 @@ class ServerThumbnails(
             if (!allowedNow()) return@withPermit null
             cacheDir.mkdirs()
             val scratch = File(cacheDir, "srvthumb-${UUID.randomUUID()}.tmp")
+            // A video is fetched only up to its prefix; a picture or song whole.
+            val maxBytes = if (kind == FileKind.VIDEO) VIDEO_PREFIX_BYTES else null
             try {
                 try {
-                    fetch(site, remotePath, scratch)
+                    fetch(site, remotePath, scratch, maxBytes)
                 } catch (c: CancellationException) {
                     throw c
                 } catch (e: Exception) {
@@ -143,6 +160,17 @@ class ServerThumbnails(
          */
         const val MAX_FETCH_BYTES = 16L * 1024 * 1024
 
+        /**
+         * How much of a video is fetched for a frame.
+         *
+         * Only the prefix, not the whole clip: a faststart file (moov at the
+         * front, which phones and web exports write) has its first frames near
+         * the start, so a few megabytes is usually enough. A file whose moov is
+         * at the end simply will not decode from this and keeps its kind tile --
+         * best-effort, but at a bounded cost rather than a 128 MB download.
+         */
+        const val VIDEO_PREFIX_BYTES = 8L * 1024 * 1024
+
         // A few megabytes of decoded previews, sized by their real cost.
         private const val CACHE_BYTES = 12 * 1024 * 1024
     }
@@ -157,10 +185,17 @@ class ServerThumbnails(
  * that did not say, which is allowed -- most report a size, and a picture is
  * usually small.
  */
-fun serverThumbEligible(enabled: Boolean, kind: FileKind, sizeBytes: Long): Boolean =
-    enabled &&
-        (kind == FileKind.IMAGE || kind == FileKind.AUDIO) &&
-        (sizeBytes < 0 || sizeBytes <= ServerThumbnails.MAX_FETCH_BYTES)
+fun serverThumbEligible(enabled: Boolean, kind: FileKind, sizeBytes: Long): Boolean {
+    if (!enabled) return false
+    return when (kind) {
+        // A whole picture or song is fetched, so its size is the ceiling.
+        FileKind.IMAGE, FileKind.AUDIO -> sizeBytes < 0 || sizeBytes <= ServerThumbnails.MAX_FETCH_BYTES
+        // Only the first few megabytes of a video are fetched (enough for a
+        // frame in a faststart file), so the file's own size is not the limit.
+        FileKind.VIDEO -> true
+        else -> false
+    }
+}
 
 /**
  * Whether the connection now allows a thumbnail fetch.
@@ -225,12 +260,7 @@ fun ServerThumb(
         is ServerThumbState.Ready -> {
             val bitmap = state.bitmap
             if (bitmap != null) {
-                Image(
-                    bitmap = bitmap,
-                    contentDescription = contentDescription,
-                    contentScale = ContentScale.Crop,
-                    modifier = modifier.size(size).clip(RoundedCornerShape(cornerRadius)),
-                )
+                ThumbImage(bitmap, kind, contentDescription, modifier, size, cornerRadius)
             } else {
                 FileTile(kind, colourFor(kind), contentDescription, modifier, size, cornerRadius)
             }
@@ -259,6 +289,91 @@ fun ServerLoadingTile(modifier: Modifier = Modifier, size: Dp = 40.dp, cornerRad
             modifier = Modifier.size(size * 0.5f),
             strokeWidth = 2.dp,
             color = MaterialTheme.colorScheme.primary,
+        )
+    }
+}
+
+/**
+ * A decoded thumbnail at a fixed tile size, with a small play badge in the
+ * corner when it is a video.
+ *
+ * The badge is what tells a video thumbnail from a picture at a glance -- in a
+ * grid or a list a frame otherwise reads as a still. Shared by the local
+ * ([EntryThumb]) and server ([ServerThumb]) paths so both mark video the same.
+ */
+@Composable
+fun ThumbImage(
+    bitmap: ImageBitmap,
+    kind: FileKind,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    size: Dp = 40.dp,
+    cornerRadius: Dp = 12.dp,
+) {
+    Box(modifier = modifier.size(size).clip(RoundedCornerShape(cornerRadius))) {
+        Image(
+            bitmap = bitmap,
+            contentDescription = contentDescription,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+        if (kind == FileKind.VIDEO) {
+            Box(Modifier.fillMaxSize().padding(2.dp), contentAlignment = Alignment.BottomEnd) {
+                VideoPlayBadge(size * 0.4f)
+            }
+        }
+    }
+}
+
+/**
+ * A thumbnail filling a gallery square, with a centred play button when it is a
+ * video. A gallery cell has no name beside it, so the button is what says a
+ * square is a film rather than a photo.
+ */
+@Composable
+fun GalleryThumbImage(bitmap: ImageBitmap, kind: FileKind, contentDescription: String?) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Image(
+            bitmap = bitmap,
+            contentDescription = contentDescription,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+        if (kind == FileKind.VIDEO) VideoPlayBadgeCentre()
+    }
+}
+
+/** A small round play badge for a corner: a white ▶ on a dark disc. */
+@Composable
+fun VideoPlayBadge(size: Dp) {
+    Box(
+        modifier = Modifier.size(size).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        // Decorative: the row or the file name already says what this is, so no
+        // description -- which also keeps it out of the one-glyph-one-verb list.
+        Icon(
+            Icons.Filled.PlayArrow,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.fillMaxSize(0.7f),
+        )
+    }
+}
+
+/** The gallery's centred play button, sized to the cell. */
+@Composable
+private fun VideoPlayBadgeCentre() {
+    Box(
+        modifier = Modifier.fillMaxWidth(0.30f).aspectRatio(1f).clip(CircleShape)
+            .background(Color.Black.copy(alpha = 0.42f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            Icons.Filled.PlayArrow,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.fillMaxSize(0.66f),
         )
     }
 }

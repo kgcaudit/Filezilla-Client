@@ -64,7 +64,7 @@ class ServerThumbnailsTest {
             cacheDir = freshCacheDir(),
             enabled = { enabled },
             allowedNow = { allowed },
-            fetch = { _, _, into -> count++; fetch(into) },
+            fetch = { _, _, into, _ -> count++; fetch(into) },
         )
         return instance to { count }
     }
@@ -119,6 +119,39 @@ class ServerThumbnailsTest {
         assertNull(thumbs.load(site, "/photos/a.jpg", "1", 1_000L, FileKind.IMAGE, 64))
         assertNull(thumbs.load(site, "/photos/a.jpg", "1", 1_000L, FileKind.IMAGE, 64))
         assertEquals("a failure leaves nothing cached, so the second look fetches", 2, fetches())
+    }
+
+    @Test
+    fun `a video is fetched only up to its prefix`() = runBlocking {
+        var capturedMax: Long? = -1
+        val thumbs = ServerThumbnails(
+            cacheDir = freshCacheDir(),
+            enabled = { true },
+            allowedNow = { true },
+            fetch = { _, _, into, maxBytes ->
+                capturedMax = maxBytes
+                into.parentFile?.mkdirs()
+                into.writeText("truncated clip")
+            },
+        )
+        // A huge clip is eligible because only a prefix is fetched; decoding a
+        // truncated junk file yields nothing, but the bound is the point here.
+        thumbs.load(site, "/videos/clip.mp4", "1", 2_000_000_000L, FileKind.VIDEO, 64)
+        assertEquals(ServerThumbnails.VIDEO_PREFIX_BYTES, capturedMax)
+    }
+
+    @Test
+    fun `a picture is fetched whole, with no prefix bound`() = runBlocking {
+        var capturedMax: Long? = -1
+        val thumbs = ServerThumbnails(
+            cacheDir = freshCacheDir(),
+            enabled = { true },
+            allowedNow = { true },
+            fetch = { _, _, into, maxBytes -> capturedMax = maxBytes; writePicture(into) },
+        )
+        val result = thumbs.load(site, "/photos/a.jpg", "1", 1_000L, FileKind.IMAGE, 64)
+        assertNotNull(result)
+        assertNull("a picture is fetched whole", capturedMax)
     }
 
     @Test

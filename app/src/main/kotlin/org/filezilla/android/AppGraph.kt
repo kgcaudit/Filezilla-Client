@@ -91,14 +91,34 @@ class AppGraph private constructor(context: Context) {
                 unmetered = networkGate.currentStatus().unmetered,
             )
         },
-        fetch = { site, remotePath, into ->
-            transfers.fetchForViewing(
-                site = site,
-                remotePath = remotePath,
-                into = into,
-                abort = org.filezilla.ftp.transfer.TransferAbort(),
-                progress = { _, _ -> },
-            )
+        fetch = { site, remotePath, into, maxBytes ->
+            val abort = org.filezilla.ftp.transfer.TransferAbort()
+            var reachedPrefix = false
+            try {
+                transfers.fetchForViewing(
+                    site = site,
+                    remotePath = remotePath,
+                    into = into,
+                    abort = abort,
+                    progress = { bytes, _ ->
+                        // A video is stopped once its prefix is here -- enough
+                        // for a frame in a faststart file, not the whole clip.
+                        // A picture or song (maxBytes null) runs to the end.
+                        if (maxBytes != null && bytes >= maxBytes && !reachedPrefix) {
+                            reachedPrefix = true
+                            abort.abortAndStop()
+                        }
+                    },
+                )
+            } catch (c: kotlinx.coroutines.CancellationException) {
+                throw c
+            } catch (e: Exception) {
+                // The abort we asked for once the prefix arrived comes back as
+                // an ordinary transfer failure; the truncated file is exactly
+                // what we wanted, so it is not an error. Anything before the
+                // prefix was reached is a real failure and is re-thrown.
+                if (!reachedPrefix) throw e
+            }
         },
     )
 
