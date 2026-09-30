@@ -76,6 +76,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.filezilla.android.R
+import org.filezilla.android.data.SiteEntity
 import org.filezilla.android.ui.theme.status
 import org.filezilla.ftp.listing.DirectoryEntry
 
@@ -138,6 +139,12 @@ fun BrowseScreen(
     onCloseSearch: () -> Unit,
     onOpenHit: (SearchHit) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Fetches thumbnails for pictures and songs on a server, or null where
+     * there are none to fetch (the phone, or a caller that does not offer
+     * them). A local pane never uses it -- its files thumbnail from disk.
+     */
+    thumbs: ServerThumbnails? = null,
 ) {
     // On the source, not on the site: a pane showing the phone has no site
     // and is not "not connected" -- it is exactly where it should be. Keyed
@@ -222,6 +229,8 @@ fun BrowseScreen(
                             isLocal = state.isLocal,
                             folder = state.path,
                             actions,
+                            site = state.site,
+                            thumbs = thumbs,
                         )
                     }
                 }
@@ -242,6 +251,8 @@ fun BrowseScreen(
                             isLocal = state.isLocal,
                             folder = state.path,
                             actions = actions,
+                            site = state.site,
+                            thumbs = thumbs,
                         )
                     }
                 }
@@ -288,6 +299,8 @@ fun BrowseScreen(
                                 actions = actions,
                                 onRename = { renaming = entry },
                                 onDelete = { deleting = entry },
+                                site = state.site,
+                                thumbs = thumbs,
                             )
                             HorizontalDivider()
                         }
@@ -422,6 +435,9 @@ private fun EntryRow(
     onDelete: () -> Unit,
     /** The compact view: a smaller tile, tighter rows, and the name alone. */
     dense: Boolean = false,
+    /** The server this row is on, for fetching a thumbnail; null on the phone. */
+    site: SiteEntity? = null,
+    thumbs: ServerThumbnails? = null,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val chip = if (entry.isDirectory) {
@@ -476,16 +492,32 @@ private fun EntryRow(
         val tileDescription = stringResource(R.string.browse_select, entry.name)
         val tileModifier = Modifier.clickable { actions.onToggleSelected(entry) }
         val tileSize = if (dense) 30.dp else 40.dp
-        if (thumbFile != null) {
-            EntryThumb(
+        // A picture or song on a server shows a fetched thumbnail the same way
+        // a local one shows a decoded one; everything else keeps the kind tile.
+        val serverThumb = thumbs != null && site != null && !entry.isDirectory &&
+            !readOnly && thumbs.eligible(kind, entry.size)
+        when {
+            thumbFile != null -> EntryThumb(
                 file = thumbFile,
                 kind = kind,
                 contentDescription = tileDescription,
                 modifier = tileModifier,
                 size = tileSize,
             )
-        } else {
-            FileTile(
+
+            serverThumb -> ServerThumb(
+                thumbs = thumbs!!,
+                site = site!!,
+                remotePath = FilePath.child(folder, entry.name),
+                modifiedToken = entry.time?.epochMillis?.toString() ?: "",
+                sizeBytes = entry.size,
+                kind = kind,
+                contentDescription = tileDescription,
+                modifier = tileModifier,
+                size = tileSize,
+            )
+
+            else -> FileTile(
                 kind = kind,
                 colour = colourFor(kind),
                 contentDescription = tileDescription,
@@ -660,6 +692,8 @@ private fun GalleryCell(
     isLocal: Boolean,
     folder: String,
     actions: EntryActions,
+    site: SiteEntity? = null,
+    thumbs: ServerThumbnails? = null,
 ) {
     val kind = remember(entry.name, entry.isDirectory) { kindOf(entry.name, entry.isDirectory) }
     val thumbFile = if (isLocal && !entry.isDirectory && Thumbnails.handles(kind)) {
@@ -667,6 +701,26 @@ private fun GalleryCell(
     } else {
         null
     }
+    // A picture or song on a server fills its square the same way a local one
+    // does, once its preview is fetched; until then a wash of the kind colour
+    // with a spinner, and the kind's glyph if there is no picture.
+    val serverEligible = thumbs != null && site != null && !entry.isDirectory &&
+        thumbs.eligible(kind, entry.size)
+    val serverState = if (serverEligible) {
+        rememberServerThumb(
+            thumbs = thumbs!!,
+            site = site!!,
+            remotePath = FilePath.child(folder, entry.name),
+            modifiedToken = entry.time?.epochMillis?.toString() ?: "",
+            sizeBytes = entry.size,
+            kind = kind,
+            sizePx = GALLERY_THUMB_PX,
+        )
+    } else {
+        null
+    }
+    val serverBitmap = (serverState as? ServerThumbState.Ready)?.bitmap
+    val hasThumb = thumbFile != null || serverBitmap != null
     val description = stringResource(R.string.browse_select, entry.name)
     Box(
         modifier = Modifier
@@ -674,7 +728,7 @@ private fun GalleryCell(
             .fillMaxWidth()
             .aspectRatio(1f)
             .clip(RoundedCornerShape(10.dp))
-            .background(if (thumbFile != null) Color.Black else colourFor(kind))
+            .background(if (hasThumb) Color.Black else colourFor(kind))
             .combinedClickable(
                 onClick = {
                     when {
@@ -687,10 +741,25 @@ private fun GalleryCell(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        if (thumbFile != null) {
-            GalleryThumb(thumbFile, kind, description)
-        } else {
-            Icon(
+        when {
+            thumbFile != null -> GalleryThumb(thumbFile, kind, description)
+            serverBitmap != null -> Image(
+                bitmap = serverBitmap,
+                contentDescription = description,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+
+            serverState is ServerThumbState.Loading -> {
+                Box(Modifier.fillMaxSize().background(colourFor(kind).copy(alpha = 0.35f)))
+                CircularProgressIndicator(
+                    modifier = Modifier.size(28.dp),
+                    strokeWidth = 3.dp,
+                    color = Color.White,
+                )
+            }
+
+            else -> Icon(
                 painter = painterResource(kind.glyph),
                 contentDescription = description,
                 tint = Color.Unspecified,
@@ -746,6 +815,8 @@ private fun GridTile(
     isLocal: Boolean,
     folder: String,
     actions: EntryActions,
+    site: SiteEntity? = null,
+    thumbs: ServerThumbnails? = null,
 ) {
     val kind = remember(entry.name, entry.isDirectory) { kindOf(entry.name, entry.isDirectory) }
     val chip = colourFor(kind)
@@ -794,6 +865,19 @@ private fun GridTile(
         } else if (thumbFile != null) {
             EntryThumb(
                 file = thumbFile,
+                kind = kind,
+                contentDescription = selectDescription,
+                modifier = Modifier.clickable { actions.onToggleSelected(entry) },
+                size = 48.dp,
+                cornerRadius = 14.dp,
+            )
+        } else if (thumbs != null && site != null && !entry.isDirectory && thumbs.eligible(kind, entry.size)) {
+            ServerThumb(
+                thumbs = thumbs,
+                site = site,
+                remotePath = FilePath.child(folder, entry.name),
+                modifiedToken = entry.time?.epochMillis?.toString() ?: "",
+                sizeBytes = entry.size,
                 kind = kind,
                 contentDescription = selectDescription,
                 modifier = Modifier.clickable { actions.onToggleSelected(entry) },

@@ -808,6 +808,10 @@ private fun AppScreen(
         QueueSettingsSheet(
             wifiOnly = model.wifiOnly,
             onWifiOnly = model::applyWifiOnly,
+            serverThumbnails = model.serverThumbnailsEnabled,
+            onServerThumbnails = model::applyServerThumbnails,
+            serverThumbnailsWifiOnly = model.serverThumbnailsWifiOnly,
+            onServerThumbnailsWifiOnly = model::applyServerThumbnailsWifiOnly,
             cacheBytes = cacheBytes,
             onEmptyCache = {
                 model.emptyViewCache()

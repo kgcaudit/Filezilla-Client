@@ -177,6 +177,10 @@
     <string name="queue_settings">Transfer settings</string>
     <string name="setting_wifi_only">Wi‑Fi only</string>
     <string name="setting_wifi_only_detail">Pause on mobile data, continue on Wi‑Fi</string>
+    <string name="setting_server_thumbnails">Server thumbnails</string>
+    <string name="setting_server_thumbnails_detail">Show a small preview for pictures and songs on a server</string>
+    <string name="setting_server_thumbnails_wifi">Thumbnails on Wi‑Fi only</string>
+    <string name="setting_server_thumbnails_wifi_detail">Fetch previews only on an unmetered connection</string>
     <string name="queue_queued_toast">%1$s queued</string>
     <string name="queue_upload_toast">Upload queued</string>
     <string name="direction_download">Download</string>

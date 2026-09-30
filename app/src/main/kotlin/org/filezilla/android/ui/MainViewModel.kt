@@ -299,6 +299,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         graph.networkGate.policy = graph.preferences.networkPolicy
     }
 
+    /** Fetches and decodes thumbnails for pictures and songs on a server. */
+    val serverThumbnails get() = graph.serverThumbnails
+
+    /** Whether server pictures and songs show a fetched thumbnail. */
+    var serverThumbnailsEnabled by mutableStateOf(graph.preferences.serverThumbnails)
+        private set
+
+    /** Whether those thumbnails are fetched only on an unmetered connection. */
+    var serverThumbnailsWifiOnly by mutableStateOf(graph.preferences.serverThumbnailsWifiOnly)
+        private set
+
+    fun applyServerThumbnails(enabled: Boolean) {
+        graph.preferences.serverThumbnails = enabled
+        serverThumbnailsEnabled = enabled
+    }
+
+    fun applyServerThumbnailsWifiOnly(enabled: Boolean) {
+        graph.preferences.serverThumbnailsWifiOnly = enabled
+        serverThumbnailsWifiOnly = enabled
+    }
+
     /**
      * Whether a transfer started now would actually run.
      *

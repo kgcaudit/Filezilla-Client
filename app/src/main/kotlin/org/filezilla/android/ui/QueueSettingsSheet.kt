@@ -42,6 +42,10 @@ import org.filezilla.android.ui.theme.tiles
 fun QueueSettingsSheet(
     wifiOnly: Boolean,
     onWifiOnly: (Boolean) -> Unit,
+    serverThumbnails: Boolean,
+    onServerThumbnails: (Boolean) -> Unit,
+    serverThumbnailsWifiOnly: Boolean,
+    onServerThumbnailsWifiOnly: (Boolean) -> Unit,
     cacheBytes: Long,
     onEmptyCache: () -> Unit,
     onDismiss: () -> Unit,
@@ -51,6 +55,10 @@ fun QueueSettingsSheet(
         QueueSettings(
             wifiOnly = wifiOnly,
             onWifiOnly = onWifiOnly,
+            serverThumbnails = serverThumbnails,
+            onServerThumbnails = onServerThumbnails,
+            serverThumbnailsWifiOnly = serverThumbnailsWifiOnly,
+            onServerThumbnailsWifiOnly = onServerThumbnailsWifiOnly,
             cacheBytes = cacheBytes,
             onEmptyCache = onEmptyCache,
         )
@@ -68,6 +76,10 @@ fun QueueSettingsSheet(
 fun QueueSettings(
     wifiOnly: Boolean,
     onWifiOnly: (Boolean) -> Unit,
+    serverThumbnails: Boolean = true,
+    onServerThumbnails: (Boolean) -> Unit = {},
+    serverThumbnailsWifiOnly: Boolean = true,
+    onServerThumbnailsWifiOnly: (Boolean) -> Unit = {},
     cacheBytes: Long = 0,
     onEmptyCache: () -> Unit = {},
 ) {
@@ -107,6 +119,28 @@ fun QueueSettings(
                 )
             }
             Switch(checked = wifiOnly, onCheckedChange = onWifiOnly)
+        }
+
+        // Whether a picture or song on a server shows a fetched thumbnail.
+        SettingSwitchRow(
+            glyph = R.drawable.ic_tile_image,
+            colour = MaterialTheme.tiles.image,
+            title = stringResource(R.string.setting_server_thumbnails),
+            detail = stringResource(R.string.setting_server_thumbnails_detail),
+            checked = serverThumbnails,
+            onChecked = onServerThumbnails,
+        )
+
+        // The Wi-Fi-only rule for those fetches, shown only while they are on.
+        if (serverThumbnails) {
+            SettingSwitchRow(
+                glyph = R.drawable.ic_tile_transfers,
+                colour = MaterialTheme.tiles.code,
+                title = stringResource(R.string.setting_server_thumbnails_wifi),
+                detail = stringResource(R.string.setting_server_thumbnails_wifi_detail),
+                checked = serverThumbnailsWifiOnly,
+                onChecked = onServerThumbnailsWifiOnly,
+            )
         }
 
         // Opening a server file leaves a copy behind so the next tap is
@@ -158,5 +192,43 @@ fun QueueSettings(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 20.dp, top = 18.dp, end = 20.dp, bottom = 8.dp),
         )
+    }
+}
+
+/** A settings row: a tile, a title and a sentence, and a switch -- the shape
+ *  the Wi-Fi row already had, factored out so the thumbnail rows match it. */
+@Composable
+private fun SettingSwitchRow(
+    @androidx.annotation.DrawableRes glyph: Int,
+    colour: androidx.compose.ui.graphics.Color,
+    title: String,
+    detail: String,
+    checked: Boolean,
+    onChecked: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onChecked(!checked) }
+            .padding(horizontal = 20.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TileIcon(
+            glyph = glyph,
+            colour = colour,
+            contentDescription = null,
+            size = 38.dp,
+            cornerRadius = 11.dp,
+        )
+        Column(modifier = Modifier.weight(1f).padding(start = 14.dp, end = 12.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text(
+                detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        Switch(checked = checked, onCheckedChange = onChecked)
     }
 }

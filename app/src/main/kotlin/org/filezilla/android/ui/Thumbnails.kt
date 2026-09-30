@@ -60,7 +60,23 @@ object Thumbnails {
         if (!handles(kind) || !file.isFile) return null
         val key = "${file.path}|${file.lastModified()}|$sizePx"
         cache.get(key)?.let { return it as? Bitmap }
-        val bitmap = runCatching {
+        val bitmap = decodeUncached(file, kind, sizePx)
+        cache.put(key, bitmap ?: MISS)
+        return bitmap
+    }
+
+    /**
+     * Decodes a thumbnail without touching the cache.
+     *
+     * For a file whose lifetime the caller owns -- a server file fetched to a
+     * scratch file and deleted straight after. [load]'s cache is keyed by
+     * path, and a scratch file's path is used once and then gone, so caching
+     * against it would only fill the cache with keys nothing will ever ask for
+     * again. The server thumbnail cache keys by the remote path instead.
+     */
+    fun decodeUncached(file: File, kind: FileKind, sizePx: Int): Bitmap? {
+        if (!handles(kind) || !file.isFile) return null
+        return runCatching {
             when (kind) {
                 FileKind.IMAGE -> decodeImage(file, sizePx)
                 FileKind.VIDEO -> decodeVideoFrame(file, sizePx)
@@ -68,8 +84,6 @@ object Thumbnails {
                 else -> null
             }
         }.getOrNull()
-        cache.put(key, bitmap ?: MISS)
-        return bitmap
     }
 
     // Decoded at a sample rate that lands near the wanted size, so a full-size

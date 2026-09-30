@@ -161,6 +161,28 @@ class AppPreferences(context: Context) {
         get() = if (wifiOnly) NetworkPolicy.UNMETERED else NetworkPolicy.ANY
 
     /**
+     * Whether a picture or song on a server shows a fetched thumbnail rather
+     * than its kind tile. On by default: a folder of photos where every row is
+     * the same coloured square is the thing this exists to fix, so it is on
+     * unless the user turns it off.
+     */
+    var serverThumbnails: Boolean
+        get() = prefs.getBoolean(KEY_SERVER_THUMBS, true)
+        set(value) = prefs.edit().putBoolean(KEY_SERVER_THUMBS, value).apply()
+
+    /**
+     * Whether server thumbnails are fetched only over an unmetered connection.
+     *
+     * On by default, and for the same reason the transfer switch exists: a
+     * preview is the whole file over FTP, so a folder of photos is a run of
+     * downloads, and doing that on mobile data without being asked is the
+     * surprise this avoids.
+     */
+    var serverThumbnailsWifiOnly: Boolean
+        get() = prefs.getBoolean(KEY_SERVER_THUMBS_WIFI, true)
+        set(value) = prefs.edit().putBoolean(KEY_SERVER_THUMBS_WIFI, value).apply()
+
+    /**
      * Whether the person has been told that opening a server file is
      * looking at it, not working on it.
      *
@@ -682,6 +704,8 @@ class AppPreferences(context: Context) {
         const val KEY_SHOW_HIDDEN = "browse_show_hidden"
         const val KEY_VIEW = "browse_view"
         const val KEY_WIFI_ONLY = "wifi_only"
+        const val KEY_SERVER_THUMBS = "server_thumbnails"
+        const val KEY_SERVER_THUMBS_WIFI = "server_thumbnails_wifi_only"
         const val KEY_READ_ONLY_WARNED = "viewing_read_only_warned"
         const val KEY_MOVE_CLEANUP = "move_cleanup"
         const val KEY_FOLDER_OPTIONS = "folder_options_"

@@ -77,6 +77,32 @@ class AppGraph private constructor(context: Context) {
     )
 
     /**
+     * Server picture and song thumbnails, fetched and decoded off the browse
+     * connection so a folder of photos on a server reads like one on the phone.
+     * The fetch is wired to [TransferManager.fetchForViewing]; the switches and
+     * the Wi-Fi-only rule are read live from [preferences].
+     */
+    val serverThumbnails = org.filezilla.android.ui.ServerThumbnails(
+        cacheDir = java.io.File(app.cacheDir, "server-thumbs"),
+        enabled = { preferences.serverThumbnails },
+        allowedNow = {
+            org.filezilla.android.ui.serverThumbAllowed(
+                wifiOnly = preferences.serverThumbnailsWifiOnly,
+                unmetered = networkGate.currentStatus().unmetered,
+            )
+        },
+        fetch = { site, remotePath, into ->
+            transfers.fetchForViewing(
+                site = site,
+                remotePath = remotePath,
+                into = into,
+                abort = org.filezilla.ftp.transfer.TransferAbort(),
+                progress = { _, _ -> },
+            )
+        },
+    )
+
+    /**
      * Clears away the folders a finished move emptied.
      *
      * Built here rather than in the service so it reads the one preferences

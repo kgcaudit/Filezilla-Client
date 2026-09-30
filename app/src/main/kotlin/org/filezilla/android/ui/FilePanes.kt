@@ -577,6 +577,7 @@ private fun PaneBody(
                     onChangeMode = { model.changeModeOf(id, it) },
                     onChecksum = { model.openChecksum(id, it) },
                 ),
+                thumbs = model.serverThumbnails,
             )
         }
     }
