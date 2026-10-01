@@ -177,7 +177,7 @@ fun QueueSettings(
                         modifier = Modifier.padding(top = 2.dp),
                     )
                 }
-                TextButton(onClick = onEmptyCache) {
+                TextButton(onClick = onEmptyCache, shape = MaterialTheme.shapes.small) {
                     Text(stringResource(R.string.setting_view_cache_clear))
                 }
             }

@@ -1027,7 +1027,7 @@ internal fun ChecksumDialog(
             }
         },
         action = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }
+            TextButton(onClick = onDismiss, shape = MaterialTheme.shapes.small) { Text(stringResource(R.string.action_close)) }
         },
     )
 }

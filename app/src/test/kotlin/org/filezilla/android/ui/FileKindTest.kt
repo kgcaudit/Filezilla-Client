@@ -42,6 +42,21 @@ class FileKindTest {
     }
 
     /**
+     * An e-book gets the open-book tile so a shelf of them reads apart from
+     * plain documents -- the same move a comic makes on the archive hue. Only
+     * epub splits off; pdf and txt stay DOCUMENT across the family.
+     */
+    @Test
+    fun `an epub is an e-book, and pdf and txt stay documents`() {
+        assertEquals(FileKind.EBOOK, kindOf("The Hobbit.epub", false))
+        assertEquals(FileKind.EBOOK, kindOf("novel.EPUB", false))
+        assertEquals(FileKind.DOCUMENT, kindOf("report.pdf", false))
+        assertEquals(FileKind.DOCUMENT, kindOf("notes.txt", false))
+        // The e-book keeps the document slate hue, but the glyph is its own.
+        assert(FileKind.EBOOK.glyph != FileKind.DOCUMENT.glyph) { "an e-book needs its own glyph" }
+    }
+
+    /**
      * A subtitle beside the film it belongs to must not look like the film.
      * Telling them apart at a glance is most of what this list is scanned for.
      */

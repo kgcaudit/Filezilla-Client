@@ -79,7 +79,7 @@ fun CertificateStatus(pinned: String?, onForget: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                TextButton(onClick = onForget) {
+                TextButton(onClick = onForget, shape = MaterialTheme.shapes.small) {
                     Text(stringResource(R.string.cert_forget))
                 }
             }

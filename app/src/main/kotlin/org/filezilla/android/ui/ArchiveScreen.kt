@@ -138,7 +138,7 @@ fun ArchiveWorkDialog(busy: ArchiveBusy) {
             }
         },
         action = {
-            TextButton(onClick = busy.onStop) { Text(stringResource(R.string.action_stop)) }
+            TextButton(onClick = busy.onStop, shape = MaterialTheme.shapes.small) { Text(stringResource(R.string.action_stop)) }
         },
     )
 }
@@ -296,7 +296,7 @@ fun CompressChoiceDialog(
         action = {
             TextButton(onClick = {
                 if (bundled) onCompress(separate, flat, split) else onCompress(false, true, split)
-            }) {
+            }, shape = MaterialTheme.shapes.small) {
                 Text(stringResource(R.string.archive_compress))
             }
         },

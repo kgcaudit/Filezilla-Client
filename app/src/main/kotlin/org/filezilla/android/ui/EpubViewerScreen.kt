@@ -118,7 +118,7 @@ fun EpubViewerScreen(viewer: MainViewModel.EpubViewer, model: MainViewModel) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        TextButton(onClick = { if (index > 0) index-- }, enabled = index > 0) {
+                        TextButton(onClick = { if (index > 0) index-- }, enabled = index > 0, shape = MaterialTheme.shapes.small) {
                             Text(stringResource(R.string.epub_prev))
                         }
                         Text(
@@ -126,7 +126,7 @@ fun EpubViewerScreen(viewer: MainViewModel.EpubViewer, model: MainViewModel) {
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        TextButton(onClick = { if (index < spine.size - 1) index++ }, enabled = index < spine.size - 1) {
+                        TextButton(onClick = { if (index < spine.size - 1) index++ }, enabled = index < spine.size - 1, shape = MaterialTheme.shapes.small) {
                             Text(stringResource(R.string.epub_next))
                         }
                     }

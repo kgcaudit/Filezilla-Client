@@ -345,6 +345,7 @@ fun StoragePlaces(
                     model.showEmpty(id)
                     onDismiss()
                 },
+                shape = MaterialTheme.shapes.small,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
             ) { Text(stringResource(R.string.storage_clear_pane)) }
     }

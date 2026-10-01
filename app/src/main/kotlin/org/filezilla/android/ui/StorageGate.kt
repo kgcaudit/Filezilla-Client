@@ -56,7 +56,7 @@ fun StorageGate(route: AccessRoute, onGrant: () -> Unit, modifier: Modifier = Mo
         // No button on Android 10: there is nowhere to send them, and a
         // button that leads nowhere is worse than none.
         if (!unavailable) {
-            Button(onClick = onGrant) {
+            Button(onClick = onGrant, shape = MaterialTheme.shapes.small) {
                 Text(stringResource(R.string.storage_permission_action))
             }
         }

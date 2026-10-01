@@ -61,7 +61,7 @@ fun HostKeyStatus(known: String?, onForget: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(end = 8.dp),
                 )
-                TextButton(onClick = onForget) {
+                TextButton(onClick = onForget, shape = MaterialTheme.shapes.small) {
                     Text(stringResource(R.string.hostkey_forget))
                 }
             }

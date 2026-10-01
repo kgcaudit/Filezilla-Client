@@ -100,6 +100,7 @@ fun OloDialog(
                 // and nothing saying which one the dialog is asking for.
                 TextButton(
                     onClick = onDismiss,
+                    shape = MaterialTheme.shapes.small,
                     colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     ),
@@ -129,6 +130,7 @@ fun DangerButton(
     TextButton(
         onClick = onClick,
         enabled = enabled,
+        shape = MaterialTheme.shapes.small,
         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
     ) { Text(text) }
 }
@@ -159,6 +161,7 @@ fun ConfirmButton(
     TextButton(
         onClick = onClick,
         enabled = enabled,
+        shape = MaterialTheme.shapes.small,
         colors = if (destructive) {
             ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
         } else {

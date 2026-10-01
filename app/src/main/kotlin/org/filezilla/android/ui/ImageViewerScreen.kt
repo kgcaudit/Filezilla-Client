@@ -637,7 +637,7 @@ private fun ReaderEndCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            Button(onClick = onOpenNext) {
+            Button(onClick = onOpenNext, shape = MaterialTheme.shapes.small) {
                 Text(stringResource(R.string.reader_continue))
             }
         } else {
@@ -647,7 +647,7 @@ private fun ReaderEndCard(
                 color = Color.White,
             )
         }
-        TextButton(onClick = onClose) {
+        TextButton(onClick = onClose, shape = MaterialTheme.shapes.small) {
             Text(stringResource(R.string.action_close), color = Color.White)
         }
     }

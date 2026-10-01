@@ -335,7 +335,7 @@ fun PasteBar(
             // Named rather than an icon alone: it is the one thing this bar
             // is for, and a clipboard glyph is not a word anybody reads.
             if (refusal == null) {
-                androidx.compose.material3.Button(onClick = onPaste) {
+                androidx.compose.material3.Button(onClick = onPaste, shape = androidx.compose.material3.MaterialTheme.shapes.small) {
                     Icon(
                         Icons.Filled.ContentPaste,
                         contentDescription = null,

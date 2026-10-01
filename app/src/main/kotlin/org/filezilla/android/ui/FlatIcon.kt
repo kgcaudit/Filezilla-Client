@@ -144,6 +144,9 @@ fun colourFor(kind: FileKind): Color = with(androidx.compose.material3.MaterialT
         FileKind.VIDEO -> video
         FileKind.AUDIO -> audio
         FileKind.DOCUMENT -> document
+        // An e-book keeps the document slate hue and is told apart by its
+        // open-book glyph -- the same move COMIC makes on the archive hue.
+        FileKind.EBOOK -> document
         FileKind.CODE -> code
         FileKind.APP -> app
         FileKind.OTHER -> other

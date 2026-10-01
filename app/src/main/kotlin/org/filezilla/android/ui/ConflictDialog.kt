@@ -119,6 +119,7 @@ fun ConflictDialog(
                 Spacer(modifier = Modifier.height(4.dp))
                 TextButton(
                     onClick = onDismiss,
+                    shape = MaterialTheme.shapes.small,
                     colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     ),

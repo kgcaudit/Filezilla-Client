@@ -129,7 +129,7 @@ fun SearchResults(
                         modifier = Modifier.size(18.dp),
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                     )
-                    TextButton(onClick = onStopWalking) {
+                    TextButton(onClick = onStopWalking, shape = MaterialTheme.shapes.small) {
                         Text(stringResource(R.string.search_stop))
                     }
                 } else {

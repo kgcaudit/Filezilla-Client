@@ -19,6 +19,10 @@ enum class FileKind(@DrawableRes val glyph: Int) {
     VIDEO(R.drawable.ic_tile_video),
     AUDIO(R.drawable.ic_tile_audio),
     DOCUMENT(R.drawable.ic_tile_document),
+    // An e-book (epub) rides the document hue but wears an open-book glyph, the
+    // same move COMIC makes on the archive hue -- so a shelf of books reads
+    // apart from plain documents without spending a tenth colour on it.
+    EBOOK(R.drawable.ic_tile_book),
     CODE(R.drawable.ic_tile_code),
     APP(R.drawable.ic_tile_app),
     OTHER(R.drawable.ic_tile_document),
@@ -71,10 +75,14 @@ private val BY_EXTENSION: Map<String, FileKind> = buildMap {
     for (e in "jpg jpeg png gif webp bmp heic heif tiff tif svg".split(" ")) put(e, FileKind.IMAGE)
     for (e in "mkv mp4 avi mov wmv flv webm m4v mpg mpeg ts m2ts".split(" ")) put(e, FileKind.VIDEO)
     for (e in "mp3 flac wav aac ogg m4a wma opus".split(" ")) put(e, FileKind.AUDIO)
+    // An e-book earns the open-book tile so a shelf of them reads apart from
+    // plain documents. pdf and txt stay DOCUMENT across the family; only epub
+    // is split off here.
+    put("epub", FileKind.EBOOK)
     // Subtitles count as documents: they are text, and on a server full of
     // films they sit beside the video they belong to and should not look
     // like one.
-    for (e in "pdf epub doc docx xls xlsx ppt pptx txt md rtf odt hwp srt smi ass vtt sub"
+    for (e in "pdf doc docx xls xlsx ppt pptx txt md rtf odt hwp srt smi ass vtt sub"
         .split(" ")) {
         put(e, FileKind.DOCUMENT)
     }

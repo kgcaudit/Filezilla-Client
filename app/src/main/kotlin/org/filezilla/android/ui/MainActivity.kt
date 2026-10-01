@@ -382,6 +382,7 @@ private fun AppScreen(
                             onClick = { model.restoreSelectedTrash() },
                             enabled = any,
                             modifier = Modifier.weight(1f),
+                            shape = MaterialTheme.shapes.small,
                         ) {
                             Icon(
                                 Icons.Filled.Restore,
@@ -395,6 +396,7 @@ private fun AppScreen(
                             onClick = { deletingSelectedTrash = true },
                             enabled = any,
                             modifier = Modifier.weight(1f),
+                            shape = MaterialTheme.shapes.small,
                             colors = ButtonDefaults.outlinedButtonColors(
                                 contentColor = MaterialTheme.colorScheme.error,
                             ),

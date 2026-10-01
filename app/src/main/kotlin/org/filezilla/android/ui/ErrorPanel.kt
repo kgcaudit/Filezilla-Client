@@ -101,7 +101,7 @@ fun ErrorPanel(
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 horizontalArrangement = Arrangement.End,
             ) {
-                TextButton(onClick = onOpenLog) {
+                TextButton(onClick = onOpenLog, shape = MaterialTheme.shapes.small) {
                     Text(
                         stringResource(R.string.action_open_log),
                         color = scheme.onSurfaceVariant,
@@ -109,7 +109,7 @@ fun ErrorPanel(
                 }
                 // The one to press, so it wears what everything pressable in
                 // this app wears. Retrying is not the dangerous thing here.
-                TextButton(onClick = onRetry) {
+                TextButton(onClick = onRetry, shape = MaterialTheme.shapes.small) {
                     Text(
                         stringResource(R.string.action_retry),
                         color = scheme.primary,
