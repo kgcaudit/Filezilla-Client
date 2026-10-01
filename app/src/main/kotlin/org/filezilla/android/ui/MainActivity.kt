@@ -11,6 +11,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -39,6 +40,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -126,6 +129,15 @@ private fun AppScreen(
     val snackbars = remember { SnackbarHostState() }
 
     var screen by remember { mutableStateOf(HOME) }
+
+    // A screen the view model asks for after finishing work off the main thread
+    // -- reopening a moved archive from recents, found by a background walk.
+    LaunchedEffect(model.pendingScreen) {
+        model.pendingScreen?.let {
+            screen = it
+            model.clearPendingScreen()
+        }
+    }
 
     // Cleared as it is honoured, so pressing back off the transfer list does
     // not land straight back on it.
@@ -517,12 +529,38 @@ private fun AppScreen(
                             )
                         }
 
-                        // The same broom, clearing the recents list.
-                        Screen.RECENTS -> IconButton(onClick = { model.clearRecents() }) {
-                            Icon(
-                                Icons.Filled.DeleteSweep,
-                                contentDescription = stringResource(R.string.recents_clear),
-                            )
+                        // The same broom, now offering two ways to clear the
+                        // recents list: tidy away only the records whose file is
+                        // gone, or forget the lot.
+                        Screen.RECENTS -> {
+                            var clearMenu by remember { mutableStateOf(false) }
+                            Box {
+                                IconButton(onClick = { clearMenu = true }) {
+                                    Icon(
+                                        Icons.Filled.DeleteSweep,
+                                        contentDescription = stringResource(R.string.recents_clear),
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = clearMenu,
+                                    onDismissRequest = { clearMenu = false },
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.recents_clear_missing)) },
+                                        onClick = {
+                                            clearMenu = false
+                                            model.clearMissingRecents()
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.recents_clear_all)) },
+                                        onClick = {
+                                            clearMenu = false
+                                            model.clearRecents()
+                                        },
+                                    )
+                                }
+                            }
                         }
 
                         // Emptying the trash erases its files for good, so it

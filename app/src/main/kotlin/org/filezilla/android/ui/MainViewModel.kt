@@ -46,6 +46,9 @@ import org.filezilla.android.files.Checksums
 import org.filezilla.android.files.FilePath
 import org.filezilla.android.files.LocalOperations
 import org.filezilla.android.files.LocalWalk
+import org.filezilla.android.files.RecentAvailability
+import org.filezilla.android.files.RecentLocator
+import org.filezilla.android.files.recentAvailability
 import org.filezilla.android.files.localParent
 import org.filezilla.android.files.StorageRoot
 import org.filezilla.android.transfer.ActiveProgress
@@ -2221,6 +2224,75 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * A screen the view model has asked to move to, for when an action that
+     * finished off the main thread needs the screen to change -- reopening a
+     * moved archive from recents, found by a background walk. Null when there is
+     * nothing pending; the host clears it once applied.
+     */
+    var pendingScreen by mutableStateOf<Screen?>(null)
+
+    fun clearPendingScreen() {
+        pendingScreen = null
+    }
+
+    /**
+     * Reconciles the recents list against the disk: heals the path of any file
+     * that has moved (found again by its fingerprint) and leaves the ones that
+     * cannot be found in place, faded, for the tidy action to clear.
+     *
+     * Run when the screen opens. The walk happens only when something is
+     * actually stale, so the common case -- every file still where it was --
+     * costs one stat per row and no walk at all.
+     */
+    fun reconcileRecents() {
+        recents = graph.preferences.recents()
+        viewModelScope.launch {
+            val resolved = withContext(Dispatchers.IO) { resolveRecents(removeMissing = false) }
+            if (resolved != null) recents = resolved
+        }
+    }
+
+    /** Heals what can be found and clears the records whose file is gone for good. */
+    fun clearMissingRecents() {
+        viewModelScope.launch {
+            val resolved = withContext(Dispatchers.IO) { resolveRecents(removeMissing = true) }
+            recents = resolved ?: graph.preferences.recents()
+        }
+    }
+
+    /**
+     * Walks the volumes once to resolve every stale entry: a moved file has its
+     * path healed, and one that cannot be found is either kept (faded) or
+     * dropped, per [removeMissing]. Returns the new list, or null when nothing
+     * was stale so nothing changed.
+     */
+    private fun resolveRecents(removeMissing: Boolean): List<RecentEntry>? {
+        val current = graph.preferences.recents()
+        val stale = current.any { recentAvailability(it, java.io.File(it.path)) != RecentAvailability.PRESENT }
+        if (!stale) return null
+        val roots = graph.volumes.volumePaths().map { java.io.File(it) }
+        val out = mutableListOf<RecentEntry>()
+        for (entry in current) {
+            val file = java.io.File(entry.path)
+            if (recentAvailability(entry, file) == RecentAvailability.PRESENT) {
+                out.add(entry)
+                continue
+            }
+            val found = if (entry.hasFingerprint) {
+                RecentLocator.find(roots, file.name, entry.size, entry.modified)
+            } else {
+                null
+            }
+            when {
+                found != null -> out.add(entry.copy(path = found.path))
+                !removeMissing -> out.add(entry)
+            }
+        }
+        graph.preferences.setRecents(out)
+        return out
+    }
+
+    /**
      * Notes that [file] was opened in a viewer, but only when it is a file on the
      * phone -- a server file fetched to the cache is not on any volume and is
      * left out, which is what "local files only" means for the recents list.
@@ -2228,7 +2300,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun recordRecent(file: java.io.File) {
         val onVolume = graph.volumes.volumePaths().any { FilePath.isWithin(file.path, it) }
         if (!onVolume) return
-        graph.preferences.addRecent(file.path, System.currentTimeMillis())
+        // Size and modified time go in with the path: the fingerprint that finds
+        // the file again if it is moved, and tells it from a different file put
+        // in its place. See RecentLocator.
+        graph.preferences.addRecent(
+            RecentEntry(
+                path = file.path,
+                time = System.currentTimeMillis(),
+                size = file.length(),
+                modified = file.lastModified(),
+            ),
+        )
         recents = graph.preferences.recents()
     }
 
@@ -2255,15 +2337,55 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Reopens a recents entry in the viewer its kind calls for. Returns the
      * screen to move to -- the files screen for an archive, which opens in a
-     * pane [pane] -- or null to stay put while a viewer opens over the top. A
-     * file that has since gone is dropped from the list and nothing opens.
+     * pane [pane] -- or null to stay put while a viewer opens over the top.
+     *
+     * When the recorded file is still at its path it opens at once. When it is
+     * not -- moved to another folder, or a different file put in its place --
+     * the recorded file is looked for by its fingerprint off the main thread
+     * and, if found, opened where it now is with its record healed; if it
+     * cannot be found the record is dropped. It never opens a different file
+     * that happens to sit at the old path.
      */
     fun openRecent(entry: RecentEntry, pane: PaneId): Screen? {
         val file = java.io.File(entry.path)
-        if (!file.exists()) {
-            removeRecent(entry.path)
-            return null
+        if (recentAvailability(entry, file) == RecentAvailability.PRESENT) {
+            return openResolved(file, pane)
         }
+        viewModelScope.launch {
+            val found = withContext(Dispatchers.IO) {
+                if (entry.hasFingerprint) {
+                    RecentLocator.find(
+                        graph.volumes.volumePaths().map { java.io.File(it) },
+                        java.io.File(entry.path).name,
+                        entry.size,
+                        entry.modified,
+                    )
+                } else {
+                    null
+                }
+            }
+            if (found == null) {
+                removeRecent(entry.path)
+                return@launch
+            }
+            healRecentPath(entry.path, found.path)
+            openResolved(found, pane)?.let { pendingScreen = it }
+        }
+        return null
+    }
+
+    /** Points a recents entry at where its file was found after a move. */
+    private fun healRecentPath(oldPath: String, newPath: String) {
+        if (oldPath == newPath) return
+        val updated = graph.preferences.recents().map {
+            if (it.path == oldPath) it.copy(path = newPath) else it
+        }
+        graph.preferences.setRecents(updated)
+        recents = updated
+    }
+
+    /** Opens a file that has been resolved to a real place, in the viewer its kind calls for. */
+    private fun openResolved(file: java.io.File, pane: PaneId): Screen? {
         // A PDF and an EPUB are both DOCUMENT by kind, so they are asked about
         // by name before that -- otherwise reopening one from recents would
         // fall to the text viewer and show the binary as gibberish, opening it

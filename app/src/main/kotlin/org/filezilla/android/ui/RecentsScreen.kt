@@ -40,6 +40,8 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import org.filezilla.android.R
 import org.filezilla.android.data.RecentEntry
+import org.filezilla.android.files.RecentAvailability
+import org.filezilla.android.files.recentAvailability
 
 /**
  * The files opened in a viewer, newest first -- one place that gathers what has
@@ -57,7 +59,9 @@ fun RecentsScreen(
     onOpen: (RecentEntry) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LaunchedEffect(Unit) { model.refreshRecents() }
+    // Reconciles against the disk on open: a file that has moved has its path
+    // healed so it opens normally, and one that is gone for good is left faded.
+    LaunchedEffect(Unit) { model.reconcileRecents() }
 
     var filter by remember { mutableStateOf(RecentFilter.ALL) }
     val entries = model.recents
@@ -132,7 +136,13 @@ private fun RecentRow(
     onRemove: () -> Unit,
 ) {
     val file = remember(entry.path) { java.io.File(entry.path) }
-    val gone = remember(entry.path, entry.time) { !file.exists() }
+    // Faded when the recorded file is not right there -- gone, or a different
+    // file now at the same path. A tap then looks for it by its fingerprint
+    // before giving up. (Reconcile on open heals moved files, so a still-faded
+    // row is one that could not be found.)
+    val gone = remember(entry.path, entry.size, entry.modified) {
+        recentAvailability(entry, file) != RecentAvailability.PRESENT
+    }
     val kind = remember(entry.path) { kindOf(file.name, false) }
     var menuOpen by remember { mutableStateOf(false) }
     // Where the long press landed, so the menu opens under the finger rather

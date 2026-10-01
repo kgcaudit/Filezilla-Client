@@ -46,16 +46,45 @@ data class MovedFolder(val siteId: String?, val path: String) {
  * and the volume it is on are all read back from the path when the list is
  * shown, so nothing stored here can fall out of step with the file it names.
  */
-data class RecentEntry(val path: String, val time: Long) {
+data class RecentEntry(
+    val path: String,
+    val time: Long,
+    /**
+     * The file's size and modified time when it was opened -- its fingerprint.
+     *
+     * What tells the recorded file from a different one now sitting at the same
+     * path, and what finds it again once it has been moved: a file keeps its
+     * size and modified time when it moves, so name+size+time locates it in its
+     * new folder. -1 for entries written before the fingerprint existed; those
+     * fall back to the old path-only behaviour.
+     */
+    val size: Long = -1,
+    val modified: Long = 0,
+) {
+    /** False for a legacy entry with no size or time to check against. */
+    val hasFingerprint: Boolean get() = size >= 0
 
-    fun encode(): String = "$time\u0000$path"
+    // Path last so it can hold any stray character (a NUL cannot occur in a
+    // path); the fixed-shape fields sit up front.
+    fun encode(): String = "$time\u0000$size\u0000$modified\u0000$path"
 
     companion object {
         fun decode(stored: String): RecentEntry? {
-            val cut = stored.indexOf('\u0000')
-            if (cut <= 0) return null
-            val time = stored.take(cut).toLongOrNull() ?: return null
-            val path = stored.substring(cut + 1)
+            val parts = stored.split('\u0000')
+            if (parts.size < 2) return null
+            val time = parts[0].toLongOrNull() ?: return null
+            // New format is time, size, modified, path (four fields, since a
+            // path holds no NUL). Anything else is the old time-then-path.
+            if (parts.size >= 4) {
+                val size = parts[1].toLongOrNull()
+                val modified = parts[2].toLongOrNull()
+                if (size != null && modified != null) {
+                    val path = parts.subList(3, parts.size).joinToString("\u0000")
+                    if (path.isEmpty()) return null
+                    return RecentEntry(path, time, size, modified)
+                }
+            }
+            val path = stored.substring(stored.indexOf('\u0000') + 1)
             if (path.isEmpty()) return null
             return RecentEntry(path, time)
         }
@@ -586,15 +615,23 @@ class AppPreferences(context: Context) {
      * is dropped once the list is longer than [MAX_RECENTS], so the list is the
      * last hundred files opened, newest first.
      */
-    fun addRecent(path: String, time: Long) {
-        val kept = recents().filterNot { it.path == path }.toMutableList()
-        kept.add(0, RecentEntry(path, time))
+    fun addRecent(entry: RecentEntry) {
+        val kept = recents().filterNot { it.path == entry.path }.toMutableList()
+        kept.add(0, entry)
         while (kept.size > MAX_RECENTS) kept.removeAt(kept.size - 1)
         writeRecents(kept)
     }
 
     /** Drops one file from the recents list, leaving the rest in order. */
     fun removeRecent(path: String) = writeRecents(recents().filterNot { it.path == path })
+
+    /**
+     * Replaces the whole recents list, keeping the given order.
+     *
+     * For reconciling paths that have healed (a moved file found again) or
+     * clearing the ones that could not be, in one write rather than many.
+     */
+    fun setRecents(entries: List<RecentEntry>) = writeRecents(entries)
 
     /** Forgets the whole recents list. */
     fun clearRecents() = prefs.edit().remove(KEY_RECENTS).apply()

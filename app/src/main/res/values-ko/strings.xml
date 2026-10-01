@@ -23,6 +23,8 @@
     <string name="title_log">접속 로그</string>
     <string name="title_recents">최근 기록</string>
     <string name="recents_clear">기록 삭제</string>
+    <string name="recents_clear_missing">없는 파일 기록 정리</string>
+    <string name="recents_clear_all">전체 삭제</string>
     <string name="recents_empty">아직 연 항목이 없습니다</string>
     <string name="recents_empty_detail">뷰어로 연 파일이 여기에 모입니다.</string>
     <string name="title_trash">휴지통</string>
