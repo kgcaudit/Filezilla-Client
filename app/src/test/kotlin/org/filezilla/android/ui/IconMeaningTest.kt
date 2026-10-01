@@ -133,7 +133,7 @@ class IconMeaningTest {
         "Share" to setOf("action_share_selected"),
         "Download" to setOf("action_download_selected", "browse_download"),
         "Search" to setOf("menu_filter"),
-        "Add" to setOf("sites_add", "bookmark_add"),
+        "Add" to setOf("sites_add", "bookmark_add", "sched_add"),
         "ArrowBack" to setOf("action_back"),
         // The player's rotate switch: free to turn with the phone, or held.
         "ScreenRotation" to setOf("action_rotate"),

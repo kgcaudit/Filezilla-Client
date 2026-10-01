@@ -40,9 +40,16 @@ class DownloadEntryPointTest {
 
     @Test
     fun `exactly one place queues a download`() {
-        // Not "at most one": zero would mean this test had stopped watching
-        // anything, which is the way a guard like this rots.
-        assertEquals(1, queueingLines().size)
+        // Two now, each a single deliberate line. The view model's is the UI's
+        // one checked way in (enqueuePlan, below). The scheduled mirror's is the
+        // background twin of syncRemoteToLocal: the source is the answer, so it
+        // overwrites by design and needs no per-file question -- the same reason
+        // the on-screen mirror is already a named exception in this file.
+        // Not "at most": zero in either would mean this test stopped watching.
+        val byFile = queueingLines().groupBy { it.substringBefore(":") }
+        assertEquals(setOf("MainViewModel.kt", "ScheduledSync.kt"), byFile.keys)
+        assertEquals(1, byFile.getValue("MainViewModel.kt").size)
+        assertEquals(1, byFile.getValue("ScheduledSync.kt").size)
     }
 
     @Test

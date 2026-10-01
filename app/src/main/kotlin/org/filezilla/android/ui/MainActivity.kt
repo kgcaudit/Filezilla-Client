@@ -573,7 +573,7 @@ private fun AppScreen(
                             )
                         }
 
-                            Screen.SITES, Screen.FILES -> Unit
+                            Screen.SITES, Screen.FILES, Screen.SCHEDULED_SYNC -> Unit
                         }
                     },
                 )
@@ -743,6 +743,8 @@ private fun AppScreen(
             )
 
             Screen.TRASH -> TrashScreen(model = model, modifier = Modifier.padding(padding))
+
+            Screen.SCHEDULED_SYNC -> ScheduledSyncScreen(model = model, modifier = Modifier.padding(padding))
         }
     }
 
@@ -1220,6 +1222,7 @@ private fun titleFor(screen: Screen): String = when (screen) {
     Screen.LOG -> stringResource(R.string.title_log)
     Screen.RECENTS -> stringResource(R.string.title_recents)
     Screen.TRASH -> stringResource(R.string.title_trash)
+    Screen.SCHEDULED_SYNC -> stringResource(R.string.sched_title)
     // Never asked for: the files screen carries no bar. Named rather than
     // left to an else, so adding a screen is a compile error here.
     Screen.FILES -> ""

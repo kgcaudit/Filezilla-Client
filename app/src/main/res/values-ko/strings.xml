@@ -585,4 +585,52 @@
     <string name="sync_done">동기화함 — 복사 %1$d개, 삭제 %2$d개</string>
     <string name="sync_done_failed">동기화함 — 복사 %1$d개, 삭제 %2$d개, 실패 %3$d개</string>
     <string name="sync_cancelled">동기화를 멈췄습니다</string>
+
+    <!-- 예약 동기화 -->
+    <string name="sched_title">예약 동기화</string>
+    <string name="sched_empty">아직 예약이 없습니다</string>
+    <string name="sched_empty_detail">한 창에 기기 폴더, 다른 창에 서버 폴더를 연 뒤 추가하세요.</string>
+    <string name="sched_add">예약 추가</string>
+    <string name="sched_needs_panes">한 창에 기기 폴더, 다른 창에 서버 폴더를 먼저 열어 주세요</string>
+    <string name="sched_run_now">지금 실행</string>
+    <string name="sched_edit">편집</string>
+    <string name="sched_remove">예약 삭제</string>
+    <string name="sched_remove_confirm">이 예약을 삭제할까요?</string>
+    <string name="sched_remove_confirm_detail">더 이상 실행되지 않습니다. 이미 동기화된 파일은 그대로 남습니다.</string>
+    <string name="sched_new">새 예약</string>
+    <string name="sched_field_name">이름</string>
+    <string name="sched_field_source">원본</string>
+    <string name="sched_field_target">대상</string>
+    <string name="sched_field_direction">방향</string>
+    <string name="sched_dir_upload">기기 → 서버 (올리기)</string>
+    <string name="sched_dir_download">서버 → 기기 (받기)</string>
+    <string name="sched_field_interval">주기</string>
+    <string name="sched_interval_6h">6시간</string>
+    <string name="sched_interval_12h">12시간</string>
+    <string name="sched_interval_daily">매일</string>
+    <string name="sched_conditions">조건</string>
+    <string name="sched_wifi_only">Wi-Fi 연결 시에만</string>
+    <string name="sched_charging_only">충전 중에만</string>
+    <string name="sched_save">저장</string>
+    <string name="sched_every_hours">%1$d시간마다</string>
+    <string name="sched_daily">매일</string>
+    <string name="sched_cond_wifi">Wi-Fi</string>
+    <string name="sched_cond_charging">충전 중</string>
+    <string name="sched_last_never">실행된 적 없음</string>
+    <string name="sched_last_at">%1$s · %2$s</string>
+
+    <!-- 예약 동기화: 알림과 실행 결과 -->
+    <string name="sched_channel_running">예약 동기화</string>
+    <string name="sched_channel_running_description">백그라운드에서 도는 예약 미러링</string>
+    <string name="sched_channel_result">예약 동기화 결과</string>
+    <string name="sched_channel_result_description">예약 미러링이 끝났을 때 알림</string>
+    <string name="sched_running_title">미러링 중…</string>
+    <string name="sched_result_no_server">서버를 찾을 수 없습니다</string>
+    <string name="sched_result_failed">동기화 실패</string>
+    <string name="sched_result_no_change">변경 없음</string>
+    <string name="sched_result_uploading">%1$d개 올리기 시작</string>
+    <string name="sched_result_downloading">%1$d개 받기 시작</string>
+    <string name="sched_result_deleted">%1$d개 삭제</string>
+    <string name="sched_result_failed_count">%1$d개 실패</string>
+    <string name="sched_result_done">완료</string>
 </resources>

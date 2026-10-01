@@ -204,6 +204,14 @@ class WordingTest {
             // the title of the preview it opens -- the preview answers the menu,
             // same as the share and change-mode pairs above.
             "sync_title",
+            // The scheduled-sync screen's name, on the storage row that opens it
+            // and on its own app bar -- the row answers the screen, same as
+            // recents and trash above.
+            "sched_title",
+            // "Delete items only on the target": the one-shot mirror's preview
+            // switch and the scheduled job's editor switch, the one destructive
+            // option, worded the same in the two places a mirror is set up.
+            "sync_delete_extras",
         ).sorted()
 
         assertEquals(allowed, shared)

@@ -8,7 +8,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [TransferEntity::class, SiteEntity::class],
+    entities = [TransferEntity::class, SiteEntity::class, SyncJobEntity::class],
     version = AppDatabase.VERSION,
     exportSchema = true,
 )
@@ -18,6 +18,8 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun sites(): SiteDao
 
+    abstract fun syncJobs(): SyncJobDao
+
     companion object {
 
         /**
@@ -26,7 +28,7 @@ abstract class AppDatabase : RoomDatabase() {
          * test went stale the moment a column was added -- so every existing
          * database looked unmigratable from a test that was only out of date.
          */
-        const val VERSION = 8
+        const val VERSION = 9
 
         /**
          * Every migration, in one list.
@@ -44,7 +46,44 @@ abstract class AppDatabase : RoomDatabase() {
                 PIN_CERTIFICATES,
                 ADD_SFTP,
                 ADD_PRIVATE_KEY,
+                ADD_SYNC_JOBS,
             )
+
+        /**
+         * Version 9 adds scheduled folder mirrors, each its own row.
+         *
+         * A new table, so nothing already stored is touched: a phone that never
+         * sets up a scheduled sync carries an empty table and behaves exactly as
+         * before. The column shapes match [SyncJobEntity] so Room's own identity
+         * check passes against it. Booleans are INTEGER, names are TEXT, and the
+         * two destructive-leaning fields (delete_extras, requires_charging)
+         * default to the safe side.
+         */
+        internal val ADD_SYNC_JOBS = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `sync_jobs` (" +
+                        "`id` TEXT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`local_root` TEXT NOT NULL, " +
+                        "`local_label` TEXT NOT NULL, " +
+                        "`site_id` TEXT NOT NULL, " +
+                        "`remote_root` TEXT NOT NULL, " +
+                        "`remote_label` TEXT NOT NULL, " +
+                        "`direction` TEXT NOT NULL, " +
+                        "`delete_extras` INTEGER NOT NULL DEFAULT 0, " +
+                        "`interval_minutes` INTEGER NOT NULL, " +
+                        "`requires_wifi` INTEGER NOT NULL DEFAULT 1, " +
+                        "`requires_charging` INTEGER NOT NULL DEFAULT 0, " +
+                        "`enabled` INTEGER NOT NULL DEFAULT 1, " +
+                        "`last_run_at` INTEGER NOT NULL DEFAULT 0, " +
+                        "`last_status` TEXT NOT NULL DEFAULT 'NONE', " +
+                        "`last_result` TEXT, " +
+                        "`created_at` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`id`))",
+                )
+            }
+        }
 
         fun open(context: Context, passwords: PasswordCipher): AppDatabase =
             Room.databaseBuilder(

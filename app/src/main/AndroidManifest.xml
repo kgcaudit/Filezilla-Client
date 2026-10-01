@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -108,6 +109,19 @@
             android:name=".service.TransferService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!--
+            A scheduled mirror runs in a WorkManager worker that goes to the
+            foreground for its scan, so WorkManager's own foreground service has
+            to declare the same dataSync type the work does. Android 14+ and
+            WorkManager's lint both refuse a foreground service whose type is not
+            spelt out. Merged onto the library's own service entry, adding only
+            the type; see SpecifyForegroundServiceType.
+        -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
 
         <!--
             The media player's engine, so a video or a sound keeps playing

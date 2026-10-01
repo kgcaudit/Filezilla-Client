@@ -174,6 +174,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val sites: StateFlow<List<SiteEntity>> = graph.database.sites().observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** The standing scheduled mirrors, newest first; see the scheduled-sync region. */
+    val scheduledSyncJobs: StateFlow<List<org.filezilla.android.data.SyncJobEntity>> =
+        graph.database.syncJobs().observeAll()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     val transfers: StateFlow<List<TransferRecord>> = graph.transfers.observeTransfers()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
@@ -4692,6 +4697,95 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
 
         PaneSource.Empty -> null
+    }
+
+    // ---------------------------------------------------------- scheduled sync
+
+    /**
+     * The two ends a new scheduled job would mirror, read from the panes now.
+     *
+     * A job needs a folder on the phone and a folder on a server, so this is
+     * null unless one pane is each -- the editor shows the hint to open them
+     * when it is. Captured whole here, the same way [prepareSync] captures the
+     * one-shot mirror, so the job does not depend on the panes staying put.
+     */
+    fun syncJobDraftFromPanes(): SyncJobDraft? {
+        val ends = PaneId.entries.mapNotNull { endpointOf(pane(it)) }
+        val local = ends.filterIsInstance<SyncEndpoint.LocalDir>().firstOrNull()
+        val remote = ends.filterIsInstance<SyncEndpoint.RemoteDir>().firstOrNull()
+        if (local == null || remote == null || local.root.isBlank() || remote.root.isBlank()) return null
+        val siteName = remote.site.name.ifBlank { remote.site.host }
+        return SyncJobDraft(
+            localRoot = local.root,
+            localLabel = compactPath(local.root),
+            siteId = remote.site.id,
+            remoteRoot = remote.root,
+            remoteLabel = "$siteName:${compactPath(remote.root)}",
+            suggestedName = remote.root.substringAfterLast('/').ifBlank { siteName },
+        )
+    }
+
+    /** A folder path shown as its last two segments, so a deep path still fits a row. */
+    private fun compactPath(path: String): String {
+        val trimmed = path.trim('/')
+        if (trimmed.isEmpty()) return "/"
+        val parts = trimmed.split('/')
+        return parts.takeLast(2).joinToString("/")
+    }
+
+    /** Writes a new scheduled job and starts its schedule. */
+    fun addSyncJob(
+        name: String,
+        draft: SyncJobDraft,
+        direction: org.filezilla.android.data.SyncDirection,
+        intervalMinutes: Long,
+        requiresWifi: Boolean,
+        requiresCharging: Boolean,
+        deleteExtras: Boolean,
+    ) {
+        val job = org.filezilla.android.data.SyncJobEntity(
+            id = java.util.UUID.randomUUID().toString(),
+            name = name.ifBlank { draft.suggestedName },
+            localRoot = draft.localRoot,
+            localLabel = draft.localLabel,
+            siteId = draft.siteId,
+            remoteRoot = draft.remoteRoot,
+            remoteLabel = draft.remoteLabel,
+            direction = direction.name,
+            deleteExtras = deleteExtras,
+            intervalMinutes = intervalMinutes,
+            requiresWifi = requiresWifi,
+            requiresCharging = requiresCharging,
+        )
+        viewModelScope.launch {
+            graph.database.syncJobs().upsert(job)
+            org.filezilla.android.sync.SyncScheduler.apply(getApplication(), job)
+        }
+    }
+
+    /** Saves an edited job and brings its schedule in line with the change. */
+    fun updateSyncJob(job: org.filezilla.android.data.SyncJobEntity) {
+        viewModelScope.launch {
+            graph.database.syncJobs().upsert(job)
+            org.filezilla.android.sync.SyncScheduler.apply(getApplication(), job)
+        }
+    }
+
+    /** Turns a job's schedule on or off without losing the job. */
+    fun setSyncJobEnabled(job: org.filezilla.android.data.SyncJobEntity, on: Boolean) =
+        updateSyncJob(job.copy(enabled = on))
+
+    /** Forgets a job and cancels its schedule. */
+    fun deleteSyncJob(job: org.filezilla.android.data.SyncJobEntity) {
+        viewModelScope.launch {
+            graph.database.syncJobs().delete(job)
+            org.filezilla.android.sync.SyncScheduler.cancel(getApplication(), job.id)
+        }
+    }
+
+    /** Runs a job once now, outside its schedule and conditions. */
+    fun runSyncJobNow(job: org.filezilla.android.data.SyncJobEntity) {
+        org.filezilla.android.sync.SyncScheduler.runNow(getApplication(), job)
     }
 
     /**

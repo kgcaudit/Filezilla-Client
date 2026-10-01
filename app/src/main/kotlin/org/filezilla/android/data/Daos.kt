@@ -133,3 +133,43 @@ interface SiteDao {
     @Query("SELECT * FROM sites WHERE host = :host AND port = :port AND user = :user LIMIT 1")
     fun byEndpoint(host: String, port: Int, user: String): SiteEntity?
 }
+
+@Dao
+interface SyncJobDao {
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: SyncJobEntity)
+
+    @Delete
+    suspend fun delete(entity: SyncJobEntity)
+
+    /**
+     * Blocking read for the background worker, which has no scope to collect a
+     * flow and only needs the one row it was woken for. Room refuses it on the
+     * main thread, which is the check that matters -- the worker is never there.
+     */
+    @Query("SELECT * FROM sync_jobs WHERE id = :id")
+    fun byIdBlocking(id: String): SyncJobEntity?
+
+    /** Newest first, which is the order the list screen wants. */
+    @Query("SELECT * FROM sync_jobs ORDER BY created_at DESC")
+    fun observeAll(): Flow<List<SyncJobEntity>>
+
+    @Query("SELECT * FROM sync_jobs")
+    suspend fun all(): List<SyncJobEntity>
+
+    /**
+     * Records how a run turned out, from the worker.
+     *
+     * A targeted update rather than a whole-row upsert: the worker holds the
+     * row it read when the run began, but the user may have edited the schedule
+     * while it ran, and writing the stale row back would quietly undo that.
+     */
+    @Query(
+        """
+        UPDATE sync_jobs SET last_run_at = :at, last_status = :status, last_result = :result
+        WHERE id = :id
+        """,
+    )
+    suspend fun recordRun(id: String, at: Long, status: String, result: String?)
+}
