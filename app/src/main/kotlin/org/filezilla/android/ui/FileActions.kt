@@ -82,7 +82,16 @@ fun NewThingFab(
                 }
             }
         }
-        FloatingActionButton(onClick = { onExpandedChange(!expanded) }) {
+        // The brand clay, bound to the role tokens rather than a hex, so the
+        // primary action leads in the brand colour and the pale container the
+        // FAB defaults to -- which read as a weak pink -- is gone. Role tokens,
+        // not #B95B3B, because dark's primary is the lighter clay and its
+        // onPrimary the dark tone: hard-coding white would fail contrast there.
+        FloatingActionButton(
+            onClick = { onExpandedChange(!expanded) },
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+        ) {
             Icon(
                 if (expanded) Icons.Filled.Close else Icons.Filled.Add,
                 contentDescription = stringResource(
