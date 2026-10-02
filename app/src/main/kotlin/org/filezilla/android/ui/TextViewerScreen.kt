@@ -16,12 +16,9 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -106,7 +104,7 @@ fun TextViewerScreen(viewer: MainViewModel.TextViewer, model: MainViewModel) {
                     )
                 }
                 IconButton(onClick = { searching = !searching }) {
-                    Icon(Icons.Filled.Search, stringResource(R.string.action_search))
+                    Icon(painterResource(R.drawable.ic_menu_search), stringResource(R.string.action_search))
                 }
                 if (viewer.editable && loaded != null) {
                     if (editing && !saved) {
@@ -127,11 +125,17 @@ fun TextViewerScreen(viewer: MainViewModel.TextViewer, model: MainViewModel) {
                                     ).show()
                                 }
                             }
+                            // Still Material: writing to disk is its own act,
+                            // distinct from leaving edit mode (the check), and
+                            // the OLO set has no save glyph yet. Swapped to
+                            // ic_action_save the moment one lands.
                         }) { Icon(Icons.Filled.Save, stringResource(R.string.viewer_save)) }
                     }
                     IconButton(onClick = { editing = !editing }) {
                         Icon(
-                            if (editing) Icons.Filled.Check else Icons.Filled.Edit,
+                            painterResource(
+                                if (editing) R.drawable.ic_action_check else R.drawable.ic_action_rename,
+                            ),
                             stringResource(if (editing) R.string.viewer_done_editing else R.string.viewer_edit),
                         )
                     }
