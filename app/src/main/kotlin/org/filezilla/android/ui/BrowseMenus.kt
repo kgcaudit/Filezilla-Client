@@ -18,15 +18,11 @@ import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.ViewHeadline
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Upload
-import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -210,30 +206,33 @@ fun ViewOptionsDialog(
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 SectionLabel(R.string.view_mode)
                 Row(modifier = Modifier.fillMaxWidth()) {
+                    // The OLO view glyphs, one hand with the sort row below:
+                    // a list, a grid, a stack of photos, and a dense set of
+                    // lines for compact.
                     OptionTile(
                         label = stringResource(R.string.view_list),
-                        icon = Icons.AutoMirrored.Filled.ViewList,
+                        icon = painterResource(R.drawable.ic_menu_view_list),
                         selected = options.viewMode == ViewMode.LIST,
                         onClick = { onApply(options.copy(viewMode = ViewMode.LIST)) },
                         modifier = Modifier.weight(1f),
                     )
                     OptionTile(
                         label = stringResource(R.string.view_grid),
-                        icon = Icons.Filled.GridView,
+                        icon = painterResource(R.drawable.ic_menu_view_grid),
                         selected = options.viewMode == ViewMode.GRID,
                         onClick = { onApply(options.copy(viewMode = ViewMode.GRID)) },
                         modifier = Modifier.weight(1f),
                     )
                     OptionTile(
                         label = stringResource(R.string.view_gallery),
-                        icon = Icons.Filled.PhotoLibrary,
+                        icon = painterResource(R.drawable.ic_menu_view_gallery),
                         selected = options.viewMode == ViewMode.GALLERY,
                         onClick = { onApply(options.copy(viewMode = ViewMode.GALLERY)) },
                         modifier = Modifier.weight(1f),
                     )
                     OptionTile(
                         label = stringResource(R.string.view_compact),
-                        icon = Icons.Filled.ViewHeadline,
+                        icon = painterResource(R.drawable.ic_menu_view_compact),
                         selected = options.viewMode == ViewMode.COMPACT,
                         onClick = { onApply(options.copy(viewMode = ViewMode.COMPACT)) },
                         modifier = Modifier.weight(1f),
@@ -255,20 +254,22 @@ fun ViewOptionsDialog(
                 }
 
                 SectionLabel(R.string.menu_folder_options)
-                Toggle(R.string.option_folders_first, options.foldersFirst) {
+                Toggle(R.string.option_folders_first, R.drawable.ic_menu_folders_first, options.foldersFirst) {
                     onApply(options.copy(foldersFirst = it))
                 }
-                Toggle(R.string.option_show_hidden, options.showHidden) {
+                Toggle(R.string.option_show_hidden, R.drawable.ic_menu_hidden, options.showHidden) {
                     onApply(options.copy(showHidden = it))
                 }
                 // Last, and only where there is a folder to pin to. One
                 // setting for the whole app means changing it on the way
                 // into a folder of photos and changing it back on the way
                 // out; this lets a folder keep its own and leaves every
-                // other folder on the shared one.
+                // other folder on the shared one. The pin glyph says "to
+                // this folder".
                 onOnlyHere?.let { set ->
                     Toggle(
                         labelRes = R.string.option_only_here,
+                        iconRes = R.drawable.ic_menu_scope_folder,
                         checked = onlyHere,
                         detailRes = R.string.option_only_here_detail,
                         onChange = set,
@@ -311,6 +312,9 @@ private fun RowScope.SortTile(
         footnote = stringResource(
             if (options.ascending) R.string.sort_ascending_short else R.string.sort_descending_short,
         ),
+        footnoteIcon = painterResource(
+            if (options.ascending) R.drawable.ic_menu_sort_asc else R.drawable.ic_menu_sort_desc,
+        ),
         modifier = Modifier.weight(1f),
     )
 }
@@ -318,6 +322,7 @@ private fun RowScope.SortTile(
 @Composable
 private fun Toggle(
     labelRes: Int,
+    @androidx.annotation.DrawableRes iconRes: Int,
     checked: Boolean,
     /** A line under the name, for a setting whose effect is not obvious. */
     detailRes: Int? = null,
@@ -330,8 +335,15 @@ private fun Toggle(
             .padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Checkbox(checked = checked, onCheckedChange = { onChange(it) })
-        Column(modifier = Modifier.padding(start = 4.dp)) {
+        // The OLO control glyph leads the row, then the name, then the
+        // checkbox at the end -- the shape a settings row is read in.
+        Icon(
+            painterResource(iconRes),
+            contentDescription = null,
+            modifier = Modifier.padding(start = 2.dp, end = 12.dp).size(22.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Column(modifier = Modifier.weight(1f)) {
             Text(stringResource(labelRes))
             if (detailRes != null) {
                 Text(
@@ -341,6 +353,7 @@ private fun Toggle(
                 )
             }
         }
+        Checkbox(checked = checked, onCheckedChange = { onChange(it) })
     }
 }
 

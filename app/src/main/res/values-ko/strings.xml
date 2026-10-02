@@ -359,8 +359,8 @@
     <string name="folder_empty">비어 있음</string>
     <string name="folder_summary">폴더 %1$d개 · 파일 %2$d개</string>
 
-    <string name="sort_ascending_short">↑ 오름차순</string>
-    <string name="sort_descending_short">↓ 내림차순</string>
+    <string name="sort_ascending_short">오름차순</string>
+    <string name="sort_descending_short">내림차순</string>
     <string name="option_only_here">이 폴더만</string>
     <string name="option_only_here_detail">이 폴더에만 적용하고, 나머지는 공용 설정을 씁니다.</string>
 

@@ -1,6 +1,7 @@
 package org.filezilla.android.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
@@ -140,7 +141,10 @@ fun OptionTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     footnote: String? = null,
-) = OptionTile(label, selected, onClick, modifier, footnote) {
+    /** Drawn before the footnote, when the footnote has a glyph of its own
+     *  -- the sort direction's up/down arrow. */
+    footnoteIcon: Painter? = null,
+) = OptionTile(label, selected, onClick, modifier, footnote, footnoteIcon) {
     Icon(icon, contentDescription = null, modifier = Modifier.padding(10.dp).size(22.dp))
 }
 
@@ -151,6 +155,7 @@ private fun OptionTile(
     onClick: () -> Unit,
     modifier: Modifier,
     footnote: String?,
+    footnoteIcon: Painter? = null,
     glyph: @Composable () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
@@ -180,12 +185,25 @@ private fun OptionTile(
         // choice rather than a choice of its own. It had a row to itself,
         // which made "ascending" look like a fifth thing to sort by.
         if (selected && footnote != null) {
-            Text(
-                footnote,
-                style = MaterialTheme.typography.labelSmall,
-                color = colors.primary,
-                maxLines = 1,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                if (footnoteIcon != null) {
+                    Icon(
+                        footnoteIcon,
+                        contentDescription = null,
+                        tint = colors.primary,
+                        modifier = Modifier.size(13.dp),
+                    )
+                }
+                Text(
+                    footnote,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.primary,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }
