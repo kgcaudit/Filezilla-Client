@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.res.painterResource
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -135,7 +135,7 @@ fun SearchResults(
                 } else {
                     androidx.compose.material3.IconButton(onClick = onClose) {
                         Icon(
-                            Icons.Filled.Close,
+                            painterResource(R.drawable.ic_action_close),
                             contentDescription = stringResource(R.string.search_close),
                             tint = MaterialTheme.colorScheme.onSecondaryContainer,
                         )

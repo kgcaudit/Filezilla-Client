@@ -13,8 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Card
@@ -127,14 +125,14 @@ fun SitesScreen(
                         }
                         IconButton(onClick = { onEdit(site) }) {
                             Icon(
-                                Icons.Filled.Edit,
+                                painterResource(R.drawable.ic_action_rename),
                                 contentDescription = stringResource(R.string.sites_edit, site.name),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         IconButton(onClick = { onDelete(site) }) {
                             Icon(
-                                Icons.Filled.Delete,
+                                painterResource(R.drawable.ic_action_delete),
                                 contentDescription = stringResource(R.string.sites_delete, site.name),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

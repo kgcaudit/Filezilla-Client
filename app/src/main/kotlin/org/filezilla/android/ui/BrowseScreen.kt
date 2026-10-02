@@ -28,9 +28,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -393,7 +390,7 @@ private fun FilterBar(filter: String, onChange: (String) -> Unit, onClose: () ->
         placeholder = stringResource(R.string.filter_hint),
         trailingIcon = {
             IconButton(onClick = onClose) {
-                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.filter_clear))
+                Icon(painterResource(R.drawable.ic_action_close), contentDescription = stringResource(R.string.filter_clear))
             }
         },
         // Headroom for the floating label, which rides the top border.
@@ -581,7 +578,7 @@ private fun EntryRow(
             if (showsFetchButton(isLocal = isLocal, isDirectory = entry.isDirectory)) {
                 IconButton(onClick = { actions.onDownload(entry) }) {
                     Icon(
-                        Icons.Filled.Download,
+                        painterResource(R.drawable.ic_action_download),
                         contentDescription = stringResource(R.string.browse_download, entry.name),
                         tint = MaterialTheme.colorScheme.primary,
                     )
@@ -995,7 +992,7 @@ internal fun ChecksumDialog(
                                 )
                                 Spacer(Modifier.width(8.dp))
                                 Icon(
-                                    Icons.Filled.ContentCopy,
+                                    painterResource(R.drawable.ic_action_copy),
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )

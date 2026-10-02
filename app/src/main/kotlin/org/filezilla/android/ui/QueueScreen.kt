@@ -17,7 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalIconButton
@@ -217,7 +217,7 @@ private fun TransferCard(
                     TransferMood.WAITING_FOR_NETWORK ->
                         FilledTonalIconButton(onClick = onResume) {
                             Icon(
-                                Icons.Filled.Refresh,
+                                painterResource(R.drawable.ic_menu_refresh),
                                 contentDescription = stringResource(R.string.queue_retry_now),
                             )
                         }

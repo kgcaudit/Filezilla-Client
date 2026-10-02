@@ -95,17 +95,10 @@ class IconMeaningTest {
      * exactly what had stopped happening.
      */
     private val meanings: Map<String, Set<String>> = mapOf(
-        // Closing, where it is still a Material glyph: the filter bar, the
-        // search bar, forgetting a pinned place. The toolbars' own close and
-        // cancel moved to the OLO ic_action_close below; none of these
-        // destroys anything -- taking a transfer out of the queue, which
-        // does, is Cancel, and keeping the two apart is most of what this is
-        // for.
-        "Close" to setOf("filter_clear", "search_close", "bookmark_remove"),
-        // Taking something out for good.
+        // Taking a transfer out of the queue for good -- distinct from the
+        // closings and cancellings that now wear ic_action_close, and the
+        // whole reason this test keeps the two apart.
         "Cancel" to setOf("queue_remove"),
-        // Deleting a server. Deleting selected files moved to ic_action_delete.
-        "Delete" to setOf("sites_delete"),
         // Clearing a list of what is finished with. The transfer list says
         // this in words now -- three kinds of clearing no three pictures
         // would tell apart -- so the broom is the log screen's alone.
@@ -125,17 +118,8 @@ class IconMeaningTest {
         "Repeat" to setOf("music_repeat"),
         "RepeatOn" to setOf("music_repeat_all"),
         "RepeatOne" to setOf("music_repeat_one"),
-        // Retrying a transfer. The files screen's refresh moved to ic_menu_refresh.
-        "Refresh" to setOf("queue_retry_now"),
         // Chosen: a row, an option, either way the same idea.
         "Check" to setOf("browse_select", "chosen"),
-        // Editing a server. Renaming a selected file moved to ic_action_rename.
-        "Edit" to setOf("sites_edit"),
-        // Searching, where it is still a Material glyph: the pane's filter
-        // field. The files menu's filter row uses ic_menu_search.
-        "Search" to setOf("menu_filter"),
-        // Downloading one row. The selection bar's download moved to ic_action_download.
-        "Download" to setOf("browse_download"),
         "Add" to setOf("sites_add", "bookmark_add", "sched_add"),
         "ArrowBack" to setOf("action_back"),
         // The player's rotate switch: free to turn with the phone, or held.
@@ -181,24 +165,33 @@ class IconMeaningTest {
         // The view-and-sort sheet, and the remembered-apps sheet.
         "ic_menu_view_options" to setOf("menu_view_options"),
         "ic_menu_associations" to setOf("menu_associations"),
-        // Re-reading the current folder.
-        "ic_menu_refresh" to setOf("browse_refresh"),
-        // The toolbars' own close and cancel: leaving selection, dropping the
-        // clipboard, backing out of trash selection.
-        "ic_action_close" to setOf("menu_select_none", "action_cancel"),
-        "ic_action_download" to setOf("action_download_selected"),
+        // Re-reading the current folder, and retrying a stalled transfer.
+        "ic_menu_refresh" to setOf("browse_refresh", "queue_retry_now"),
+        // The magnifier: the files menu's filter row and the pane's filter field.
+        "ic_menu_search" to setOf("menu_filter"),
+        // Closing and cancelling throughout: leaving selection, dropping the
+        // clipboard, backing out of trash selection, closing the filter and
+        // search bars, forgetting a pinned place. None destroys anything --
+        // that is Cancel (queue_remove) above.
+        "ic_action_close" to setOf(
+            "menu_select_none", "action_cancel", "filter_clear", "search_close", "bookmark_remove",
+        ),
+        // Downloading, whether the selection or a single row.
+        "ic_action_download" to setOf("action_download_selected", "browse_download"),
         "ic_action_share" to setOf("action_share_selected"),
         // Packing files into an archive, and joining split parts -- the
         // counterparts of extract above.
         "ic_action_compress" to setOf("archive_compress"),
         "ic_action_merge" to setOf("archive_join"),
-        // The clipboard verbs and rename, on the selection bar.
+        // The clipboard verbs, and renaming -- a selected file, or a server:
+        // the same act of changing what something is called.
         "ic_action_cut" to setOf("action_cut"),
         "ic_action_copy" to setOf("action_copy"),
-        "ic_action_rename" to setOf("action_rename_selected"),
-        // Deleting the selected files -- the bin, distinct from the broom
-        // (clearing a list) and the stronger bin-with-a-cross (emptying trash).
-        "ic_action_delete" to setOf("action_delete_selected"),
+        "ic_action_rename" to setOf("action_rename_selected", "sites_edit"),
+        // Deleting, whether selected files or a server -- the bin, distinct
+        // from the broom (clearing a list) and the stronger bin-with-a-cross
+        // (emptying trash).
+        "ic_action_delete" to setOf("action_delete_selected", "sites_delete"),
     )
 
     @Test

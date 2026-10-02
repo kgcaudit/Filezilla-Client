@@ -13,7 +13,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -135,7 +134,7 @@ fun PaneHeader(
             if (state.source !is PaneSource.Empty) {
                 IconButton(onClick = here(model::toggleFilter)) {
                     Icon(
-                        Icons.Filled.Search,
+                        painterResource(R.drawable.ic_menu_search),
                         contentDescription = stringResource(R.string.menu_filter),
                         tint = if (state.filterOpen) {
                             MaterialTheme.colorScheme.primary
