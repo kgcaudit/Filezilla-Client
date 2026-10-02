@@ -158,6 +158,8 @@ class IconMeaningTest {
         "Replay10" to setOf("video_rewind"),
         "Forward10" to setOf("video_forward"),
         "Settings" to setOf("action_settings"),
+        // The photo viewer's EXIF: the ⓘ that opens a picture's info sheet.
+        "Info" to setOf("reader_photo_info"),
         // The EPUB reader's table of contents.
         "List" to setOf("epub_toc"),
     )

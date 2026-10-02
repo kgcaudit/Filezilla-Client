@@ -633,4 +633,34 @@
     <string name="sched_result_deleted">%1$d개 삭제</string>
     <string name="sched_result_failed_count">%1$d개 실패</string>
     <string name="sched_result_done">완료</string>
+
+    <!-- 사진 정보 (EXIF) -->
+    <string name="reader_photo_info">사진 정보</string>
+    <string name="photo_info_title">사진 정보</string>
+    <string name="photo_section_shot">촬영</string>
+    <string name="photo_field_date">날짜</string>
+    <string name="photo_section_camera">카메라</string>
+    <string name="photo_field_device">기기</string>
+    <string name="photo_field_lens">렌즈</string>
+    <string name="photo_section_exposure">노출</string>
+    <string name="photo_field_exposure">설정</string>
+    <string name="photo_field_focal">초점거리</string>
+    <string name="photo_section_location">위치</string>
+    <string name="photo_field_coords">좌표</string>
+    <string name="photo_open_map">지도</string>
+    <string name="photo_section_edit">편집</string>
+    <string name="photo_edit_scope_local">이 기기의 원본</string>
+    <string name="photo_rotate_left">왼쪽 회전</string>
+    <string name="photo_rotate_right">오른쪽 회전</string>
+    <string name="photo_remove_location">위치 제거</string>
+    <string name="photo_remove_all">전체 제거</string>
+    <string name="photo_not_editable">이 형식은 정보만 볼 수 있어요</string>
+    <string name="photo_exif_empty">표시할 정보가 없습니다</string>
+    <string name="photo_remove_location_confirm">위치 정보를 제거할까요?</string>
+    <string name="photo_remove_location_detail">이 사진에서 촬영된 위치를 제거합니다. 되돌릴 수 없습니다.</string>
+    <string name="photo_remove_all_confirm">모든 정보를 제거할까요?</string>
+    <string name="photo_remove_all_detail">촬영 위치·카메라·날짜 등 식별 정보를 모두 제거합니다. 사진 화질과 방향은 그대로입니다. 되돌릴 수 없습니다.</string>
+    <string name="photo_iso">ISO %1$d</string>
+    <string name="photo_focal_35">환산 %1$dmm</string>
+    <string name="photo_shutter">%1$s초</string>
 </resources>

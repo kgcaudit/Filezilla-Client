@@ -30,6 +30,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -174,6 +175,26 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
             }
         }
     }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    model.photoInfo?.let { info ->
+        PhotoInfoSheet(
+            info = info,
+            onRotate = { clockwise -> model.rotatePhoto(clockwise) },
+            onClearLocation = { model.clearPhotoLocation() },
+            onClearAll = { model.clearPhotoAll() },
+            onOpenMap = { lat, lon -> openMap(context, lat, lon) },
+            onDismiss = { model.closePhotoInfo() },
+        )
+    }
+}
+
+/** Hands the coordinates to whatever map app the phone has, if any. */
+private fun openMap(context: android.content.Context, lat: Double, lon: Double) {
+    val uri = android.net.Uri.parse("geo:$lat,$lon?q=$lat,$lon")
+    runCatching {
+        context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, uri))
+    }
 }
 
 /**
@@ -269,9 +290,10 @@ private fun PagedReader(
         val onImage = pager.currentPage < spreads.size
         val shownPages = spreads.getOrNull(pager.currentPage).orEmpty()
 
+        val currentRef = shownPages.firstOrNull()?.let { viewer.images[it] }
         AnimatedVisibility(visible = chrome, modifier = Modifier.align(Alignment.TopCenter)) {
             ReaderTopBar(
-                name = shownPages.firstOrNull()?.let { viewer.images[it].name }.orEmpty(),
+                name = currentRef?.name.orEmpty(),
                 webtoon = false,
                 rtl = rtl,
                 twoPage = model.readerTwoPage,
@@ -283,6 +305,7 @@ private fun PagedReader(
                 onNarrow = {},
                 onWidthPercent = {},
                 onClose = model::closeImageViewer,
+                onInfo = (currentRef as? MainViewModel.ImageRef.OnDisk)?.let { ref -> { model.openPhotoInfo(ref) } },
             )
         }
 
@@ -495,6 +518,7 @@ private fun ReaderTopBar(
     onNarrow: (Boolean) -> Unit,
     onWidthPercent: (Int) -> Unit,
     onClose: () -> Unit,
+    onInfo: (() -> Unit)? = null,
 ) {
     Row(
         Modifier
@@ -515,6 +539,14 @@ private fun ReaderTopBar(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
         )
+        // The photo's own EXIF: shown only for a loose picture on the phone,
+        // not a comic page, so the button is there when there is a photo to
+        // read and gone when there is not.
+        if (onInfo != null) {
+            IconButton(onClick = onInfo) {
+                Icon(Icons.Filled.Info, contentDescription = stringResource(R.string.reader_photo_info), tint = Color.White)
+            }
+        }
         Box {
             var open by remember { mutableStateOf(false) }
             IconButton(onClick = { open = true }) {
@@ -756,9 +788,12 @@ private fun PageImage(
     reqHeight: Int,
     modifier: Modifier,
 ) {
-    var bitmap by remember(ref) { mutableStateOf<Bitmap?>(null) }
-    var failed by remember(ref) { mutableStateOf(false) }
-    LaunchedEffect(ref, reqWidth, reqHeight) {
+    // Keyed on the edit revision too: a rotate rewrites the file in place, which
+    // nothing else here would notice, so this re-decodes it when one lands.
+    val revision = model.photoRevision
+    var bitmap by remember(ref, revision) { mutableStateOf<Bitmap?>(null) }
+    var failed by remember(ref, revision) { mutableStateOf(false) }
+    LaunchedEffect(ref, reqWidth, reqHeight, revision) {
         val decoded = model.loadImage(ref, reqWidth, reqHeight)
         if (decoded == null) failed = true else bitmap = decoded
     }

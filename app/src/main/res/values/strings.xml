@@ -641,4 +641,34 @@
     <string name="sched_result_deleted">%1$d deleted</string>
     <string name="sched_result_failed_count">%1$d failed</string>
     <string name="sched_result_done">Done</string>
+
+    <!-- Photo info (EXIF) -->
+    <string name="reader_photo_info">Photo info</string>
+    <string name="photo_info_title">Photo info</string>
+    <string name="photo_section_shot">Taken</string>
+    <string name="photo_field_date">Date</string>
+    <string name="photo_section_camera">Camera</string>
+    <string name="photo_field_device">Device</string>
+    <string name="photo_field_lens">Lens</string>
+    <string name="photo_section_exposure">Exposure</string>
+    <string name="photo_field_exposure">Settings</string>
+    <string name="photo_field_focal">Focal length</string>
+    <string name="photo_section_location">Location</string>
+    <string name="photo_field_coords">Coordinates</string>
+    <string name="photo_open_map">Map</string>
+    <string name="photo_section_edit">Edit</string>
+    <string name="photo_edit_scope_local">this device\'s original</string>
+    <string name="photo_rotate_left">Rotate left</string>
+    <string name="photo_rotate_right">Rotate right</string>
+    <string name="photo_remove_location">Remove location</string>
+    <string name="photo_remove_all">Remove all</string>
+    <string name="photo_not_editable">This format can only be viewed</string>
+    <string name="photo_exif_empty">No details to show</string>
+    <string name="photo_remove_location_confirm">Remove the location?</string>
+    <string name="photo_remove_location_detail">Removes where this photo was taken. This cannot be undone.</string>
+    <string name="photo_remove_all_confirm">Remove all metadata?</string>
+    <string name="photo_remove_all_detail">Removes the location, camera, date and other identifying details. The photo\'s quality and orientation are kept. This cannot be undone.</string>
+    <string name="photo_iso">ISO %1$d</string>
+    <string name="photo_focal_35">%1$dmm equiv.</string>
+    <string name="photo_shutter">%1$s s</string>
 </resources>
