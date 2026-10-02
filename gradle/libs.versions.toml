@@ -42,6 +42,8 @@ room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 
 androidx-work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 
+androidx-exifinterface = { module = "androidx.exifinterface:exifinterface", version = "1.4.2" }
+
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
 androidx-lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "androidx-lifecycle" }

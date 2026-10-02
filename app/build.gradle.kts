@@ -199,6 +199,7 @@ dependencies {
     implementation(libs.room.ktx)
 
     implementation(libs.androidx.work.runtime)
+    implementation(libs.androidx.exifinterface)
     ksp(libs.room.compiler)
 
     implementation(platform(libs.compose.bom))

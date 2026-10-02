@@ -5,8 +5,8 @@ import android.graphics.BitmapFactory
 import android.graphics.BitmapRegionDecoder
 import android.graphics.Matrix
 import android.graphics.Rect
-import android.media.ExifInterface
 import android.util.Size
+import androidx.exifinterface.media.ExifInterface
 import java.io.ByteArrayInputStream
 import java.io.File
 
