@@ -159,10 +159,6 @@ class IconMeaningTest {
         "Info" to setOf("reader_photo_info"),
         // The EPUB reader's table of contents.
         "List" to setOf("epub_toc"),
-        // Packing files into an archive. The only control glyph still borrowed
-        // from Material -- the OLO set has no compress yet; it joins the family
-        // below the moment one is drawn.
-        "FolderZip" to setOf("archive_compress"),
 
         // --- OLO control glyphs (drawables, tinted) ---------------------------
         // The menu and action iconography is the OLO control-glyph family,
@@ -192,10 +188,9 @@ class IconMeaningTest {
         "ic_action_close" to setOf("menu_select_none", "action_cancel"),
         "ic_action_download" to setOf("action_download_selected"),
         "ic_action_share" to setOf("action_share_selected"),
-        // Joining split parts -- the counterpart of extract above. Packing
-        // into an archive (FolderZip -> archive_compress) is still a Material
-        // glyph: the OLO set has no compress glyph yet, and it swaps here the
-        // moment one lands.
+        // Packing files into an archive, and joining split parts -- the
+        // counterparts of extract above.
+        "ic_action_compress" to setOf("archive_compress"),
         "ic_action_merge" to setOf("archive_join"),
         // The clipboard verbs and rename, on the selection bar.
         "ic_action_cut" to setOf("action_cut"),

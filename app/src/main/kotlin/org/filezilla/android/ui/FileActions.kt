@@ -12,7 +12,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -219,12 +218,8 @@ fun SelectionBar(
                 }
                 onCompress?.let { compress ->
                     IconButton(onClick = compress) {
-                        // Still Material: the OLO control set has no compress
-                        // glyph yet (extract and join have theirs). Swapped to
-                        // ic_action_compress the moment it lands, so the bar
-                        // reads as one hand.
                         Icon(
-                            Icons.Filled.FolderZip,
+                            painterResource(R.drawable.ic_action_compress),
                             contentDescription = stringResource(R.string.archive_compress),
                         )
                     }
