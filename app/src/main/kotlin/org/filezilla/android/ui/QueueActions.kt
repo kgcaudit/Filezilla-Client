@@ -1,8 +1,7 @@
 package org.filezilla.android.ui
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -110,7 +109,7 @@ fun QueueOverflow(
 
     Box {
         IconButton(onClick = { open = true }) {
-            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.menu_more))
+            Icon(painterResource(R.drawable.ic_menu_more), contentDescription = stringResource(R.string.menu_more))
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             if (actions.canClearFinished) {

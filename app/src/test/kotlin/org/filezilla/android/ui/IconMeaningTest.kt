@@ -46,6 +46,15 @@ class IconMeaningTest {
      */
     private fun pairings(): List<Pair<String, String>> {
         val glyph = """Icons\.(?:AutoMirrored\.)?(?:Filled|Outlined)\.(\w+)"""
+        // The OLO control glyphs are drawables, not Material vectors, so the
+        // app draws them through painterResource. They carry a meaning exactly
+        // as the Material ones do -- an icon-only button's contentDescription,
+        // or the menu helper's label -- and the one-glyph-one-verb rule holds
+        // for them the same way. A glyph decided at runtime (painterResource of
+        // a variable) or left decorative (contentDescription = null, where a
+        // label beside it carries the meaning) is not scanned, the same as the
+        // Material side.
+        val draw = """R\.drawable\.(ic_\w+)"""
         val named = """stringResource\(\s*R\.string\.(\w+)"""
         val shapes = listOf(
             // Icon(Icons.Filled.X, contentDescription = stringResource(R.string.y
@@ -56,6 +65,11 @@ class IconMeaningTest {
                 to (1 to 2),
             // Item(R.string.y, Icons.Filled.X)
             Regex("""Item\(\s*R\.string\.(\w+)\s*,\s*$glyph""") to (2 to 1),
+            // Icon(painterResource(R.drawable.ic_x), contentDescription = stringResource(R.string.y
+            Regex("""painterResource\(\s*$draw\s*\)\s*,\s*contentDescription\s*=\s*$named""", RegexOption.DOT_MATCHES_ALL)
+                to (1 to 2),
+            // Item(R.string.y, R.drawable.ic_x)
+            Regex("""Item\(\s*R\.string\.(\w+)\s*,\s*$draw""") to (2 to 1),
         )
         return sources.flatMap { file ->
             val text = file.readText()
@@ -81,13 +95,17 @@ class IconMeaningTest {
      * exactly what had stopped happening.
      */
     private val meanings: Map<String, Set<String>> = mapOf(
-        // Closing. None of these destroys anything -- taking a transfer out
-        // of the queue, which does, is Cancel below, and keeping the two
-        // apart is most of what this test is for.
-        "Close" to setOf("action_cancel", "filter_clear", "menu_select_none", "search_close", "bookmark_remove"),
+        // Closing, where it is still a Material glyph: the filter bar, the
+        // search bar, forgetting a pinned place. The toolbars' own close and
+        // cancel moved to the OLO ic_action_close below; none of these
+        // destroys anything -- taking a transfer out of the queue, which
+        // does, is Cancel, and keeping the two apart is most of what this is
+        // for.
+        "Close" to setOf("filter_clear", "search_close", "bookmark_remove"),
         // Taking something out for good.
         "Cancel" to setOf("queue_remove"),
-        "Delete" to setOf("action_delete_selected", "sites_delete"),
+        // Deleting a server. Deleting selected files moved to ic_action_delete.
+        "Delete" to setOf("sites_delete"),
         // Clearing a list of what is finished with. The transfer list says
         // this in words now -- three kinds of clearing no three pictures
         // would tell apart -- so the broom is the log screen's alone.
@@ -107,32 +125,17 @@ class IconMeaningTest {
         "Repeat" to setOf("music_repeat"),
         "RepeatOn" to setOf("music_repeat_all"),
         "RepeatOne" to setOf("music_repeat_one"),
-        "Refresh" to setOf("queue_retry_now", "browse_refresh"),
-        // A menu of choices. Not the settings sheet, which is a gear: a ⋮
-        // that opens a panel with one switch in it is a promise unkept.
-        "MoreVert" to setOf("browse_more", "menu_more"),
+        // Retrying a transfer. The files screen's refresh moved to ic_menu_refresh.
+        "Refresh" to setOf("queue_retry_now"),
         // Chosen: a row, an option, either way the same idea.
         "Check" to setOf("browse_select", "chosen"),
-        // Renaming a file and editing a server are the same act on
-        // different things: changing what something is called or is.
-        "Edit" to setOf("action_rename_selected", "sites_edit"),
-        "ContentCut" to setOf("action_cut"),
-        "ContentCopy" to setOf("action_copy"),
-        // Making a folder, from the menu and from the paste bar. Two
-        // routes to one act, and the bar's exists because the round button
-        // that usually does it is hidden while the bar is up.
-        "CreateNewFolder" to setOf("new_folder_title", "fab_new_folder"),
-        "Upload" to setOf("browse_upload"),
-        // Mirroring one pane's folder onto the other's.
-        "Sync" to setOf("sync_title"),
-        "CheckCircle" to setOf("menu_select"),
-        "DoneAll" to setOf("menu_select_all"),
-        "Tune" to setOf("menu_view_options"),
-        // Which app opens which kind of file.
-        "AppShortcut" to setOf("menu_associations"),
-        "Share" to setOf("action_share_selected"),
-        "Download" to setOf("action_download_selected", "browse_download"),
+        // Editing a server. Renaming a selected file moved to ic_action_rename.
+        "Edit" to setOf("sites_edit"),
+        // Searching, where it is still a Material glyph: the pane's filter
+        // field. The files menu's filter row uses ic_menu_search.
         "Search" to setOf("menu_filter"),
+        // Downloading one row. The selection bar's download moved to ic_action_download.
+        "Download" to setOf("browse_download"),
         "Add" to setOf("sites_add", "bookmark_add", "sched_add"),
         "ArrowBack" to setOf("action_back"),
         // The player's rotate switch: free to turn with the phone, or held.
@@ -140,12 +143,6 @@ class IconMeaningTest {
         "ScreenLockRotation" to setOf("action_rotate_lock"),
         // The picture's fit: letterbox, crop-to-fill, or stretch.
         "AspectRatio" to setOf("action_aspect"),
-        // Packing files into an archive, and unpacking one. Verbs, a pair,
-        // and the only zip glyphs in the app -- the row icons for archives
-        // are the app's own tiles, not these.
-        "FolderZip" to setOf("archive_compress"),
-        "Unarchive" to setOf("archive_extract_all", "archive_extract_picked"),
-        "Merge" to setOf("archive_join"),
         "KeyboardArrowUp" to setOf("sites_move_up"),
         "KeyboardArrowDown" to setOf("sites_move_down"),
         // Taking a removable volume out.
@@ -162,6 +159,51 @@ class IconMeaningTest {
         "Info" to setOf("reader_photo_info"),
         // The EPUB reader's table of contents.
         "List" to setOf("epub_toc"),
+        // Packing files into an archive. The only control glyph still borrowed
+        // from Material -- the OLO set has no compress yet; it joins the family
+        // below the moment one is drawn.
+        "FolderZip" to setOf("archive_compress"),
+
+        // --- OLO control glyphs (drawables, tinted) ---------------------------
+        // The menu and action iconography is the OLO control-glyph family,
+        // drawn from the one source pack rather than borrowed from Material,
+        // so a whole menu or toolbar reads as one hand. The one-glyph-one-verb
+        // rule holds for them exactly as for the Material glyphs above.
+        //
+        // The ⋮ that opens any of the app's menus -- files, transfers, sync.
+        "ic_menu_more" to setOf("menu_more", "browse_more"),
+        // Unpacking an archive, the whole of it or the picked entries.
+        "ic_menu_unarchive" to setOf("archive_extract_all", "archive_extract_picked"),
+        // Making a folder, from the files menu and from the paste bar.
+        "ic_menu_new_folder" to setOf("new_folder_title", "fab_new_folder"),
+        "ic_menu_upload" to setOf("browse_upload"),
+        // Mirroring one pane's folder onto the other's.
+        "ic_menu_sync" to setOf("sync_title"),
+        // Entering selection, and selecting everything in it.
+        "ic_menu_select" to setOf("menu_select"),
+        "ic_menu_select_all" to setOf("menu_select_all"),
+        // The view-and-sort sheet, and the remembered-apps sheet.
+        "ic_menu_view_options" to setOf("menu_view_options"),
+        "ic_menu_associations" to setOf("menu_associations"),
+        // Re-reading the current folder.
+        "ic_menu_refresh" to setOf("browse_refresh"),
+        // The toolbars' own close and cancel: leaving selection, dropping the
+        // clipboard, backing out of trash selection.
+        "ic_action_close" to setOf("menu_select_none", "action_cancel"),
+        "ic_action_download" to setOf("action_download_selected"),
+        "ic_action_share" to setOf("action_share_selected"),
+        // Joining split parts -- the counterpart of extract above. Packing
+        // into an archive (FolderZip -> archive_compress) is still a Material
+        // glyph: the OLO set has no compress glyph yet, and it swaps here the
+        // moment one lands.
+        "ic_action_merge" to setOf("archive_join"),
+        // The clipboard verbs and rename, on the selection bar.
+        "ic_action_cut" to setOf("action_cut"),
+        "ic_action_copy" to setOf("action_copy"),
+        "ic_action_rename" to setOf("action_rename_selected"),
+        // Deleting the selected files -- the bin, distinct from the broom
+        // (clearing a list) and the stronger bin-with-a-cross (emptying trash).
+        "ic_action_delete" to setOf("action_delete_selected"),
     )
 
     @Test

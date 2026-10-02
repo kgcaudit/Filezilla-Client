@@ -11,19 +11,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.ContentCut
-import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CreateNewFolder
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderZip
-import androidx.compose.material.icons.filled.Merge
-import androidx.compose.material.icons.filled.Unarchive
-import androidx.compose.material.icons.automirrored.filled.NoteAdd
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -36,6 +25,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -65,11 +56,19 @@ fun NewThingFab(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.padding(bottom = 12.dp),
             ) {
-                DialItem(Icons.Filled.CreateNewFolder, R.string.fab_new_folder) {
+                DialItem(
+                    R.drawable.ic_menu_new_folder,
+                    R.string.fab_new_folder,
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                ) {
                     onExpandedChange(false)
                     onPick(NewThing.FOLDER)
                 }
-                DialItem(Icons.AutoMirrored.Filled.NoteAdd, R.string.fab_new_file) {
+                DialItem(
+                    R.drawable.ic_action_new_file,
+                    R.string.fab_new_file,
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                ) {
                     onExpandedChange(false)
                     onPick(NewThing.FILE)
                 }
@@ -95,26 +94,19 @@ fun NewThingFab(
     }
 }
 
-@Composable
-private fun DialItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: Int,
-    onClick: () -> Unit,
-) {
-    ExtendedFloatingActionButton(
-        onClick = onClick,
-        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        icon = { Icon(icon, contentDescription = null) },
-        text = { Text(stringResource(label)) },
-    )
-}
-
-/** The same item, for the entries drawn from the app's own artwork. */
+/**
+ * A speed-dial entry drawn from a drawable.
+ *
+ * The OLO control glyphs (new folder, new file) are single-ink and tint to
+ * the button's content colour; the app's own two-tone artwork (the server
+ * tile) must not be tinted, or it flattens to one colour -- so that one
+ * passes [Color.Unspecified].
+ */
 @Composable
 private fun DialItem(
     @androidx.annotation.DrawableRes icon: Int,
     label: Int,
+    tint: Color = Color.Unspecified,
     onClick: () -> Unit,
 ) {
     ExtendedFloatingActionButton(
@@ -125,8 +117,7 @@ private fun DialItem(
             Icon(
                 painter = androidx.compose.ui.res.painterResource(icon),
                 contentDescription = null,
-                // Unspecified, or the two-tone tile flattens to one colour.
-                tint = androidx.compose.ui.graphics.Color.Unspecified,
+                tint = tint,
                 modifier = Modifier.size(24.dp),
             )
         },
@@ -188,7 +179,7 @@ fun SelectionBar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onClear) {
-                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.menu_select_none))
+                Icon(painterResource(R.drawable.ic_action_close), contentDescription = stringResource(R.string.menu_select_none))
             }
             // One line, and never squeezed to a column of single characters:
             // the count keeps its own width and the actions take the rest.
@@ -213,7 +204,7 @@ fun SelectionBar(
                 onDownload?.let { download ->
                     IconButton(onClick = download) {
                         Icon(
-                            Icons.Filled.Download,
+                            painterResource(R.drawable.ic_action_download),
                             contentDescription = stringResource(R.string.action_download_selected),
                         )
                     }
@@ -221,13 +212,17 @@ fun SelectionBar(
                 onShare?.let { share ->
                     IconButton(onClick = share, enabled = canShare) {
                         Icon(
-                            Icons.Filled.Share,
+                            painterResource(R.drawable.ic_action_share),
                             contentDescription = stringResource(R.string.action_share_selected),
                         )
                     }
                 }
                 onCompress?.let { compress ->
                     IconButton(onClick = compress) {
+                        // Still Material: the OLO control set has no compress
+                        // glyph yet (extract and join have theirs). Swapped to
+                        // ic_action_compress the moment it lands, so the bar
+                        // reads as one hand.
                         Icon(
                             Icons.Filled.FolderZip,
                             contentDescription = stringResource(R.string.archive_compress),
@@ -237,7 +232,7 @@ fun SelectionBar(
                 onExtract?.let { extract ->
                     IconButton(onClick = extract) {
                         Icon(
-                            Icons.Filled.Unarchive,
+                            painterResource(R.drawable.ic_menu_unarchive),
                             contentDescription = stringResource(R.string.archive_extract_all),
                         )
                     }
@@ -245,26 +240,26 @@ fun SelectionBar(
                 onJoin?.let { join ->
                     IconButton(onClick = join) {
                         Icon(
-                            Icons.Filled.Merge,
+                            painterResource(R.drawable.ic_action_merge),
                             contentDescription = stringResource(R.string.archive_join),
                         )
                     }
                 }
                 IconButton(onClick = onCut) {
-                    Icon(Icons.Filled.ContentCut, contentDescription = stringResource(R.string.action_cut))
+                    Icon(painterResource(R.drawable.ic_action_cut), contentDescription = stringResource(R.string.action_cut))
                 }
                 IconButton(onClick = onCopy) {
-                    Icon(Icons.Filled.ContentCopy, contentDescription = stringResource(R.string.action_copy))
+                    Icon(painterResource(R.drawable.ic_action_copy), contentDescription = stringResource(R.string.action_copy))
                 }
                 IconButton(onClick = onRename, enabled = canRename) {
                     Icon(
-                        Icons.Filled.Edit,
+                        painterResource(R.drawable.ic_action_rename),
                         contentDescription = stringResource(R.string.action_rename_selected),
                     )
                 }
                 IconButton(onClick = onDelete) {
                     Icon(
-                        Icons.Filled.Delete,
+                        painterResource(R.drawable.ic_action_delete),
                         contentDescription = stringResource(R.string.action_delete_selected),
                     )
                 }
@@ -317,7 +312,7 @@ fun PasteBar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onCancel) {
-                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.action_cancel))
+                Icon(painterResource(R.drawable.ic_action_close), contentDescription = stringResource(R.string.action_cancel))
             }
             Text(
                 refusalText(refusal, count, cut) ?: stringResource(labelFor(kind), count),
@@ -327,7 +322,7 @@ fun PasteBar(
             onNewFolder?.let { make ->
                 IconButton(onClick = make) {
                     Icon(
-                        Icons.Filled.CreateNewFolder,
+                        painterResource(R.drawable.ic_menu_new_folder),
                         contentDescription = stringResource(R.string.fab_new_folder),
                     )
                 }
@@ -337,7 +332,7 @@ fun PasteBar(
             if (refusal == null) {
                 androidx.compose.material3.Button(onClick = onPaste, shape = androidx.compose.material3.MaterialTheme.shapes.small) {
                     Icon(
-                        Icons.Filled.ContentPaste,
+                        painterResource(R.drawable.ic_action_paste),
                         contentDescription = null,
                         modifier = Modifier.padding(end = 6.dp),
                     )
@@ -407,7 +402,7 @@ fun ArchiveSelectionBar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onClear) {
-                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.menu_select_none))
+                Icon(painterResource(R.drawable.ic_action_close), contentDescription = stringResource(R.string.menu_select_none))
             }
             Text(
                 stringResource(R.string.selection_count, count),
@@ -420,7 +415,7 @@ fun ArchiveSelectionBar(
             )
             IconButton(onClick = onExtract) {
                 Icon(
-                    Icons.Filled.Unarchive,
+                    painterResource(R.drawable.ic_menu_unarchive),
                     contentDescription = stringResource(R.string.archive_extract_picked),
                 )
             }

@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -595,7 +594,7 @@ private fun EntryRow(
             Box {
                 IconButton(onClick = { menuOpen = true }) {
                     Icon(
-                        Icons.Filled.MoreVert,
+                        painterResource(R.drawable.ic_menu_more),
                         contentDescription = stringResource(R.string.browse_more, entry.name),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

@@ -21,7 +21,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.ui.res.painterResource
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -258,7 +258,7 @@ private fun SyncJobCard(
             Switch(checked = job.enabled, onCheckedChange = onToggle)
             Box {
                 androidx.compose.material3.IconButton(onClick = { menu = true }) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.menu_more))
+                    Icon(painterResource(R.drawable.ic_menu_more), contentDescription = stringResource(R.string.menu_more))
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(

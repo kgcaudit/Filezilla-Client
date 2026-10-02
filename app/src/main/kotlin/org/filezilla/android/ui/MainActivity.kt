@@ -21,11 +21,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.Button
@@ -57,6 +55,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -437,12 +436,12 @@ private fun AppScreen(
                     },
                     navigationIcon = {
                         IconButton(onClick = { model.exitTrashSelection() }) {
-                            Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.action_cancel))
+                            Icon(painterResource(R.drawable.ic_action_close), contentDescription = stringResource(R.string.action_cancel))
                         }
                     },
                     actions = {
                         IconButton(onClick = { model.toggleSelectAllTrash() }) {
-                            Icon(Icons.Filled.DoneAll, contentDescription = stringResource(R.string.menu_select_all))
+                            Icon(painterResource(R.drawable.ic_menu_select_all), contentDescription = stringResource(R.string.menu_select_all))
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(

@@ -10,19 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material.icons.filled.AppShortcut
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.CreateNewFolder
-import androidx.compose.material.icons.filled.Unarchive
-import androidx.compose.material.icons.filled.DoneAll
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -81,30 +68,30 @@ fun BrowseOverflow(
     // of the phone, under nothing.
     Box {
         IconButton(onClick = { open = true }) {
-            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.menu_more))
+            Icon(painterResource(R.drawable.ic_menu_more), contentDescription = stringResource(R.string.menu_more))
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             onExtractAll?.let { action ->
-                Item(R.string.archive_extract_all, Icons.Filled.Unarchive) {
+                Item(R.string.archive_extract_all, R.drawable.ic_menu_unarchive) {
                     open = false
                     action()
                 }
                 HorizontalDivider()
             }
             onNewDirectory?.let { action ->
-                Item(R.string.new_folder_title, Icons.Filled.CreateNewFolder) {
+                Item(R.string.new_folder_title, R.drawable.ic_menu_new_folder) {
                     open = false
                     action()
                 }
             }
             onUpload?.let { action ->
-                Item(R.string.browse_upload, Icons.Filled.Upload) {
+                Item(R.string.browse_upload, R.drawable.ic_menu_upload) {
                     open = false
                     action()
                 }
             }
             onSync?.let { action ->
-                Item(R.string.sync_title, Icons.Filled.Sync) {
+                Item(R.string.sync_title, R.drawable.ic_menu_sync) {
                     open = false
                     action()
                 }
@@ -114,18 +101,18 @@ fun BrowseOverflow(
             // and the folder options below them were the same eye twice --
             // so the column of icons told the reader nothing that the words
             // beside it had not already said, and read as decoration.
-            Item(R.string.menu_select, Icons.Filled.CheckCircle) {
+            Item(R.string.menu_select, R.drawable.ic_menu_select) {
                 open = false
                 onSelectMode()
             }
-            Item(R.string.menu_select_all, Icons.Filled.DoneAll) {
+            Item(R.string.menu_select_all, R.drawable.ic_menu_select_all) {
                 open = false
                 onSelectAll()
             }
             HorizontalDivider()
             Item(
                 if (filterOpen) R.string.filter_clear else R.string.menu_filter,
-                Icons.Filled.FilterList,
+                R.drawable.ic_menu_search,
             ) {
                 open = false
                 onToggleFilter()
@@ -136,7 +123,7 @@ fun BrowseOverflow(
             // same two settings in two places meant they could be read in
             // two places and believed in neither. They live in view options,
             // which is the line directly above.
-            Item(R.string.menu_view_options, Icons.Filled.Tune) {
+            Item(R.string.menu_view_options, R.drawable.ic_menu_view_options) {
                 open = false
                 onViewOptions()
             }
@@ -145,12 +132,12 @@ fun BrowseOverflow(
             // transfers, and because a choice that cannot be unmade is a
             // trap: the wrong app picked once for a kind of file opened
             // daily would be wrong for ever with nothing admitting it.
-            Item(R.string.menu_associations, Icons.Filled.AppShortcut) {
+            Item(R.string.menu_associations, R.drawable.ic_menu_associations) {
                 open = false
                 onAssociations()
             }
             HorizontalDivider()
-            Item(R.string.browse_refresh, Icons.Filled.Refresh) {
+            Item(R.string.browse_refresh, R.drawable.ic_menu_refresh) {
                 open = false
                 onRefresh()
             }
@@ -159,12 +146,12 @@ fun BrowseOverflow(
 }
 
 @Composable
-private fun Item(labelRes: Int, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+private fun Item(labelRes: Int, @androidx.annotation.DrawableRes iconRes: Int, onClick: () -> Unit) {
     DropdownMenuItem(
         text = { Text(stringResource(labelRes)) },
         leadingIcon = {
             Icon(
-                icon,
+                painterResource(iconRes),
                 contentDescription = null,
                 // Material's default is onSurfaceVariant already, but the
                 // size is not: at 24dp against 14sp labels the icons were
