@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -118,6 +119,39 @@ fun OptionTile(
     modifier: Modifier = Modifier,
     /** Shown under the name when chosen: which way this sort runs. */
     footnote: String? = null,
+) = OptionTile(label, selected, onClick, modifier, footnote) {
+    Icon(icon, contentDescription = null, modifier = Modifier.padding(10.dp).size(22.dp))
+}
+
+/**
+ * The same tile drawn from a drawable rather than a Material vector.
+ *
+ * The OLO control glyphs -- the sort keys among them -- ship as tint-ready
+ * drawables, not Material icons, so the sort row reaches through here. The
+ * glyph is tinted to the tile's content colour the same way the vector one
+ * is, so chosen reads white on clay and the rest read muted, with no second
+ * code path for the look.
+ */
+@Composable
+fun OptionTile(
+    label: String,
+    icon: Painter,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    footnote: String? = null,
+) = OptionTile(label, selected, onClick, modifier, footnote) {
+    Icon(icon, contentDescription = null, modifier = Modifier.padding(10.dp).size(22.dp))
+}
+
+@Composable
+private fun OptionTile(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier,
+    footnote: String?,
+    glyph: @Composable () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
     Column(
@@ -132,11 +166,7 @@ fun OptionTile(
             contentColor = if (selected) colors.onPrimary else colors.onSurfaceVariant,
             border = if (selected) null else BorderStroke(1.dp, colors.outlineVariant),
         ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                modifier = Modifier.padding(10.dp).size(22.dp),
-            )
+            glyph()
         }
         Text(
             label,

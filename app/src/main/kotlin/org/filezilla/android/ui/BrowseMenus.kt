@@ -13,10 +13,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.AppShortcut
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.SortByAlpha
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Unarchive
@@ -46,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -246,12 +243,15 @@ fun ViewOptionsDialog(
                 SectionLabel(R.string.sort_mode)
                 Row(modifier = Modifier.fillMaxWidth()) {
                     // A different picture for each, which is the whole
-                    // point: an A-to-Z, a calendar, a set of bars and a
-                    // page say what four identical sort glyphs did not.
-                    SortTile(R.string.sort_name, Icons.Filled.SortByAlpha, SortKey.NAME, options, onApply)
-                    SortTile(R.string.sort_date, Icons.Filled.CalendarMonth, SortKey.DATE, options, onApply)
-                    SortTile(R.string.sort_size, Icons.Filled.BarChart, SortKey.SIZE, options, onApply)
-                    SortTile(R.string.sort_type, Icons.Filled.Description, SortKey.TYPE, options, onApply)
+                    // point: an A-to-Z, a clock, a set of bars and a tag
+                    // say what four identical sort glyphs did not. These are
+                    // the OLO control glyphs, drawn from the one source pack
+                    // so the row reads as one hand rather than four Material
+                    // borrowings.
+                    SortTile(R.string.sort_name, R.drawable.ic_menu_sort_name, SortKey.NAME, options, onApply)
+                    SortTile(R.string.sort_date, R.drawable.ic_menu_sort_date, SortKey.DATE, options, onApply)
+                    SortTile(R.string.sort_size, R.drawable.ic_menu_sort_size, SortKey.SIZE, options, onApply)
+                    SortTile(R.string.sort_type, R.drawable.ic_menu_sort_type, SortKey.TYPE, options, onApply)
                 }
 
                 SectionLabel(R.string.menu_folder_options)
@@ -289,7 +289,7 @@ fun ViewOptionsDialog(
 @Composable
 private fun RowScope.SortTile(
     labelRes: Int,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    @androidx.annotation.DrawableRes iconRes: Int,
     key: SortKey,
     options: BrowseOptions,
     onApply: (BrowseOptions) -> Unit,
@@ -297,7 +297,7 @@ private fun RowScope.SortTile(
     val chosen = options.sortKey == key
     OptionTile(
         label = stringResource(labelRes),
-        icon = icon,
+        icon = painterResource(iconRes),
         selected = chosen,
         onClick = {
             onApply(
