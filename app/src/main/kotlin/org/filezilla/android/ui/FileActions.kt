@@ -56,7 +56,7 @@ fun NewThingFab(
                 modifier = Modifier.padding(bottom = 12.dp),
             ) {
                 DialItem(
-                    R.drawable.ic_menu_new_folder,
+                    R.drawable.ic_action_new_folder,
                     R.string.fab_new_folder,
                     tint = MaterialTheme.colorScheme.onSecondaryContainer,
                 ) {
@@ -317,7 +317,7 @@ fun PasteBar(
             onNewFolder?.let { make ->
                 IconButton(onClick = make) {
                     Icon(
-                        painterResource(R.drawable.ic_menu_new_folder),
+                        painterResource(R.drawable.ic_action_new_folder),
                         contentDescription = stringResource(R.string.fab_new_folder),
                     )
                 }

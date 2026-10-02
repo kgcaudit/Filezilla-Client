@@ -154,8 +154,11 @@ class IconMeaningTest {
         "ic_menu_more" to setOf("menu_more", "browse_more"),
         // Unpacking an archive, the whole of it or the picked entries.
         "ic_menu_unarchive" to setOf("archive_extract_all", "archive_extract_picked"),
-        // Making a folder, from the files menu and from the paste bar.
-        "ic_menu_new_folder" to setOf("new_folder_title", "fab_new_folder"),
+        // Making a folder. The menu row's folder is the menu-layer glyph;
+        // the action surfaces (the speed dial, the paste bar) use the solid
+        // action-layer folder, a matching pair so both read as the same folder.
+        "ic_menu_new_folder" to setOf("new_folder_title"),
+        "ic_action_new_folder" to setOf("fab_new_folder"),
         "ic_menu_upload" to setOf("browse_upload"),
         // Mirroring one pane's folder onto the other's.
         "ic_menu_sync" to setOf("sync_title"),
