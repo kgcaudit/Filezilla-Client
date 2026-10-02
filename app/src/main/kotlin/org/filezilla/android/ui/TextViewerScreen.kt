@@ -18,7 +18,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -125,11 +124,10 @@ fun TextViewerScreen(viewer: MainViewModel.TextViewer, model: MainViewModel) {
                                     ).show()
                                 }
                             }
-                            // Still Material: writing to disk is its own act,
-                            // distinct from leaving edit mode (the check), and
-                            // the OLO set has no save glyph yet. Swapped to
-                            // ic_action_save the moment one lands.
-                        }) { Icon(Icons.Filled.Save, stringResource(R.string.viewer_save)) }
+                            // Writing to disk is its own act, distinct from
+                            // leaving edit mode (the check beside it) -- its own
+                            // glyph, the floppy.
+                        }) { Icon(painterResource(R.drawable.ic_action_save), stringResource(R.string.viewer_save)) }
                     }
                     IconButton(onClick = { editing = !editing }) {
                         Icon(
