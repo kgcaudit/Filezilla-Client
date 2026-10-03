@@ -97,6 +97,7 @@ fun FilePanes(
     val active = if (bothPanes) model.activePane else paneAt(pager.currentPage)
     val state = model.pane(active)
     var dialOpen by remember { mutableStateOf(false) }
+    var pasteDetail by remember { mutableStateOf(false) }
     var naming by remember { mutableStateOf<NewThing?>(null) }
     var renaming by remember { mutableStateOf(false) }
     var bulkRenaming by remember { mutableStateOf(false) }
@@ -290,9 +291,11 @@ fun FilePanes(
         // Hidden while a bar is up, and not only for tidiness: the button
         // floats over the bottom-right corner, which is exactly where the
         // paste button sits -- so the one action the paste bar exists for was
-        // underneath it and could not be pressed.
+        // underneath it and could not be pressed. Hidden too while a copy
+        // runs: the badge takes this same corner, the button become the work.
         val barShowing = (state.selecting && state.selection.isNotEmpty()) || model.clipboard != null
-        if (state.isLocal && model.storageGranted && !barShowing && state.archive == null) {
+        val pasting = model.localPaste
+        if (state.isLocal && model.storageGranted && !barShowing && state.archive == null && pasting == null) {
             NewThingFab(
                 expanded = dialOpen,
                 onExpandedChange = { dialOpen = it },
@@ -302,6 +305,27 @@ fun FilePanes(
                 modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
             )
         }
+        pasting?.let { progress ->
+            CopyProgressBadge(
+                progress = progress,
+                onClick = { pasteDetail = true },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+            )
+        }
+    }
+
+    // The detail behind the badge: what is copying, how far, and a way to
+    // stop. Tied to the paste still running -- once it ends, the badge goes
+    // and the sheet is closed with it, rather than lingering over a copy that
+    // is finished (and reopening itself the instant the next copy starts).
+    val paste = model.localPaste
+    LaunchedEffect(paste == null) { if (paste == null) pasteDetail = false }
+    if (pasteDetail && paste != null) {
+        CopyProgressSheet(
+            progress = paste,
+            onStop = model::cancelPaste,
+            onDismiss = { pasteDetail = false },
+        )
     }
 
     naming?.let { thing ->

@@ -261,6 +261,12 @@
     <string name="action_rename_selected">Rename</string>
     <string name="selection_count">%1$d selected</string>
     <string name="paste_into">Paste %1$d here</string>
+    <string name="copy_badge_preparing">Preparing to copy. Tap for details.</string>
+    <string name="copy_badge_progress">Copying, %1$d%%. Tap for details.</string>
+    <string name="copy_badge_done">Copied</string>
+    <string name="copy_progress_title">Copying</string>
+    <string name="copy_progress_items">%1$d of %2$d</string>
+    <string name="copy_progress_stop">Stop</string>
     <string name="paste_into_itself">A folder cannot go inside itself</string>
     <string name="new_folder_title">New folder</string>
     <string name="new_file_title">New file</string>

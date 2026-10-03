@@ -73,9 +73,17 @@ fun pasteLocally(
     paths: List<String>,
     target: String,
     choice: ConflictChoice,
+    /** Told how many items are finished and which one is starting, for a badge. */
+    onProgress: (done: Int, name: String) -> Unit = { _, _ -> },
+    /** Told each chunk as it is written, so the badge can fill as bytes land. */
+    onBytes: (Long) -> Unit = {},
+    /** Asked before each item, so a paste no longer wanted stops near at once. */
+    isCancelled: () -> Boolean = { false },
 ) {
-    for (path in paths) {
+    for ((done, path) in paths.withIndex()) {
+        if (isCancelled()) throw LocalOperations.Cancelled()
         val name = FilePath.name(path)
+        onProgress(done, name)
         val existing = File(FilePath.child(target, name))
         var asName: String? = null
         if (existing.exists()) {
@@ -83,7 +91,7 @@ fun pasteLocally(
                 ConflictChoice.SKIP -> continue
                 ConflictChoice.OVERWRITE -> {
                     if (FilePath.isWithin(FilePath.normalize(path), existing.absolutePath)) {
-                        overwriteFromWithin(mode, path, target, name)
+                        overwriteFromWithin(mode, path, target, name, onBytes, isCancelled)
                         continue
                     }
                     LocalOperations.delete(existing.absolutePath)
@@ -92,8 +100,8 @@ fun pasteLocally(
             }
         }
         when (mode) {
-            ClipboardMode.COPY -> LocalOperations.copy(path, target, asName)
-            ClipboardMode.MOVE -> LocalOperations.move(path, target, asName)
+            ClipboardMode.COPY -> LocalOperations.copy(path, target, asName, onBytes, isCancelled)
+            ClipboardMode.MOVE -> LocalOperations.move(path, target, asName, onBytes, isCancelled)
         }
     }
 }
@@ -186,11 +194,18 @@ fun syncLocally(
  * delete then move -- the delete would swallow the source and leave nothing to
  * move.
  */
-private fun overwriteFromWithin(mode: ClipboardMode, path: String, target: String, name: String) {
+private fun overwriteFromWithin(
+    mode: ClipboardMode,
+    path: String,
+    target: String,
+    name: String,
+    onBytes: (Long) -> Unit = {},
+    isCancelled: () -> Boolean = { false },
+) {
     val aside = freeNameIn(target, name)
     when (mode) {
-        ClipboardMode.COPY -> LocalOperations.copy(path, target, aside)
-        ClipboardMode.MOVE -> LocalOperations.move(path, target, aside)
+        ClipboardMode.COPY -> LocalOperations.copy(path, target, aside, onBytes, isCancelled)
+        ClipboardMode.MOVE -> LocalOperations.move(path, target, aside, onBytes, isCancelled)
     }
     LocalOperations.delete(FilePath.child(target, name))
     LocalOperations.rename(FilePath.child(target, aside), name)

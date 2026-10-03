@@ -12,6 +12,19 @@ import java.io.IOException
  */
 object LocalOperations {
 
+    /**
+     * Thrown to stop a copy partway, when the user asks it to stop.
+     *
+     * Not a failure: the bytes copied so far are real, and the one file that
+     * was mid-stream is removed on the way out so nothing is left looking whole
+     * when it is half-written. Its own type so the caller can tell "stopped on
+     * purpose" from "could not be done" and not report the first as an error.
+     */
+    class Cancelled : Exception()
+
+    /** Bytes at a time, so a copy can be stopped and shown without stalling. */
+    private const val COPY_BUFFER = 64 * 1024
+
     /** How a move turned out, since the cheap way is not always available. */
     enum class MoveKind {
         /** The filesystem renamed it, which costs nothing whatever the size. */
@@ -88,7 +101,13 @@ object LocalOperations {
      * the original -- and says which it did, because one of them takes as
      * long as the file is big and the caller may want to show that.
      */
-    fun move(path: String, intoDirectory: String, asName: String? = null): MoveKind {
+    fun move(
+        path: String,
+        intoDirectory: String,
+        asName: String? = null,
+        onBytes: (Long) -> Unit = {},
+        isCancelled: () -> Boolean = { false },
+    ): MoveKind {
         val source = File(FilePath.normalize(path))
         val target = File(FilePath.child(intoDirectory, asName ?: source.name))
         refuseUnsafe(source, target)
@@ -96,25 +115,44 @@ object LocalOperations {
 
         if (source.renameTo(target)) return MoveKind.RENAMED
 
-        copy(source.absolutePath, intoDirectory, asName)
+        copy(source.absolutePath, intoDirectory, asName, onBytes, isCancelled)
         delete(source.absolutePath)
         return MoveKind.COPIED
     }
 
-    /** Copies [path] into [intoDirectory], folders and all. */
-    fun copy(path: String, intoDirectory: String, asName: String? = null) {
+    /**
+     * Copies [path] into [intoDirectory], folders and all.
+     *
+     * [onBytes] is told each chunk as it is written, so the one copying can
+     * show how far along a large file is; [isCancelled] is asked between chunks
+     * and between files, so a copy that is no longer wanted stops near enough
+     * to at once rather than running to the end.
+     */
+    fun copy(
+        path: String,
+        intoDirectory: String,
+        asName: String? = null,
+        onBytes: (Long) -> Unit = {},
+        isCancelled: () -> Boolean = { false },
+    ) {
         val source = File(FilePath.normalize(path))
         val target = File(FilePath.child(intoDirectory, asName ?: source.name))
         refuseUnsafe(source, target)
         if (target.exists()) throw IOException("${target.name} already exists")
-        copyInto(source, target)
+        copyInto(source, target, onBytes, isCancelled)
     }
 
-    private fun copyInto(source: File, target: File) {
+    private fun copyInto(
+        source: File,
+        target: File,
+        onBytes: (Long) -> Unit = {},
+        isCancelled: () -> Boolean = { false },
+    ) {
         if (source.isDirectory && !isLink(source)) {
             if (!target.mkdirs()) throw IOException("could not create ${target.name}")
             for (child in source.listFiles().orEmpty()) {
-                copyInto(child, File(target, child.name))
+                if (isCancelled()) throw Cancelled()
+                copyInto(child, File(target, child.name), onBytes, isCancelled)
             }
             // Set last, after the children: writing each one into the new
             // folder stamps the folder with "now", so its own time has to be
@@ -122,10 +160,44 @@ object LocalOperations {
             keepModifiedTime(source, target)
             return
         }
-        source.inputStream().use { input ->
-            target.outputStream().use { output -> input.copyTo(output) }
+        try {
+            source.inputStream().use { input ->
+                target.outputStream().use { output ->
+                    val buffer = ByteArray(COPY_BUFFER)
+                    while (true) {
+                        if (isCancelled()) throw Cancelled()
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        output.write(buffer, 0, read)
+                        onBytes(read.toLong())
+                    }
+                }
+            }
+        } catch (cancelled: Cancelled) {
+            // A half-written file would read as whole. Take it back out, so
+            // stopping leaves the copied files beside an absence, not a lie.
+            target.delete()
+            throw cancelled
         }
         keepModifiedTime(source, target)
+    }
+
+    /**
+     * The bytes [path] holds, folders summed, for sizing a copy before it runs.
+     *
+     * Reads only the lengths the filesystem already knows, so it is cheap even
+     * for a deep folder, and a link is counted as nothing rather than followed
+     * out of the tree. Best-effort: a folder that cannot be listed contributes
+     * what its readable parts do, the same way the copy itself passes over what
+     * it cannot reach.
+     */
+    fun sizeOf(path: String): Long {
+        val file = File(FilePath.normalize(path))
+        return when {
+            isLink(file) -> 0L
+            file.isDirectory -> file.listFiles().orEmpty().sumOf { sizeOf(it.absolutePath) }
+            else -> file.length()
+        }
     }
 
     /**

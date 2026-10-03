@@ -19,6 +19,7 @@ import org.filezilla.android.storage.numberedName
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import org.filezilla.android.AppGraph
 import org.filezilla.android.R
 import org.filezilla.android.archive.ArchiveBrowsing
@@ -154,6 +155,43 @@ data class SearchState(
 
 /** Which side the file tab is showing. The seed of the two panes. */
 enum class FileSide { LOCAL, REMOTE }
+
+/**
+ * How far a paste inside the phone has got, for the badge in the corner.
+ *
+ * A copy inside the phone was the one kind of transfer nothing watched. The
+ * queue at the foot of the screen is fed by the transfer journal, which only
+ * network transfers write to, so a local copy left the bottom count at zero
+ * and all the screen could say was a bar sweeping left to right forever --
+ * which says "working" and never "how much". This is what the copy is
+ * actually doing, kept apart from the pane state because it belongs to the
+ * operation rather than to either folder, and read by the round badge that
+ * takes the new-thing button's place while a copy runs.
+ *
+ * [bytesTotal] is null until the background size scan finishes, which is why
+ * [fraction] can be null: with no total there is no fraction, and the badge
+ * shows an indeterminate sweep until there is one. [done] is set for the brief
+ * moment at the end, so the badge can show a tick before it goes away.
+ */
+data class LocalPasteProgress(
+    val filesDone: Int = 0,
+    /** Top-level items picked; null only in the first instant, before it is known. */
+    val filesTotal: Int? = null,
+    val bytesDone: Long = 0,
+    val bytesTotal: Long? = null,
+    /** The item being copied right now, for the detail sheet. */
+    val currentName: String = "",
+    val done: Boolean = false,
+) {
+    /**
+     * How full the ring is, 0..1, or null while there is no total to measure
+     * against. A total of zero -- every picked item empty -- counts as full
+     * rather than as a division by nothing.
+     */
+    val fraction: Float? get() = bytesTotal?.let { total ->
+        if (total <= 0L) 1f else (bytesDone.toFloat() / total).coerceIn(0f, 1f)
+    }
+}
 
 /** What the local pane is showing, and why it is not showing anything. */
 data class LocalBrowseState(
@@ -629,6 +667,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** What was cut or copied, and where from. Null until something is. */
     var clipboard by mutableStateOf<Clipboard?>(null)
         private set
+
+    /**
+     * How far the copy inside the phone has got, or null when none is running.
+     *
+     * Read by the round badge in the corner. Written from the ticker below
+     * rather than from the copy loop itself: a buffered copy reports every
+     * few kilobytes, and turning each of those into a recomposition would
+     * spend more time drawing the badge than copying the file. So the loop
+     * adds to plain counters and the ticker lifts them into this state a few
+     * times a second, which is as often as a ring is worth redrawing.
+     */
+    var localPaste by mutableStateOf<LocalPasteProgress?>(null)
+        private set
+
+    // Written from the copy thread, read by the ticker. Plain and atomic
+    // rather than snapshot state, so the copy does not touch the composition
+    // on every chunk; the ticker is the one place these become state.
+    private val pasteBytes = java.util.concurrent.atomic.AtomicLong(0)
+    private val pasteFiles = java.util.concurrent.atomic.AtomicInteger(0)
+    @Volatile private var pasteName = ""
+    @Volatile private var pasteStopped = false
+
+    /** Stops the running copy at the next chunk; the files already copied stay. */
+    fun cancelPaste() {
+        pasteStopped = true
+    }
 
     /** Picks up the pane's selection, leaving the originals where they are. */
     fun copySelection(id: PaneId) = pickUp(id, ClipboardMode.COPY)
@@ -1306,19 +1370,62 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         target: String,
         choice: ConflictChoice,
     ) {
-        update(id) { it.copy(loading = true, error = null) }
+        val paths = held.paths()
+        // Reset the counters and raise the badge before a byte moves. No top
+        // bar: the sweeping line that said "working" and nothing else is what
+        // this replaces, and two things saying the same thing at once is one
+        // too many.
+        pasteBytes.set(0)
+        pasteFiles.set(0)
+        pasteName = ""
+        pasteStopped = false
+        localPaste = LocalPasteProgress(filesTotal = paths.size)
+        // Put down at once, so the paste bar gives way to the badge rather
+        // than sitting over the corner the badge wants. Keeping a copy to
+        // paste twice is rarer than wondering why the bar will not leave.
+        clipboard = null
+
         viewModelScope.launch {
+            // The size is learned alongside the copy, not before it: the copy
+            // starts this instant and the ring is an indeterminate sweep until
+            // the scan comes back with a total, which for lengths the
+            // filesystem already knows is a moment. Starting the copy only
+            // after measuring would have the user waiting on a scan to watch a
+            // folder they can already see being copied.
+            val sizeScan = launch(Dispatchers.IO) {
+                val total = runCatching { paths.sumOf { LocalOperations.sizeOf(it) } }.getOrNull()
+                localPaste = localPaste?.copy(bytesTotal = total)
+            }
+            // A few times a second the counters become state. Often enough to
+            // read as motion, seldom enough that the copy is not drawing the
+            // badge instead of copying.
+            val ticker = launch {
+                while (isActive) {
+                    localPaste = localPaste?.copy(
+                        filesDone = pasteFiles.get(),
+                        bytesDone = pasteBytes.get(),
+                        currentName = pasteName,
+                    )
+                    delay(120)
+                }
+            }
+
             val failure = withContext(Dispatchers.IO) {
                 runCatching {
-                    pasteLocally(held.mode, held.paths(), target, choice)
+                    pasteLocally(
+                        held.mode, paths, target, choice,
+                        onProgress = { done, name ->
+                            pasteFiles.set(done)
+                            pasteName = name
+                        },
+                        onBytes = { pasteBytes.addAndGet(it) },
+                        isCancelled = { pasteStopped },
+                    )
                 }.exceptionOrNull()
             }
-            // Emptied whichever it was. Keeping a copy on the clipboard so it
-            // could be put down twice left the bar across the bottom of the
-            // screen for good, with no sign that anything had happened -- and
-            // putting the same thing in two places is rarer than wondering why
-            // the bar will not go away.
-            clipboard = null
+            sizeScan.cancel()
+            ticker.cancel()
+
             if (held.mode == ClipboardMode.MOVE) {
                 // The folder the items left also has to be redrawn, or the
                 // other pane goes on showing things that are no longer there.
@@ -1327,7 +1434,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             listLocal(id, pane(id).path)
-            failure?.let { error -> update(id) { it.copy(error = describeLocalFailure(error)) } }
+
+            when {
+                // Stopped on purpose is not a failure: the files that did copy
+                // are real, so the pane is left re-listed and the badge simply
+                // goes, with no tick and no error.
+                failure is LocalOperations.Cancelled -> localPaste = null
+                failure != null -> {
+                    localPaste = null
+                    update(id) { it.copy(error = describeLocalFailure(failure)) }
+                }
+                // A full ring and a tick for a moment, so "done" is seen rather
+                // than the badge just vanishing, and then it gives the corner
+                // back to the new-thing button.
+                else -> {
+                    localPaste = localPaste?.copy(
+                        done = true,
+                        filesDone = pasteFiles.get(),
+                        bytesDone = pasteBytes.get(),
+                    )
+                    delay(700)
+                    localPaste = null
+                }
+            }
         }
     }
 

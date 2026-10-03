@@ -258,6 +258,12 @@
     <string name="action_rename_selected">이름 변경</string>
     <string name="selection_count">%1$d개 선택</string>
     <string name="paste_into">여기에 %1$d개 붙여넣기</string>
+    <string name="copy_badge_preparing">복사 준비 중. 눌러서 상세 보기.</string>
+    <string name="copy_badge_progress">복사 중 %1$d%%. 눌러서 상세 보기.</string>
+    <string name="copy_badge_done">복사 완료</string>
+    <string name="copy_progress_title">복사 중</string>
+    <string name="copy_progress_items">%2$d개 중 %1$d개</string>
+    <string name="copy_progress_stop">중단</string>
     <string name="paste_into_itself">폴더를 자기 자신 안에 넣을 수 없습니다</string>
     <string name="new_folder_title">새 폴더</string>
     <string name="new_file_title">새 파일</string>

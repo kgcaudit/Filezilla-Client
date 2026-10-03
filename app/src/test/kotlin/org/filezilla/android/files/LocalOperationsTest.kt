@@ -187,6 +187,67 @@ class LocalOperationsTest {
     }
 
     /**
+     * The bytes are reported as they are written, and add up to the whole.
+     *
+     * This is what feeds the badge in the corner: a copy that did not say how
+     * many bytes it had moved could only show a bar sweeping back and forth. A
+     * folder, so the count has to cross more than one file and still total the
+     * sum of them.
+     */
+    @Test
+    fun `a copy reports every byte it writes`() {
+        temp.newFolder("tree", "sub")
+        File(temp.root, "tree/a.bin").writeBytes(ByteArray(5000))
+        File(temp.root, "tree/sub/b.bin").writeBytes(ByteArray(3000))
+        temp.newFolder("target")
+
+        var reported = 0L
+        LocalOperations.copy(path("tree"), path("target"), onBytes = { reported += it })
+
+        assertEquals(8000L, reported)
+        assertEquals(8000L, LocalOperations.sizeOf(path("target", "tree")))
+    }
+
+    /** The size of a tree is the sum of its files, for measuring a copy first. */
+    @Test
+    fun `sizeOf sums a folder's files`() {
+        temp.newFolder("tree", "sub")
+        File(temp.root, "tree/a.bin").writeBytes(ByteArray(1200))
+        File(temp.root, "tree/sub/b.bin").writeBytes(ByteArray(800))
+
+        assertEquals(2000L, LocalOperations.sizeOf(path("tree")))
+    }
+
+    /**
+     * A copy asked to stop stops, and does not leave a half-written file
+     * pretending to be whole.
+     *
+     * The file manager offers to stop a copy from the detail sheet. Stopping
+     * has to take the one file that was mid-stream back out -- a truncated file
+     * that reads as complete is worse than no file -- while leaving whole the
+     * ones that finished before the stop.
+     */
+    @Test
+    fun `a cancelled copy stops and removes the partial file`() {
+        File(temp.root, "big.bin").writeBytes(ByteArray(1_000_000))
+        temp.newFolder("target")
+
+        // Stop as soon as the first chunk lands, so the copy is partway in.
+        var seen = false
+        assertThrows(LocalOperations.Cancelled::class.java) {
+            LocalOperations.copy(
+                path("big.bin"),
+                path("target"),
+                onBytes = { seen = true },
+                isCancelled = { seen },
+            )
+        }
+
+        assertTrue("the copy should have started before stopping", seen)
+        assertFalse(File(temp.root, "target/big.bin").exists())
+    }
+
+    /**
      * The two ways a copy eats itself. Both walk forever, and both start
      * writing before they do, so they are refused before anything is made
      * rather than discovered halfway through.
