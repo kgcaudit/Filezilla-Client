@@ -163,6 +163,30 @@ class LocalOperationsTest {
     }
 
     /**
+     * A copy keeps the original's modified time.
+     *
+     * The bug this pins: the copy streamed the bytes and let the new file
+     * take the moment the write finished, so a photo taken last year, copied
+     * to the phone, read as copied-just-now -- and a thousand files copied at
+     * once all read as the same minute. A copy is the same file in another
+     * place; its clock has to say the same thing.
+     */
+    @Test
+    fun `a copy keeps the original's modified time`() {
+        val source = File(temp.root, "a.txt").apply { writeText("hello") }
+        // A year back, floored to the whole second: some filesystems keep
+        // only seconds, and the copy has to land on the same tick on those
+        // as on the ones that keep milliseconds.
+        val stamp = (System.currentTimeMillis() - 365L * 24 * 60 * 60 * 1000) / 1000 * 1000
+        assertTrue(source.setLastModified(stamp))
+        temp.newFolder("target")
+
+        LocalOperations.copy(path("a.txt"), path("target"))
+
+        assertEquals(stamp, File(temp.root, "target/a.txt").lastModified())
+    }
+
+    /**
      * The two ways a copy eats itself. Both walk forever, and both start
      * writing before they do, so they are refused before anything is made
      * rather than discovered halfway through.

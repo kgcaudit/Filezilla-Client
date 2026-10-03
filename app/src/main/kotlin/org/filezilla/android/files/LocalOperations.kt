@@ -116,11 +116,39 @@ object LocalOperations {
             for (child in source.listFiles().orEmpty()) {
                 copyInto(child, File(target, child.name))
             }
+            // Set last, after the children: writing each one into the new
+            // folder stamps the folder with "now", so its own time has to be
+            // put back once they are all in.
+            keepModifiedTime(source, target)
             return
         }
         source.inputStream().use { input ->
             target.outputStream().use { output -> input.copyTo(output) }
         }
+        keepModifiedTime(source, target)
+    }
+
+    /**
+     * Gives the copy the original's modified time.
+     *
+     * A copy of a file is that file in another place, not a new file made now
+     * -- so "when was this last changed" has to answer the same for both.
+     * Without this every copied file was stamped with the moment the copy
+     * finished, which is the one time about it that is never interesting: the
+     * date a photo was taken, a document last edited, became the date it was
+     * moved to the phone, and a folder of a thousand files all read as the
+     * same minute.
+     *
+     * Best-effort: `setLastModified` answers false rather than throwing where
+     * the filesystem will not take it (a read-only mount, a volume reached
+     * through the storage framework that keeps the time itself), and a copy
+     * whose bytes are whole should not be called a failure because its clock
+     * could not be set. A source time of zero means the source itself does
+     * not know, so there is nothing to carry over.
+     */
+    private fun keepModifiedTime(source: File, target: File) {
+        val time = source.lastModified()
+        if (time > 0L) target.setLastModified(time)
     }
 
     /**
