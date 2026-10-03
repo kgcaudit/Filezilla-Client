@@ -41,6 +41,8 @@ data class TransferEntity(
     @ColumnInfo(name = "updated_at") val updatedAtMillis: Long,
     /** Half of a move: the source goes once this has arrived. */
     @ColumnInfo(name = "remove_source", defaultValue = "0") val removeSourceWhenDone: Boolean = false,
+    /** When it was queued; the queue is ordered by this so it holds still. */
+    @ColumnInfo(name = "created_at", defaultValue = "0") val createdAtMillis: Long = 0,
 ) {
     fun toRecord(): TransferRecord = TransferRecord(
         id = id,
@@ -66,6 +68,7 @@ data class TransferEntity(
         lastError = lastError,
         updatedAtMillis = updatedAtMillis,
         removeSourceWhenDone = removeSourceWhenDone,
+        createdAtMillis = createdAtMillis,
     )
 
     companion object {
@@ -87,6 +90,7 @@ data class TransferEntity(
             lastError = record.lastError,
             updatedAtMillis = record.updatedAtMillis,
             removeSourceWhenDone = record.removeSourceWhenDone,
+            createdAtMillis = record.createdAtMillis,
         )
     }
 }

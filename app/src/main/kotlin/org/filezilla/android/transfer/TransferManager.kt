@@ -205,6 +205,7 @@ class TransferManager(
                 totalBytes = totalBytes,
                 updatedAtMillis = System.currentTimeMillis(),
                 removeSourceWhenDone = removeSource,
+                createdAtMillis = System.currentTimeMillis(),
             ),
         )
         id
@@ -241,6 +242,7 @@ class TransferManager(
                 totalBytes = totalBytes,
                 updatedAtMillis = System.currentTimeMillis(),
                 removeSourceWhenDone = removeSource,
+                createdAtMillis = System.currentTimeMillis(),
             ),
         )
         id

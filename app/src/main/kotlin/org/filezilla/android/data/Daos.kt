@@ -32,8 +32,16 @@ interface TransferDao {
     @Query("DELETE FROM transfers WHERE state = 'COMPLETED'")
     fun deleteCompleted()
 
-    /** Newest first, which is the order the queue screen wants. */
-    @Query("SELECT * FROM transfers ORDER BY updated_at DESC")
+    /**
+     * Newest-queued first, which is where the queue screen looks after a
+     * download is started -- and, unlike `updated_at`, a queue that holds
+     * still. `updated_at` moves every megabyte a running transfer writes, so
+     * ordering by it had two transfers running at once swap places several
+     * times a second. `created_at` is set once and never moves, and `id`
+     * breaks the tie for a batch queued within the same millisecond so the
+     * order within it is at least consistent between emissions.
+     */
+    @Query("SELECT * FROM transfers ORDER BY created_at DESC, id ASC")
     fun observeAll(): Flow<List<TransferEntity>>
 
     /**

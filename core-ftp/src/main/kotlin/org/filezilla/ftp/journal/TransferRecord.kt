@@ -96,6 +96,18 @@ data class TransferRecord(
     val updatedAtMillis: Long = 0,
 
     /**
+     * When the transfer was first queued, set once and never changed.
+     *
+     * The queue is shown in this order, and this is the field that keeps it
+     * still. [updatedAtMillis] moves every time the row is written -- which,
+     * for a running transfer, is every megabyte -- so ordering the list by it
+     * made two transfers running at once trade places several times a second,
+     * which is dizzying to watch. The moment a transfer was queued does not
+     * move, so the order does not either.
+     */
+    val createdAtMillis: Long = 0,
+
+    /**
      * True when this transfer is half of a move, and the thing it was made
      * from should go once it has arrived.
      *

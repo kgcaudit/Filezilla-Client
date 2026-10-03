@@ -28,7 +28,7 @@ abstract class AppDatabase : RoomDatabase() {
          * test went stale the moment a column was added -- so every existing
          * database looked unmigratable from a test that was only out of date.
          */
-        const val VERSION = 9
+        const val VERSION = 10
 
         /**
          * Every migration, in one list.
@@ -47,7 +47,26 @@ abstract class AppDatabase : RoomDatabase() {
                 ADD_SFTP,
                 ADD_PRIVATE_KEY,
                 ADD_SYNC_JOBS,
+                ADD_TRANSFER_CREATED_AT,
             )
+
+        /**
+         * Version 10 gives each transfer the moment it was queued, so the queue
+         * can be ordered by something that holds still.
+         *
+         * The queue was ordered by `updated_at`, which a running transfer
+         * rewrites every megabyte, so two transfers at once traded places many
+         * times a second. The new column is set once at enqueue and never
+         * moves. Existing rows are seeded from `updated_at` -- the best guess at
+         * their queue order there is, and good enough for transfers already in
+         * flight when the app updates; new ones carry the real time.
+         */
+        internal val ADD_TRANSFER_CREATED_AT = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `transfers` ADD COLUMN `created_at` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("UPDATE `transfers` SET `created_at` = `updated_at`")
+            }
+        }
 
         /**
          * Version 9 adds scheduled folder mirrors, each its own row.
