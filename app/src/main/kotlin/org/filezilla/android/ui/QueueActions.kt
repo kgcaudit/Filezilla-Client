@@ -44,7 +44,19 @@ data class QueueActions(
     val canStart: Boolean,
     val canClearFinished: Boolean,
     val canClearFailed: Boolean,
-    /** Anything at all in the list, finished or not. */
+    /**
+     * Something still going that the two tidy actions above cannot reach.
+     *
+     * Not simply "the list is not empty". Emptying the list is the one tidy
+     * action that reaches a *running* transfer -- it stops it and throws away
+     * the bytes it had, which is why it asks first. When everything in the
+     * list has finished one way or the other, "empty the list" removes exactly
+     * what "remove finished" and "remove the failed ones" already do, so it was
+     * a second button for the same result and a destructive one at that. It is
+     * offered only when there is a transfer still in flight -- running, waiting,
+     * paused or interrupted -- which is the only time it does something the
+     * other two cannot.
+     */
     val canClearAll: Boolean,
 ) {
     /** True when the menu would open on nothing. */
@@ -77,7 +89,11 @@ fun queueActionsFor(records: List<TransferRecord>): QueueActions {
         canStart = !moving && records.any { it.state in OUTSTANDING },
         canClearFinished = records.any { it.state == TransferState.COMPLETED },
         canClearFailed = records.any { it.state == TransferState.FAILED },
-        canClearAll = records.isNotEmpty(),
+        // Only when something is still in flight: a list that has entirely
+        // finished is emptied by "remove finished" and "remove the failed
+        // ones" together, so offering a destructive "empty the list" beside
+        // them was a second button for the same outcome.
+        canClearAll = records.any { !it.isTerminal },
     )
 }
 

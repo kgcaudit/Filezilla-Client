@@ -106,10 +106,34 @@ class QueueActionsTest {
         assertFalse(given(TransferState.COMPLETED).canClearFailed)
     }
 
-    /** Emptying the list reaches everything, running included. */
+    /**
+     * Emptying the list is offered only when something is still in flight.
+     *
+     * It is the one tidy action that reaches a running transfer -- stopping it
+     * and throwing away its bytes, which is why it asks first. When everything
+     * has finished, "remove finished" and "remove the failed ones" together
+     * already clear the list, so offering a destructive "empty the list" beside
+     * them would be a second button for the same outcome.
+     */
     @Test
-    fun `anything at all can be emptied`() {
+    fun `emptying is offered only while something is in flight`() {
         assertTrue(given(TransferState.RUNNING).canClearAll)
-        assertTrue(given(TransferState.COMPLETED).canClearAll)
+        assertTrue(given(TransferState.PENDING).canClearAll)
+        assertTrue(given(TransferState.PAUSED).canClearAll)
+        assertTrue(given(TransferState.INTERRUPTED).canClearAll)
+        assertTrue(given(TransferState.WAITING_FOR_NETWORK).canClearAll)
+    }
+
+    /**
+     * A list that has entirely finished does not offer to empty: the two
+     * specific clears reach every row, so the destructive catch-all would be a
+     * duplicate. A mix with something still in flight does offer it.
+     */
+    @Test
+    fun `a wholly finished list is tidied by the specific clears, not emptied`() {
+        assertFalse(given(TransferState.COMPLETED).canClearAll)
+        assertFalse(given(TransferState.FAILED).canClearAll)
+        assertFalse(given(TransferState.COMPLETED, TransferState.FAILED).canClearAll)
+        assertTrue(given(TransferState.COMPLETED, TransferState.RUNNING).canClearAll)
     }
 }
