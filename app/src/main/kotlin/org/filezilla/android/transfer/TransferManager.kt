@@ -37,8 +37,10 @@ import org.filezilla.ftp.protocol.ServerCapabilities
 import org.filezilla.ftp.sftp.SftpResilientTransfer
 import org.filezilla.ftp.transfer.ResilientTransfer
 import org.filezilla.ftp.transfer.RetryPolicy
+import org.filezilla.ftp.transfer.ResilientOutcome
 import org.filezilla.ftp.transfer.TransferAbort
 import org.filezilla.ftp.transfer.TransferProgressListener
+import org.filezilla.ftp.io.TransferReader
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -564,7 +566,7 @@ class TransferManager(
             capabilities = capabilities,
             retryPolicy = RetryPolicy(maxAttempts = settings.maxRetries),
             logger = log,
-            sleep = { millis -> networkGate.waitBeforeRetry(millis) { abort.isStopped } },
+            sleep = retrySleep(abort),
             connections = connection,
             abort = abort,
         ).download(
@@ -584,7 +586,7 @@ class TransferManager(
         // either: those bytes were dropped on purpose, and the server's copy
         // is then the only one left.
         if (MovedSource.mayRemoveRemote(finished, delivered)) {
-            removeRemoteSource(finished, connection)
+            removeRemoteSource(finished) { deleteOnServer(connection, finished.remotePath) }
         }
     }
 
@@ -598,14 +600,10 @@ class TransferManager(
      */
     private fun removeRemoteSource(
         record: TransferRecord,
-        connection: WorkerConnection,
+        delete: () -> Unit,
     ) = changingTheServer(record) {
         val name = record.remotePath.substringAfterLast('/')
-        val removed = runCatching {
-            onWorkerConnection(connection) { control ->
-                org.filezilla.ftp.protocol.FtpFileOperations(control).deleteFile(record.remotePath)
-            }
-        }
+        val removed = runCatching { delete() }
         if (removed.isSuccess) {
             log.log(LogLevel.STATUS, "Moved $name from the server; removed the copy there")
         } else {
@@ -616,6 +614,19 @@ class TransferManager(
             )
         }
     }
+
+    /** Deletes [remotePath] on the FTP worker's own connection, already logged in. */
+    private fun deleteOnServer(connection: WorkerConnection, remotePath: String) =
+        onWorkerConnection(connection) { control ->
+            org.filezilla.ftp.protocol.FtpFileOperations(control).deleteFile(remotePath)
+        }
+
+    /** Deletes [remotePath] on a fresh SFTP connection, which SFTP has no reuse for. */
+    private fun deleteOnServerSftp(settings: org.filezilla.ftp.sftp.SftpSettings, remotePath: String) =
+        org.filezilla.ftp.sftp.SftpEngine(settings, log).use {
+            it.connect()
+            it.deleteFile(remotePath)
+        }
 
     /**
      * Copies a finished download into the user's folder.
@@ -684,6 +695,43 @@ class TransferManager(
         settings: FtpSettings,
         connection: WorkerConnection,
         abort: TransferAbort,
+    ) = runUploadVia(record) { remoteFile, resume, progress, readerFactory ->
+        ResilientTransfer(
+            settings = settings,
+            capabilities = capabilities,
+            retryPolicy = RetryPolicy(maxAttempts = settings.maxRetries),
+            logger = log,
+            sleep = retrySleep(abort),
+            connections = connection,
+            abort = abort,
+        ).upload(remoteFile, resume = resume, progress = progress, readerFactory = readerFactory)
+    }
+
+    /**
+     * The body an upload and an SFTP upload share, bar the transfer itself.
+     *
+     * The two differed only in which resilient transfer they built -- FTP's
+     * reuses the worker's connection, SFTP's opens its own -- and in nothing
+     * else: both mark the record RUNNING, hand the same remote path, resume
+     * decision and progress to `.upload`, write COMPLETED from the same
+     * outcome, and remove the phone's copy when the record is half of a move.
+     * So [upload] is the one difference, and this is everything around it.
+     *
+     * No resume-safety decision: an upload's resume offset comes from the
+     * server's `SIZE`, not from anything recorded here, and the engine already
+     * chooses between `REST`+`STOR` and `APPE` from what the server advertised.
+     * Inventing one here would be exactly the duplication that keeping the
+     * logic in `:core-ftp` is meant to avoid. The journal still tracks the
+     * record so the queue survives a restart.
+     */
+    private inline fun runUploadVia(
+        record: TransferRecord,
+        upload: (
+            remoteFile: String,
+            resume: Boolean,
+            progress: TransferProgressListener,
+            readerFactory: () -> TransferReader,
+        ) -> ResilientOutcome,
     ) = changingTheServer(record) {
         val source = Uri.parse(record.localPath)
         var running = record.copy(
@@ -694,27 +742,19 @@ class TransferManager(
         )
         journal.put(running)
 
-        val result = ResilientTransfer(
-            settings = settings,
-            capabilities = capabilities,
-            retryPolicy = RetryPolicy(maxAttempts = settings.maxRetries),
-            logger = log,
-            sleep = { millis -> networkGate.waitBeforeRetry(millis) { abort.isStopped } },
-            connections = connection,
-            abort = abort,
-        ).upload(
-            remoteFile = record.remotePath,
+        val outcome = upload(
+            record.remotePath,
             // Resume is what would otherwise treat a file already on the
             // server as a half-sent copy of this one and append to it,
             // splicing two different files together.
-            resume = uploadResumes(record.destination),
-            progress = progressListener(record),
+            uploadResumes(record.destination),
+            progressListener(record),
         ) { storage.readerFor(source) }
 
         running = running.copy(
             state = TransferState.COMPLETED,
-            bytesTransferred = result.outcome.resumeOffset + result.outcome.bytesTransferred,
-            totalBytes = result.outcome.totalSize ?: running.totalBytes,
+            bytesTransferred = outcome.outcome.resumeOffset + outcome.outcome.bytesTransferred,
+            totalBytes = outcome.outcome.totalSize ?: running.totalBytes,
             updatedAtMillis = System.currentTimeMillis(),
         )
         journal.put(running)
@@ -724,6 +764,14 @@ class TransferManager(
         // record still says it arrived, which is the harmless way round.
         if (MovedSource.isDue(running)) removeLocalSource(running)
     }
+
+    /**
+     * The retry pause both resilient transfers wait with: the network gate's
+     * back-off, cut short when the transfer has been stopped. The one copy of
+     * a lambda every transfer here built for itself.
+     */
+    private fun retrySleep(abort: TransferAbort): (Long) -> Unit =
+        { millis -> networkGate.waitBeforeRetry(millis) { abort.isStopped } }
 
     /**
      * Takes the phone's copy away once the server has it.
@@ -781,7 +829,9 @@ class TransferManager(
                 )
                 journal.put(done)
                 val delivered = publish(done, partial)
-                if (MovedSource.mayRemoveRemote(done, delivered)) removeRemoteSourceSftp(done, settings)
+                if (MovedSource.mayRemoveRemote(done, delivered)) {
+                    removeRemoteSource(done) { deleteOnServerSftp(settings, done.remotePath) }
+                }
                 return
             }
             is org.filezilla.ftp.journal.ResumeDecision.ResumeFrom -> {
@@ -830,7 +880,7 @@ class TransferManager(
                 settings = settings,
                 retryPolicy = RetryPolicy(maxAttempts = settings.maxRetries),
                 logger = log,
-                sleep = { millis -> networkGate.waitBeforeRetry(millis) { abort.isStopped } },
+                sleep = retrySleep(abort),
                 abort = abort,
             ).download(
                 remoteFile = record.remotePath,
@@ -861,7 +911,9 @@ class TransferManager(
         }
 
         val delivered = publish(finished, partial)
-        if (MovedSource.mayRemoveRemote(finished, delivered)) removeRemoteSourceSftp(finished, settings)
+        if (MovedSource.mayRemoveRemote(finished, delivered)) {
+            removeRemoteSource(finished) { deleteOnServerSftp(settings, finished.remotePath) }
+        }
     }
 
     /** The SFTP counterpart of [runUpload]. */
@@ -869,60 +921,14 @@ class TransferManager(
         record: TransferRecord,
         settings: org.filezilla.ftp.sftp.SftpSettings,
         abort: TransferAbort,
-    ) = changingTheServer(record) {
-        val source = Uri.parse(record.localPath)
-        var running = record.copy(
-            state = TransferState.RUNNING,
-            attempts = record.attempts + 1,
-            lastError = null,
-            updatedAtMillis = System.currentTimeMillis(),
-        )
-        journal.put(running)
-
-        val result = SftpResilientTransfer(
+    ) = runUploadVia(record) { remoteFile, resume, progress, readerFactory ->
+        SftpResilientTransfer(
             settings = settings,
             retryPolicy = RetryPolicy(maxAttempts = settings.maxRetries),
             logger = log,
-            sleep = { millis -> networkGate.waitBeforeRetry(millis) { abort.isStopped } },
+            sleep = retrySleep(abort),
             abort = abort,
-        ).upload(
-            remoteFile = record.remotePath,
-            resume = uploadResumes(record.destination),
-            progress = progressListener(record),
-        ) { storage.readerFor(source) }
-
-        running = running.copy(
-            state = TransferState.COMPLETED,
-            bytesTransferred = result.outcome.resumeOffset + result.outcome.bytesTransferred,
-            totalBytes = result.outcome.totalSize ?: running.totalBytes,
-            updatedAtMillis = System.currentTimeMillis(),
-        )
-        journal.put(running)
-
-        if (MovedSource.isDue(running)) removeLocalSource(running)
-    }
-
-    /** The SFTP counterpart of [removeRemoteSource]. */
-    private fun removeRemoteSourceSftp(
-        record: TransferRecord,
-        settings: org.filezilla.ftp.sftp.SftpSettings,
-    ) = changingTheServer(record) {
-        val name = record.remotePath.substringAfterLast('/')
-        val removed = runCatching {
-            org.filezilla.ftp.sftp.SftpEngine(settings, log).use {
-                it.connect()
-                it.deleteFile(record.remotePath)
-            }
-        }
-        if (removed.isSuccess) {
-            log.log(LogLevel.STATUS, "Moved $name from the server; removed the copy there")
-        } else {
-            log.log(
-                LogLevel.ERROR,
-                "Fetched $name but could not remove it from the server " +
-                    "(${removed.exceptionOrNull()?.message})",
-            )
-        }
+        ).upload(remoteFile, resume = resume, progress = progress, readerFactory = readerFactory)
     }
 
     // ----------------------------------------------------------------- helpers
@@ -1291,7 +1297,7 @@ class TransferManager(
                         settings = settings,
                         retryPolicy = RetryPolicy(maxAttempts = settings.maxRetries),
                         logger = log,
-                        sleep = { millis -> networkGate.waitBeforeRetry(millis) { abort.isStopped } },
+                        sleep = retrySleep(abort),
                         abort = abort,
                     ).download(
                         remoteFile = remotePath,
@@ -1313,7 +1319,7 @@ class TransferManager(
                             capabilities = capabilities,
                             retryPolicy = RetryPolicy(maxAttempts = settings.maxRetries),
                             logger = log,
-                            sleep = { millis -> networkGate.waitBeforeRetry(millis) { abort.isStopped } },
+                            sleep = retrySleep(abort),
                             connections = connection,
                             abort = abort,
                         ).download(
@@ -1361,7 +1367,7 @@ class TransferManager(
                             settings = settings,
                             retryPolicy = RetryPolicy(maxAttempts = settings.maxRetries),
                             logger = log,
-                            sleep = { millis -> networkGate.waitBeforeRetry(millis) { abort.isStopped } },
+                            sleep = retrySleep(abort),
                             abort = abort,
                         ).upload(
                             remoteFile = remotePath,
@@ -1383,7 +1389,7 @@ class TransferManager(
                                 capabilities = capabilities,
                                 retryPolicy = RetryPolicy(maxAttempts = settings.maxRetries),
                                 logger = log,
-                                sleep = { millis -> networkGate.waitBeforeRetry(millis) { abort.isStopped } },
+                                sleep = retrySleep(abort),
                                 connections = connection,
                                 abort = abort,
                             ).upload(
