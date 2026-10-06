@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
@@ -374,6 +375,17 @@ class TransferManager(
     private fun claimable(): List<TransferRecord> =
         journal.all()
             .filter { it.state == TransferState.PENDING || it.state == TransferState.INTERRUPTED }
+            // Not one that is still unwinding a stop. Between JournalledTransfer
+            // writing INTERRUPTED on its way out and runOne's catch writing the
+            // terminal PAUSED/removed state, the record is momentarily back in a
+            // claimable state, and with two workers the sibling could take it
+            // and re-run a transfer the user just paused or cancelled. The stop
+            // signal is set for exactly that window and cleared in runOne's
+            // finally once the terminal state is in the journal, so skipping a
+            // record that still carries one closes the window without reordering
+            // the unwind. A plain failure never sets the signal, so a genuinely
+            // interrupted transfer is still picked back up.
+            .filterNot { pauseSignal.isRequested(it.id) }
             .sortedBy { it.updatedAtMillis }
 
     /**
@@ -478,7 +490,12 @@ class TransferManager(
             }
             rates.remove(record.id)
             aborts.remove(record.id)
-            activeState.value = activeState.value - record.id
+            // Atomic read-modify-write: two workers reach this and publishProgress
+            // at once, and `value = value - id` / `value = value + …` can read the
+            // same map and write back over each other, dropping one change -- a
+            // removed transfer's deletion clobbered by the sibling's progress add
+            // left a ghost "transferring" card that never cleared.
+            activeState.update { it - record.id }
             pauseSignal.clear(record.id)
         }
     }
@@ -521,7 +538,8 @@ class TransferManager(
 
     /** Puts one transfer's live figures where the screen can see them. */
     private fun publishProgress(progress: ActiveProgress) {
-        activeState.value = activeState.value + (progress.id to progress)
+        // Atomic: see the note in runOne's finally. Two workers publish at once.
+        activeState.update { it + (progress.id to progress) }
     }
 
     // ------------------------------------------------------------- downloading

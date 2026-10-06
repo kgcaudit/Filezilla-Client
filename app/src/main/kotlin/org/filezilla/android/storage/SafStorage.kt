@@ -86,35 +86,42 @@ class SafStorage(private val context: Context) {
         if (!root.canWrite()) {
             throw IOException("no permission to write to the destination folder")
         }
-        // Serialised: see [makingFolders].
-        val folder = synchronized(makingFolders) { descend(root, destination.subPath) }
+        // Serialised, and the whole way through creating the file -- not just
+        // the folder descent. Two workers run at once, and if the conflict
+        // check, the numbering and createFile were done unlocked, two
+        // same-named downloads into one folder would both see nothing there (or
+        // both pick "name (1)"), and the second would overwrite the first:
+        // silent local data loss. Creating the file under the lock reserves the
+        // name before the next worker gets to look. Only the byte copy, which
+        // is slow, happens outside.
+        val created = synchronized(makingFolders) {
+            val folder = descend(root, destination.subPath)
+            var name = displayName
+            val existing = folder.findFile(displayName)?.takeIf { it.isFile }
+            if (existing != null) {
+                when (destination.onConflict) {
+                    // Nothing to write, and null says so rather than throwing:
+                    // the transfer succeeded, it simply has nowhere to go. What
+                    // becomes of the fetched bytes is the caller's to decide.
+                    ConflictChoice.SKIP -> return null
 
-        var name = displayName
-        val existing = folder.findFile(displayName)?.takeIf { it.isFile }
-        if (existing != null) {
-            when (destination.onConflict) {
-                // Nothing to write, and null says so rather than throwing:
-                // the transfer succeeded, it simply has nowhere to go. What
-                // becomes of the fetched bytes is the caller's to decide.
-                ConflictChoice.SKIP -> return null
+                    // Removed first, because createFile would otherwise hand back
+                    // "name (1)" and leave the old file in place -- which is the
+                    // opposite of what overwrite means.
+                    ConflictChoice.OVERWRITE ->
+                        if (!existing.delete()) {
+                            throw IOException("could not replace the existing $displayName")
+                        }
 
-                // Removed first, because createFile would otherwise hand back
-                // "name (1)" and leave the old file in place -- which is the
-                // opposite of what overwrite means.
-                ConflictChoice.OVERWRITE ->
-                    if (!existing.delete()) {
-                        throw IOException("could not replace the existing $displayName")
-                    }
-
-                // Numbered here rather than by the provider. Left to it,
-                // "movie.mkv" became "movie.mkv (1)" -- a name whose extension
-                // is now " (1)", so nothing will open it.
-                ConflictChoice.KEEP_BOTH -> name = freeNameIn(folder, displayName)
+                    // Numbered here rather than by the provider. Left to it,
+                    // "movie.mkv" became "movie.mkv (1)" -- a name whose extension
+                    // is now " (1)", so nothing will open it.
+                    ConflictChoice.KEEP_BOTH -> name = freeNameIn(folder, displayName)
+                }
             }
+            folder.createFile(mimeTypeFor(name), name)
+                ?: throw IOException("could not create $name in the destination folder")
         }
-
-        val created = folder.createFile(mimeTypeFor(name), name)
-            ?: throw IOException("could not create $name in the destination folder")
 
         try {
             context.contentResolver.openOutputStream(created.uri, "w")?.use { out ->
@@ -159,27 +166,38 @@ class SafStorage(private val context: Context) {
         // nothing, and promised to save it on some later run. The race is
         // between "to/Vision/test", whose mkdirs makes Vision as well, and
         // "to/Vision" arriving a moment later.
-        synchronized(makingFolders) {
+        // Folder creation, conflict resolution and reserving the name all under
+        // the one lock. Two workers run at once; done unlocked, two same-named
+        // downloads into one folder would both find nothing there (or both pick
+        // "name (1)") and the second would overwrite the first -- silent data
+        // loss. Creating the empty file under the lock claims the name before
+        // the next worker looks; only the byte copy, which is slow, is outside.
+        val target = synchronized(makingFolders) {
             // Asked again after mkdirs fails, in case something outside this
             // app made it in between. The lock is what deals with the case
             // inside it; see [makingFolders].
             if (!folder.isDirectory && !folder.mkdirs() && !folder.isDirectory) {
                 throw IOException("could not create the destination folder")
             }
-        }
+            var t = File(folder, displayName)
+            if (t.exists()) {
+                when (destination.onConflict) {
+                    ConflictChoice.SKIP -> return null
 
-        var target = File(folder, displayName)
-        if (target.exists()) {
-            when (destination.onConflict) {
-                ConflictChoice.SKIP -> return null
+                    ConflictChoice.OVERWRITE ->
+                        if (!t.delete()) {
+                            throw IOException("could not replace the existing $displayName")
+                        }
 
-                ConflictChoice.OVERWRITE ->
-                    if (!target.delete()) {
-                        throw IOException("could not replace the existing $displayName")
-                    }
-
-                ConflictChoice.KEEP_BOTH -> target = freeFileIn(folder, displayName)
+                    ConflictChoice.KEEP_BOTH -> t = freeFileIn(folder, displayName)
+                }
             }
+            // Claim the chosen name now, so a sibling worker numbering its own
+            // copy sees this one and steps past it rather than onto it.
+            if (!t.createNewFile() && !t.isFile) {
+                throw IOException("could not create $displayName in the destination folder")
+            }
+            t
         }
 
         partial.inputStream().use { input ->

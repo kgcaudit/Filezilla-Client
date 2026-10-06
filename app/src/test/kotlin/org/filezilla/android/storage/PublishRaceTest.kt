@@ -36,15 +36,23 @@ class PublishRaceTest {
     @get:Rule
     val phone = TemporaryFolder()
 
-    private val storage: SafStorage
-        get() = SafStorage(ApplicationProvider.getApplicationContext())
+    // One instance, as production has it: AppGraph builds a single SafStorage
+    // that both queue workers publish through, so the lock inside it is what
+    // serialises them. A fresh instance per call would lock on a different
+    // object each time and prove nothing about the race.
+    private val storage = SafStorage(ApplicationProvider.getApplicationContext())
 
     private fun partial(text: String): File =
         File.createTempFile("partial", ".part").apply { writeText(text) }
 
-    private fun into(root: File, vararg subPath: String) = DownloadDestination(
+    private fun into(
+        root: File,
+        vararg subPath: String,
+        onConflict: ConflictChoice = ConflictChoice.DEFAULT,
+    ) = DownloadDestination(
         tree = Uri.fromFile(root),
         subPath = subPath.toList(),
+        onConflict = onConflict,
     )
 
     /**
@@ -74,6 +82,48 @@ class PublishRaceTest {
 
                 assertEquals("round $round", "one", File(root, "Vision/test/film.mkv").readText())
                 assertEquals("round $round", "two", File(root, "Vision/subtitle.srt").readText())
+            }
+        } finally {
+            workers.shutdownNow()
+        }
+    }
+
+    /**
+     * Two different files with the same name landing in one folder at once.
+     *
+     * The companion to the test above, and a worse failure: there the two had
+     * different names and only the folder overlapped; here the *name* collides.
+     * Keep-both numbers a second copy only once the first is there to be seen,
+     * so if the existence check, the numbering and the create are not held
+     * together, both workers see an empty folder, both write "film.mkv", and
+     * one file's bytes land on the other's -- a download reported finished, with
+     * the wrong contents, and no sign anything was lost. Both must survive, each
+     * with its own bytes.
+     */
+    @Test
+    fun `two same-named files landing at once both survive`() {
+        val workers = Executors.newFixedThreadPool(2)
+        try {
+            repeat(60) { round ->
+                val root = phone.newFolder("same-$round")
+                val start = CountDownLatch(1)
+                val a = workers.submit {
+                    start.await()
+                    storage.publish(partial("one"), into(root, onConflict = ConflictChoice.KEEP_BOTH), "film.mkv")
+                }
+                val b = workers.submit {
+                    start.await()
+                    storage.publish(partial("two"), into(root, onConflict = ConflictChoice.KEEP_BOTH), "film.mkv")
+                }
+
+                start.countDown()
+                a.get(20, TimeUnit.SECONDS)
+                b.get(20, TimeUnit.SECONDS)
+
+                // Two files, and between them both sets of bytes -- neither
+                // overwritten by the other.
+                val contents = root.listFiles().orEmpty().filter { it.isFile }.map { it.readText() }.sorted()
+                assertEquals("round $round", listOf("one", "two"), contents)
             }
         } finally {
             workers.shutdownNow()

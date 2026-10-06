@@ -9,6 +9,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -1351,6 +1352,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun paste(id: PaneId) {
         val held = clipboard ?: return
         if (pasteRefusal(id) != null) return
+        // One local paste at a time. The progress badge is driven by a single
+        // set of process-wide counters (pasteBytes/pasteFiles/pasteName) and
+        // one `localPaste`; a second paste starting mid-copy would reset those
+        // to zero under the first, corrupt its badge and total, and a single
+        // cancel would stop both. The badge sits where the paste button is, so
+        // this is not a case the user can easily reach, and ignoring the second
+        // press until the first finishes is less surprising than garbling it.
+        if (localPaste != null) return
         val target = pane(id).path
         viewModelScope.launch {
             val conflicts = withContext(Dispatchers.IO) {
@@ -4744,9 +4753,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         stopSearch(id)
         update(id) { it.copy(search = SearchState(needle = needle)) }
 
-        searchJobs[id] = viewModelScope.launch {
-            val outcome = runCatching {
-                withContext(Dispatchers.IO) { walkFor(state, needle) { hit -> reportHit(id, needle, hit) } }
+        val job = viewModelScope.launch {
+            // Cancellation must propagate rather than be caught: a cancelled
+            // walk (replaced by a newer search, or stopped by the user) must
+            // not run the completion below -- it would write "finished" onto
+            // the newer search's state and, worse, remove the newer search's
+            // job from the map so it could no longer be stopped, leaving it
+            // walking the server with nothing able to call it off. So only a
+            // genuine failure becomes a result; a CancellationException is
+            // rethrown and ends this coroutine here.
+            val outcome = try {
+                Result.success(
+                    withContext(Dispatchers.IO) { walkFor(state, needle) { hit -> reportHit(id, needle, hit) } },
+                )
+            } catch (cancel: kotlinx.coroutines.CancellationException) {
+                throw cancel
+            } catch (error: Throwable) {
+                Result.failure(error)
             }
             update(id) { pane ->
                 // Only if this is still the same search. A second one
@@ -4765,8 +4788,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     ),
                 )
             }
-            searchJobs.remove(id)
+            // Only this job's own entry, never a newer search's that replaced it.
+            if (searchJobs[id] === coroutineContext[kotlinx.coroutines.Job]) searchJobs.remove(id)
         }
+        searchJobs[id] = job
     }
 
     /** Calls off [id]'s search and forgets its results. */
@@ -5687,7 +5712,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun watchFinishedTransfers() {
         viewModelScope.launch {
-            transfers.collect { records ->
+            // Collect `transfers`, not the raw query: this is also what keeps
+            // the WhileSubscribed StateFlow alive, so dropping it for the raw
+            // flow left nothing subscribed and `transfers.value` stuck empty.
+            //
+            // drop(1) skips the StateFlow's initial value. A StateFlow hands a
+            // new collector its current value (emptyList, before the query has
+            // loaded) first, so seeding from "the first emission" seeded on that
+            // empty list; the real load then arrived with every already-finished
+            // transfer looking fresh, and re-listed -- a server login -- for each
+            // one whose folder a pane was showing. Skipping that synthetic first
+            // emission seeds from the real state instead.
+            transfers.drop(1).collect { records ->
                 val finished = records
                     .filter { it.state == TransferState.COMPLETED }
                     .associateBy { it.id }
