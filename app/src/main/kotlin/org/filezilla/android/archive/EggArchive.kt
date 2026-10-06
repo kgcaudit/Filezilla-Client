@@ -170,9 +170,6 @@ class EggArchive private constructor(
 
         internal const val METHOD_STORE = 0
         internal const val METHOD_DEFLATE = 1
-        internal const val METHOD_BZIP2 = 2
-        internal const val METHOD_AZO = 3
-        internal const val METHOD_LZMA = 4
 
         internal const val ENCRYPT_KEY_XOR = 0
         internal const val ENCRYPT_AES128 = 1

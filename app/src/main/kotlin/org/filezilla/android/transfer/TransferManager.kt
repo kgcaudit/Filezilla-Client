@@ -1082,11 +1082,6 @@ class TransferManager(
         }
     }
 
-    /** True when the queue is holding work back for the network. */
-    suspend fun hasNetworkHeldWork(): Boolean = withContext(io) {
-        journal.all().any { it.state == TransferState.WAITING_FOR_NETWORK }
-    }
-
     private fun fail(record: TransferRecord, reason: String) {
         log.log(LogLevel.ERROR, "${record.remotePath}: $reason")
         journal.put(

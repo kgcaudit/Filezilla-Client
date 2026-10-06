@@ -731,7 +731,6 @@ class AppPreferences(context: Context) {
         name?.let { runCatching { enumValueOf<T>(it) }.getOrNull() } ?: fallback
 
     internal companion object {
-        const val KEY_DOWNLOAD_FOLDER = "download_folder"
         const val KEY_PANE_PATH = "pane_path_"
         const val KEY_PANE_SITE = "pane_site_"
         const val KEY_PANE_LOCAL = "pane_local_"

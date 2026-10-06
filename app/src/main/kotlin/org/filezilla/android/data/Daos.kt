@@ -29,9 +29,6 @@ interface TransferDao {
     @Query("DELETE FROM transfers WHERE id = :id")
     fun deleteById(id: String)
 
-    @Query("DELETE FROM transfers WHERE state = 'COMPLETED'")
-    fun deleteCompleted()
-
     /**
      * Newest-queued first, which is where the queue screen looks after a
      * download is started -- and, unlike `updated_at`, a queue that holds

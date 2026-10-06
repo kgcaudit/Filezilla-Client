@@ -110,28 +110,10 @@ fun ChoiceChip(
  * colour, bold, and a mark -- because the reference's thin underline is
  * subtle enough that the user had to look twice, and that is the complaint
  * this whole design came out of.
- */
-@Composable
-fun OptionTile(
-    label: String,
-    icon: ImageVector,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    /** Shown under the name when chosen: which way this sort runs. */
-    footnote: String? = null,
-) = OptionTile(label, selected, onClick, modifier, footnote) {
-    Icon(icon, contentDescription = null, modifier = Modifier.padding(10.dp).size(22.dp))
-}
-
-/**
- * The same tile drawn from a drawable rather than a Material vector.
  *
- * The OLO control glyphs -- the sort keys among them -- ship as tint-ready
- * drawables, not Material icons, so the sort row reaches through here. The
- * glyph is tinted to the tile's content colour the same way the vector one
- * is, so chosen reads white on clay and the rest read muted, with no second
- * code path for the look.
+ * The glyph ships as a tint-ready drawable (the OLO control glyphs, the sort
+ * keys among them), not a Material icon, and is tinted to the tile's content
+ * colour so the chosen one reads white on clay and the rest read muted.
  */
 @Composable
 fun OptionTile(

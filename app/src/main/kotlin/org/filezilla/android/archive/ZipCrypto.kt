@@ -2,7 +2,6 @@ package org.filezilla.android.archive
 
 import java.io.FilterInputStream
 import java.io.InputStream
-import java.util.zip.CRC32
 
 /**
  * PKZIP's traditional encryption, which ALZ uses unchanged.

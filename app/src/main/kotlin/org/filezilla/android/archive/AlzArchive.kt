@@ -80,7 +80,6 @@ class AlzArchive private constructor(
         private const val SIG_END_OF_CENTRAL = 0x025A4C43
 
         internal const val METHOD_STORE = 0
-        internal const val METHOD_BZIP2 = 1
         internal const val METHOD_DEFLATE = 2
 
         private const val DESCRIPTOR_ENCRYPTED = 0x01

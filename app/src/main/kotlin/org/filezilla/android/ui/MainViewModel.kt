@@ -1870,11 +1870,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         activePane = PaneId.RIGHT
     }
 
-    // These three are what the toolbar has always called, and they now mean
-    // the same thing on either kind of pane -- which is the point of there
-    // being one pane type rather than two.
-    fun openDirectory(name: String) = openChild(activePane, name)
-
+    // These are what the toolbar calls, and they now mean the same thing on
+    // either kind of pane -- which is the point of there being one pane type
+    // rather than two.
     fun goUp() = up(activePane)
 
     fun refresh() = open(activePane)
@@ -2360,11 +2358,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     var recents by mutableStateOf<List<RecentEntry>>(emptyList())
         private set
-
-    /** Re-reads the recents list from storage, for when the screen opens. */
-    fun refreshRecents() {
-        recents = graph.preferences.recents()
-    }
 
     /**
      * A screen the view model has asked to move to, for when an action that
@@ -3412,9 +3405,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         @androidx.annotation.StringRes val message: Int,
         val args: List<Any> = emptyList(),
     )
-
-    /** A pane's current inside-an-archive location, resolved off [BrowseState]. */
-    fun archiveIn(id: PaneId): ArchiveSession? = pane(id).archive
 
     var archiveBusy by mutableStateOf<ArchiveBusy?>(null)
         private set
@@ -5493,8 +5483,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         return plan.copy(files = queued)
     }
-
-    fun deleteSelected() = deleteSelectionIn(activePane)
 
     /**
      * Removes one row from whichever kind of pane it is in.
