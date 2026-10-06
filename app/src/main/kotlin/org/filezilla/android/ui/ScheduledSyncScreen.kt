@@ -398,14 +398,14 @@ private fun ScheduledSyncEditor(
 
                 FieldLabel(stringResource(R.string.sched_field_direction))
                 Row(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ChoiceChip(stringResource(R.string.sched_dir_upload), upload) { direction = SyncDirection.UPLOAD }
-                    ChoiceChip(stringResource(R.string.sched_dir_download), !upload) { direction = SyncDirection.DOWNLOAD }
+                    ChoiceChip(stringResource(R.string.sched_dir_upload), upload, onClick = { direction = SyncDirection.UPLOAD })
+                    ChoiceChip(stringResource(R.string.sched_dir_download), !upload, onClick = { direction = SyncDirection.DOWNLOAD })
                 }
 
                 FieldLabel(stringResource(R.string.sched_field_interval))
                 Row(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     for (option in SyncInterval.entries) {
-                        ChoiceChip(stringResource(option.label), option == interval) { interval = option }
+                        ChoiceChip(stringResource(option.label), option == interval, onClick = { interval = option })
                     }
                 }
 
@@ -454,22 +454,6 @@ private fun ReadOnlyField(label: String, value: String) {
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-@Composable
-private fun ChoiceChip(text: String, chosen: Boolean, onClick: () -> Unit) {
-    Box(
-        Modifier.clip(RoundedCornerShape(16.dp))
-            .background(if (chosen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 15.dp, vertical = 8.dp),
-    ) {
-        Text(
-            text,
-            style = MaterialTheme.typography.labelLarge,
-            color = if (chosen) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

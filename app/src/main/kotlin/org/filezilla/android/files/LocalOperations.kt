@@ -254,7 +254,4 @@ object LocalOperations {
         if (FilePath.SEPARATOR in trimmed) throw IOException("a name cannot contain a slash")
         return trimmed
     }
-
-    private fun isLink(file: File): Boolean =
-        runCatching { file.canonicalPath != file.absolutePath }.getOrDefault(false)
 }

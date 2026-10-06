@@ -88,8 +88,4 @@ object LocalWalk {
         walk(root, emptyList())
         return found
     }
-
-    /** Shared with EmptyFolders, which must not follow one either. */
-    internal fun isLink(file: File): Boolean =
-        runCatching { file.canonicalPath != file.absolutePath }.getOrDefault(false)
 }

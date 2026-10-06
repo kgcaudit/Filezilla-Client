@@ -45,7 +45,7 @@ object EmptyFolders {
             // Not followed into. A symbolic link to a folder full of files
             // would look empty from the link's own side, and deleting the
             // link would be removing something the move never touched.
-            if (!child.isDirectory || LocalWalk.isLink(child)) continue
+            if (!child.isDirectory || isLink(child)) continue
             sweep(child, removed)
         }
         val empty = directory.listFiles()?.isEmpty() ?: false

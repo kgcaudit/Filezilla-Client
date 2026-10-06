@@ -44,7 +44,7 @@ internal fun entryOf(file: File): DirectoryEntry {
         // A symlink is followed for "is it a folder" but flagged, so a walk
         // can refuse to follow it -- a link to its own parent is an endless
         // walk, which is the reason the download planner skips them too.
-        isLink = runCatching { file.canonicalPath != file.absolutePath }.getOrDefault(false),
+        isLink = isLink(file),
         time = file.lastModified().takeIf { it > 0 }
             ?.let { EntryTime(it, TimeAccuracy.SECONDS) },
     )
