@@ -32,9 +32,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -42,7 +40,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -1425,16 +1422,9 @@ private fun MediaPlayer(
     // inset drops to zero once the bar is hidden, so the largest seen is
     // latched and the cutout is taken into account directly.
     val density = LocalDensity.current
-    val statusTop = WindowInsets.statusBars.getTop(density)
-    val cutoutTop = WindowInsets.displayCutout.getTop(density)
-    // Latched with a plain remember, not saved across configuration change: the
-    // largest inset seen this orientation is held (the status bar's drops to zero
-    // once the bar hides), but a rotation starts the latch over, so a portrait
-    // notch does not leave an over-tall bar in landscape.
-    var reservedTopPx by remember { mutableIntStateOf(0) }
-    val reservedTop = maxOf(reservedTopPx, statusTop, cutoutTop)
-    LaunchedEffect(reservedTop) { reservedTopPx = reservedTop }
-    val reservedTopDp = with(density) { reservedTop.toDp() }
+    // The strip kept for the status bar and camera cutout; see the shared
+    // [rememberReservedTopInset].
+    val reservedTopDp = rememberReservedTopInset()
 
     // A finger dragged across the picture scrubs: the distance maps to time, a
     // full width being two minutes, and a read-out of where the release would
@@ -2581,18 +2571,14 @@ private fun savePlaybackPosition(player: Player, items: List<File>, model: MainV
     items.getOrNull(at)?.let { model.setMediaPosition(it, save) }
 }
 
-/** A duration as h:mm:ss, or m:ss under an hour. */
-private fun clock(ms: Long): String {
-    val total = (ms.coerceAtLeast(0L)) / 1000
-    val h = total / 3600
-    val m = (total % 3600) / 60
-    val s = total % 60
-    return if (h > 0) {
-        String.format(Locale.ROOT, "%d:%02d:%02d", h, m, s)
-    } else {
-        String.format(Locale.ROOT, "%d:%02d", m, s)
-    }
-}
+/**
+ * A playback position as h:mm:ss, or m:ss under an hour.
+ *
+ * The app-wide [formatDuration] in seconds; the player keeps time in
+ * milliseconds, so this is the one place that divides. The formatter itself is
+ * not written twice.
+ */
+private fun clock(ms: Long): String = formatDuration(ms / 1000)
 
 /**
  * A playable, with any subtitle files found beside it attached.

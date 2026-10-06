@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,7 +19,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -136,17 +133,10 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
         if (chrome) controller.show(bars) else controller.hide(bars)
     }
 
-    // The top strip the phone keeps for its status bar and camera, remembered
-    // so the page sits below it even once the bar is hidden -- otherwise a
-    // centre-punch camera would bite a hole out of the art. Latched at its
-    // largest, since hiding the bar drops its own inset to zero.
-    val density = LocalDensity.current
-    val statusTop = WindowInsets.statusBars.getTop(density)
-    val cutoutTop = WindowInsets.displayCutout.getTop(density)
-    var reservedTopPx by rememberSaveable { mutableStateOf(0) }
-    val reservedTop = maxOf(reservedTopPx, statusTop, cutoutTop)
-    LaunchedEffect(reservedTop) { reservedTopPx = reservedTop }
-    val reservedTopDp = with(density) { reservedTop.toDp() }
+    // The strip kept for the status bar and camera cutout; see the shared
+    // [rememberReservedTopInset]. (This viewer used to keep its own saved copy,
+    // which left an over-tall bar after a portrait->landscape rotation.)
+    val reservedTopDp = rememberReservedTopInset()
 
     Surface(Modifier.fillMaxSize(), color = Color.Black) {
         Box(Modifier.fillMaxSize()) {
