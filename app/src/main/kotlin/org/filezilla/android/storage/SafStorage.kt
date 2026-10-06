@@ -116,7 +116,11 @@ class SafStorage(private val context: Context) {
                     // Numbered here rather than by the provider. Left to it,
                     // "movie.mkv" became "movie.mkv (1)" -- a name whose extension
                     // is now " (1)", so nothing will open it.
-                    ConflictChoice.KEEP_BOTH -> name = freeNameIn(folder, displayName)
+                    // Lenient past the cap: an ugly provider-chosen name beats
+                    // refusing a download outright, so the throw is swallowed.
+                    ConflictChoice.KEEP_BOTH -> name =
+                        runCatching { firstFreeName(displayName) { folder.findFile(it) != null } }
+                            .getOrDefault(displayName)
                 }
             }
             folder.createFile(mimeTypeFor(name), name)
@@ -189,7 +193,8 @@ class SafStorage(private val context: Context) {
                             throw IOException("could not replace the existing $displayName")
                         }
 
-                    ConflictChoice.KEEP_BOTH -> t = freeFileIn(folder, displayName)
+                    ConflictChoice.KEEP_BOTH ->
+                        t = File(folder, firstFreeName(displayName) { File(folder, it).exists() })
                 }
             }
             // Claim the chosen name now, so a sibling worker numbering its own
@@ -204,14 +209,6 @@ class SafStorage(private val context: Context) {
             target.outputStream().use { output -> input.copyTo(output) }
         }
         return Uri.fromFile(target)
-    }
-
-    private fun freeFileIn(folder: File, displayName: String): File {
-        for (n in 1..MAX_NUMBERED) {
-            val candidate = File(folder, numberedName(displayName, n))
-            if (!candidate.exists()) return candidate
-        }
-        throw IOException("too many files named $displayName")
     }
 
     /**
@@ -290,24 +287,6 @@ class SafStorage(private val context: Context) {
         } else {
             SafTransferReader(context, documentUri)
         }
-
-    /**
-     * The first name in [folder] that nothing is using.
-     *
-     * Numbering the file is ours to do. `createFile` takes a name that is
-     * already taken and returns one of its own choosing, and what it chose for
-     * "movie.mkv" was "movie.mkv (1)" -- the number after the extension, so
-     * the file no longer had one and nothing would open it.
-     */
-    private fun freeNameIn(folder: DocumentFile, displayName: String): String {
-        for (n in 1..MAX_NUMBERED) {
-            val candidate = numberedName(displayName, n)
-            if (folder.findFile(candidate) == null) return candidate
-        }
-        // Past the limit, fall back to the provider's own numbering rather
-        // than refusing the download outright. An ugly name beats losing it.
-        return displayName
-    }
 
     /**
      * The type the file is saved as, which decides what opens it.
@@ -415,4 +394,24 @@ fun numberedName(displayName: String, n: Int): String {
     val base = displayName.substring(0, dot)
     val extension = displayName.substring(dot)
     return "$base ($n)$extension"
+}
+
+/**
+ * [base], or the first "base (n)" after it that [taken] does not claim.
+ *
+ * The one "number a name until it is free" loop the download publisher, the
+ * paste and the clipboard each kept a copy of. [taken] is how each caller asks
+ * whether a name is in use -- a file on disk, a document in a tree, a name in a
+ * set already chosen this pass -- and the numbering is [numberedName]'s, so a
+ * kept-alongside copy is "movie (1).mkv" rather than "movie.mkv (1)". Capped at
+ * [MAX_NUMBERED]: past that many collisions it throws rather than spin, and a
+ * caller that would rather have an ugly name than an error catches it.
+ */
+fun firstFreeName(base: String, taken: (String) -> Boolean): String {
+    if (!taken(base)) return base
+    for (n in 1..MAX_NUMBERED) {
+        val candidate = numberedName(base, n)
+        if (!taken(candidate)) return candidate
+    }
+    throw java.io.IOException("too many files named $base")
 }

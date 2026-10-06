@@ -5,7 +5,7 @@ import org.filezilla.android.files.LocalOperations
 import org.filezilla.android.files.SyncAction
 import org.filezilla.android.storage.ConflictChoice
 import org.filezilla.android.storage.DownloadConflict
-import org.filezilla.android.storage.numberedName
+import org.filezilla.android.storage.firstFreeName
 import java.io.File
 
 /**
@@ -45,12 +45,8 @@ fun localPasteConflicts(target: String, source: String, names: List<String>): Li
  * ordinary -- and a second paste that quietly landed back on "(1)" would be
  * the same silent overwrite this whole path exists to prevent.
  */
-fun freeNameIn(target: String, name: String): String {
-    if (!File(FilePath.child(target, name)).exists()) return name
-    var n = 1
-    while (File(FilePath.child(target, numberedName(name, n))).exists()) n++
-    return numberedName(name, n)
-}
+fun freeNameIn(target: String, name: String): String =
+    firstFreeName(name) { File(FilePath.child(target, it)).exists() }
 
 /**
  * Puts the held items down in [target], one at a time, settling each name

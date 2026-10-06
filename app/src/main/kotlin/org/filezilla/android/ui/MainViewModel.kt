@@ -16,7 +16,7 @@ import kotlinx.coroutines.withContext
 import org.filezilla.android.storage.ConflictChoice
 import org.filezilla.android.storage.DownloadConflict
 import org.filezilla.android.storage.DownloadDestination
-import org.filezilla.android.storage.numberedName
+import org.filezilla.android.storage.firstFreeName
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -1008,9 +1008,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     ConflictChoice.KEEP_BOTH -> {
                         // Numbered the same way a download is, so a file kept
                         // beside another reads the same wherever it lands.
-                        var n = 1
-                        while (numberedName(file.name, n) in taken) n++
-                        name = numberedName(file.name, n)
+                        // Against `taken`, not just the folder, so two files in
+                        // one batch do not both land on "(1)".
+                        name = firstFreeName(file.name) { it in taken }
                         taken += name
                     }
                 }
@@ -1254,9 +1254,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         val fromWithin = name in taken && choice == ConflictChoice.OVERWRITE &&
                             FilePath.isWithin(FilePath.child(held.directory, name), FilePath.child(target, name))
                         if (fromWithin) {
-                            var n = 1
-                            while (numberedName(name, n) in taken) n++
-                            val aside = numberedName(name, n)
+                            val aside = firstFreeName(name) { it in taken }
                             session.rename(
                                 FilePath.child(held.directory, name),
                                 FilePath.child(target, aside),
@@ -1279,11 +1277,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                 ConflictChoice.OVERWRITE ->
                                     deleteRemoteTree(session, target, rows.first { it.name == name })
 
-                                ConflictChoice.KEEP_BOTH -> {
-                                    var n = 1
-                                    while (numberedName(name, n) in taken) n++
-                                    asName = numberedName(name, n)
-                                }
+                                ConflictChoice.KEEP_BOTH ->
+                                    asName = firstFreeName(name) { it in taken }
                             }
                         }
                         taken += asName

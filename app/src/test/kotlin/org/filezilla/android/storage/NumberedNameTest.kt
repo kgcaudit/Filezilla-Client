@@ -1,6 +1,7 @@
 package org.filezilla.android.storage
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class NumberedNameTest {
@@ -59,5 +60,38 @@ class NumberedNameTest {
     @Test
     fun `a korean name numbers the same`() {
         assertEquals("놀라운 토요일 E430 (1).mp4", numberedName("놀라운 토요일 E430.mp4", 1))
+    }
+
+    // ---------------------------------------------------- firstFreeName
+
+    /** A name nothing uses is returned as-is, not numbered for no reason. */
+    @Test
+    fun `a free base name is kept`() {
+        assertEquals("movie.mkv", firstFreeName("movie.mkv") { false })
+    }
+
+    /** The base taken, the first free number after it is chosen. */
+    @Test
+    fun `a taken base steps to the first free number`() {
+        val used = setOf("movie.mkv", "movie (1).mkv", "movie (2).mkv")
+        assertEquals("movie (3).mkv", firstFreeName("movie.mkv") { it in used })
+    }
+
+    /**
+     * The gap matters: numbering restarts from the lowest free number, not
+     * from one past the highest, so "(1)" is reused once "(1)" is gone.
+     */
+    @Test
+    fun `numbering fills the lowest free slot`() {
+        val used = setOf("a.txt", "a (2).txt")
+        assertEquals("a (1).txt", firstFreeName("a.txt") { it in used })
+    }
+
+    /** Past the cap it refuses rather than spinning forever. */
+    @Test
+    fun `everything taken is refused, not looped`() {
+        assertThrows(java.io.IOException::class.java) {
+            firstFreeName("x.txt") { true }
+        }
     }
 }
