@@ -167,14 +167,14 @@ fun ImageViewerScreen(viewer: MainViewModel.ImageViewer, model: MainViewModel) {
     }
 
     val context = androidx.compose.ui.platform.LocalContext.current
-    model.photoInfo?.let { info ->
+    model.photo.info?.let { info ->
         PhotoInfoSheet(
             info = info,
-            onRotate = { clockwise -> model.rotatePhoto(clockwise) },
-            onClearLocation = { model.clearPhotoLocation() },
-            onClearAll = { model.clearPhotoAll() },
+            onRotate = { clockwise -> model.photo.rotate(clockwise) },
+            onClearLocation = { model.photo.clearLocation() },
+            onClearAll = { model.photo.clearAll() },
             onOpenMap = { lat, lon -> openMap(context, lat, lon) },
-            onDismiss = { model.closePhotoInfo() },
+            onDismiss = { model.photo.close() },
         )
     }
 }
@@ -295,7 +295,7 @@ private fun PagedReader(
                 onNarrow = {},
                 onWidthPercent = {},
                 onClose = model::closeImageViewer,
-                onInfo = (currentRef as? MainViewModel.ImageRef.OnDisk)?.let { ref -> { model.openPhotoInfo(ref) } },
+                onInfo = (currentRef as? MainViewModel.ImageRef.OnDisk)?.let { ref -> { model.photo.open(ref.file) } },
             )
         }
 
@@ -780,7 +780,7 @@ private fun PageImage(
 ) {
     // Keyed on the edit revision too: a rotate rewrites the file in place, which
     // nothing else here would notice, so this re-decodes it when one lands.
-    val revision = model.photoRevision
+    val revision = model.photo.revision
     var bitmap by remember(ref, revision) { mutableStateOf<Bitmap?>(null) }
     var failed by remember(ref, revision) { mutableStateOf(false) }
     LaunchedEffect(ref, reqWidth, reqHeight, revision) {

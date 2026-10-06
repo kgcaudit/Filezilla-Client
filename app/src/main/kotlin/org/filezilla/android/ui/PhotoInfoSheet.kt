@@ -54,7 +54,7 @@ import kotlin.math.roundToInt
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PhotoInfoSheet(
-    info: MainViewModel.PhotoInfo,
+    info: PhotoInfo,
     onRotate: (clockwise: Boolean) -> Unit,
     onClearLocation: () -> Unit,
     onClearAll: () -> Unit,
@@ -76,7 +76,7 @@ fun PhotoInfoSheet(
  */
 @Composable
 fun PhotoInfoBody(
-    info: MainViewModel.PhotoInfo,
+    info: PhotoInfo,
     onRotate: (clockwise: Boolean) -> Unit,
     onClearLocation: () -> Unit,
     onClearAll: () -> Unit,
@@ -208,7 +208,7 @@ fun PhotoInfoBody(
 }
 
 @Composable
-private fun Header(info: MainViewModel.PhotoInfo) {
+private fun Header(info: PhotoInfo) {
     Row(
         Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
