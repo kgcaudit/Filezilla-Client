@@ -1085,11 +1085,11 @@ private fun AppScreen(
         )
     }
 
-    model.checksum?.let { state ->
+    model.checksum.state?.let { state ->
         ChecksumDialog(
             state = state,
-            onAlgorithm = model::setChecksumAlgorithm,
-            onDismiss = model::closeChecksum,
+            onAlgorithm = model.checksum::setAlgorithm,
+            onDismiss = model.checksum::close,
         )
     }
 

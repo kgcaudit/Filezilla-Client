@@ -925,7 +925,7 @@ private fun GridTile(
  */
 @Composable
 internal fun ChecksumDialog(
-    state: MainViewModel.ChecksumState,
+    state: ChecksumState,
     onAlgorithm: (Checksums.Algorithm) -> Unit,
     onDismiss: () -> Unit,
 ) {
