@@ -50,11 +50,11 @@ fun TrashScreen(
     model: MainViewModel,
     modifier: Modifier = Modifier,
 ) {
-    LaunchedEffect(Unit) { model.refreshTrash() }
+    LaunchedEffect(Unit) { model.trash.refresh() }
 
-    val entries = model.trash
-    val selecting = model.trashSelecting
-    val selected = model.trashSelection
+    val entries = model.trash.entries
+    val selecting = model.trash.selecting
+    val selected = model.trash.selection
     val dayStart = remember { RecentDays.today() }
     val yesterdayStart = remember { RecentDays.yesterday() }
 
@@ -90,13 +90,13 @@ fun TrashScreen(
                 }
                 TrashRow(
                     entry = entry,
-                    file = model.trashFile(entry),
-                    source = model.trashSource(entry.originalPath),
+                    file = model.trash.fileFor(entry),
+                    source = model.trash.sourceOf(entry.originalPath),
                     selecting = selecting,
                     selected = entry.trashPath in selected,
-                    onToggle = { model.toggleTrashSelected(entry) },
-                    onRestore = { model.restoreFromTrash(entry) },
-                    onDeleteForever = { model.deleteFromTrashForever(entry) },
+                    onToggle = { model.trash.toggleSelected(entry) },
+                    onRestore = { model.trash.restore(entry) },
+                    onDeleteForever = { model.trash.deleteForever(entry) },
                 )
             }
         }

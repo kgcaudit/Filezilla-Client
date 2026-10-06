@@ -36,7 +36,6 @@ import org.filezilla.android.archive.RarNative
 import org.filezilla.android.archive.SevenZipNative
 import org.filezilla.android.archive.ExtractResult
 import org.filezilla.android.data.RecentEntry
-import org.filezilla.android.data.TrashEntry
 import org.filezilla.android.data.Bookmark
 import org.filezilla.android.data.SiteEntity
 import org.filezilla.android.files.FileMode
@@ -219,6 +218,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * knows the panes.
      */
     val scheduledSync = ScheduledSyncController(application, graph.database.syncJobs(), viewModelScope)
+
+    /**
+     * The phone's trash -- the waiting files and the restore/erase of them --
+     * lifted out of here into one class. It depends on this only for two
+     * things the view model alone can answer: naming the volume a path sits on
+     * ([recentSource]) and redrawing the open folders after a restore
+     * ([relistLocalPanes]), both handed in rather than reached back for.
+     */
+    val trash = TrashController(
+        application,
+        graph.volumes,
+        graph.preferences,
+        viewModelScope,
+        ::recentSource,
+        ::relistLocalPanes,
+    )
 
     val transfers: StateFlow<List<TransferRecord>> = graph.transfers.observeTransfers()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -1563,7 +1578,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (names.isEmpty()) return
         update(id) { it.copy(selection = emptySet(), selecting = false) }
         writeThen(id) {
-            for (name in names) trashLocal(FilePath.child(pane(id).path, name))
+            for (name in names) trash.stashLocal(FilePath.child(pane(id).path, name))
         }
     }
 
@@ -2512,207 +2527,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 openTextViewer(file, editable = true)
                 null
             }
-        }
-    }
-
-    // ------------------------------------------------------------ trash
-
-    /**
-     * The trash folder for the volume [path] is on -- a hidden folder at that
-     * volume's own root.
-     *
-     * On its own volume on purpose. The app's external files dir looked like
-     * the same volume but is a separate FUSE domain, so a rename into it
-     * failed and the move fell back to copying the whole file byte for byte:
-     * deleting a several-gigabyte video took as long as copying one. A trash
-     * beside the file, on the same volume, makes a delete the instant rename
-     * it should be, and a restore the same. A file on no known volume falls
-     * back to the app's own folder.
-     */
-    private fun trashDirFor(path: String): java.io.File {
-        val volume = graph.volumes.volumePaths().firstOrNull { FilePath.isWithin(path, it) }
-        return if (volume != null) java.io.File(volume, TRASH_DIR_NAME) else legacyTrashDir
-    }
-
-    /** The old single trash folder, kept for reading entries stored before the move. */
-    private val legacyTrashDir: java.io.File by lazy {
-        val app = getApplication<Application>()
-        java.io.File(app.getExternalFilesDir(null) ?: app.filesDir, "trash")
-    }
-
-    /**
-     * Moves a local file into the trash rather than erasing it, keeping a
-     * note of where it came from so it can be put back. Runs on the write
-     * thread [deleteSelection]/[delete] already switched to, and touches no
-     * UI state -- the screen re-reads storage when it opens.
-     */
-    private fun trashLocal(path: String) {
-        val src = java.io.File(FilePath.normalize(path))
-        if (!src.exists()) return
-        val dir = trashDirFor(src.absolutePath).also { it.mkdirs() }
-        val name = Trash.stash(dir, src)
-        graph.preferences.addTrash(
-            java.io.File(dir, name).absolutePath,
-            src.absolutePath,
-            src.isDirectory,
-            System.currentTimeMillis(),
-        )
-    }
-
-    /**
-     * The trashed files, most recently deleted first -- what the trash screen
-     * shows. Held as state so the screen redraws as items are restored,
-     * removed, or the trash is emptied; the stored list is the source of truth.
-     */
-    var trash by mutableStateOf<List<TrashEntry>>(emptyList())
-        private set
-
-    /** Re-reads the trash from storage, for when the screen opens; starts it unselected. */
-    fun refreshTrash() {
-        trash = graph.preferences.trash()
-        exitTrashSelection()
-    }
-
-    // ------------------------------------------------------- trash selection
-
-    /** Whether the trash screen is picking rows for a bulk restore or erase. */
-    var trashSelecting by mutableStateOf(false)
-        private set
-
-    /** The trash paths currently ticked. */
-    var trashSelection by mutableStateOf<Set<String>>(emptySet())
-        private set
-
-    /** Turns a row's tick on or off, entering selection mode on the first. */
-    fun toggleTrashSelected(entry: TrashEntry) {
-        trashSelecting = true
-        trashSelection = if (entry.trashPath in trashSelection) {
-            trashSelection - entry.trashPath
-        } else {
-            trashSelection + entry.trashPath
-        }
-    }
-
-    /** Ticks every row, or clears them all when they are already all ticked. */
-    fun toggleSelectAllTrash() {
-        val all = trash.map { it.trashPath }.toSet()
-        trashSelecting = true
-        trashSelection = if (all.isNotEmpty() && trashSelection.containsAll(all)) emptySet() else all
-    }
-
-    /** Leaves selection mode, forgetting the ticks. */
-    fun exitTrashSelection() {
-        trashSelecting = false
-        trashSelection = emptySet()
-    }
-
-    private fun selectedTrash(): List<TrashEntry> = trash.filter { it.trashPath in trashSelection }
-
-    /** Puts every ticked file back where it came from, then leaves selection mode. */
-    fun restoreSelectedTrash() {
-        val picked = selectedTrash()
-        if (picked.isEmpty()) return
-        viewModelScope.launch {
-            withContext(Dispatchers.IO) { picked.forEach(::restoreEntryBlocking) }
-            trash = graph.preferences.trash()
-            exitTrashSelection()
-            relistLocalPanes()
-        }
-    }
-
-    /** Erases every ticked file for good, then leaves selection mode. */
-    fun deleteSelectedTrashForever() {
-        val picked = selectedTrash()
-        if (picked.isEmpty()) return
-        viewModelScope.launch {
-            withContext(Dispatchers.IO) { picked.forEach(::deleteEntryBlocking) }
-            trash = graph.preferences.trash()
-            exitTrashSelection()
-        }
-    }
-
-    /**
-     * The file on disk that backs a trash entry, for its thumbnail and its
-     * restore. An absolute path is taken as is; a bare name is an entry from
-     * before the per-volume move, read against the old app-private folder.
-     */
-    fun trashFile(entry: TrashEntry): java.io.File =
-        if (entry.trashPath.startsWith("/")) {
-            java.io.File(entry.trashPath)
-        } else {
-            java.io.File(legacyTrashDir, entry.trashPath)
-        }
-
-    /**
-     * The volume a trashed file originally sat on, named the way the storage
-     * list names it -- shown so a file can be told apart from its namesakes.
-     */
-    fun trashSource(originalPath: String): String = recentSource(originalPath)
-
-    /**
-     * Puts a trashed file back where it came from. If its old folder is gone
-     * it is recreated; if a file now sits at the old name the restored one is
-     * given a free name beside it, so nothing is overwritten. Re-lists the
-     * local panes when done, so a restore into the open folder shows at once.
-     */
-    fun restoreFromTrash(entry: TrashEntry) {
-        viewModelScope.launch {
-            withContext(Dispatchers.IO) { restoreEntryBlocking(entry) }
-            trash = graph.preferences.trash()
-            relistLocalPanes()
-        }
-    }
-
-    /** Erases one trashed file for good and drops it from the list. */
-    fun deleteFromTrashForever(entry: TrashEntry) {
-        viewModelScope.launch {
-            withContext(Dispatchers.IO) { deleteEntryBlocking(entry) }
-            trash = graph.preferences.trash()
-        }
-    }
-
-    // One entry, shared by the single-row menu and the batch actions. Runs on
-    // a caller's IO context.
-
-    /**
-     * Moves one entry's file back, dropping the record only when it is actually
-     * back -- or was already gone. A failed move (a full card, an unwritable
-     * old folder) keeps the entry, so a row with no file, and a file no row
-     * names, never happen.
-     */
-    private fun restoreEntryBlocking(entry: TrashEntry) {
-        val stored = trashFile(entry)
-        val done = if (!stored.exists()) {
-            true
-        } else {
-            runCatching {
-                val original = java.io.File(entry.originalPath)
-                val parent = original.parentFile
-                if (parent != null && !parent.exists()) parent.mkdirs()
-                Trash.restore(stored, parent?.absolutePath ?: FilePath.ROOT, original.name)
-            }.isSuccess
-        }
-        if (done) graph.preferences.removeTrash(entry.trashPath)
-    }
-
-    /** Erases one entry's file, keeping the record if the erase failed. */
-    private fun deleteEntryBlocking(entry: TrashEntry) {
-        val gone = runCatching { LocalOperations.delete(trashFile(entry).absolutePath) }.isSuccess
-        if (gone) graph.preferences.removeTrash(entry.trashPath)
-    }
-
-    /** Erases everything in the trash for good. */
-    fun emptyTrash() {
-        viewModelScope.launch {
-            withContext(Dispatchers.IO) {
-                // Each entry's own file, since the trash is now spread across a
-                // hidden folder per volume rather than one folder to list.
-                for (entry in graph.preferences.trash()) {
-                    runCatching { LocalOperations.delete(trashFile(entry).absolutePath) }
-                }
-                graph.preferences.clearTrash()
-            }
-            trash = emptyList()
         }
     }
 
@@ -5394,7 +5208,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun delete(entry: DirectoryEntry) {
         val id = activePane
         if (pane(id).isLocal) {
-            writeThen(id) { trashLocal(FilePath.child(pane(id).path, entry.name)) }
+            writeThen(id) { trash.stashLocal(FilePath.child(pane(id).path, entry.name)) }
             return
         }
         removeRemotely(id, listOf(entry))
@@ -5656,9 +5470,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private companion object {
         /** The slot the phone's own folder is remembered in, per pane. */
         const val LOCAL_SOURCE_KEY = "local"
-
-        /** The hidden folder each volume keeps its trash in, at its own root. */
-        const val TRASH_DIR_NAME = ".OloExplorerTrash"
 
         /** How many whole image files the band decoder keeps around at once. */
         const val IMAGE_BYTE_CACHE = 4

@@ -172,8 +172,8 @@ private fun AppScreen(
     BackHandler {
         // In the trash's selection mode, back drops the selection first --
         // the same "undo the nearest thing" rule the rest of back follows.
-        if (screen == Screen.TRASH && model.trashSelecting) {
-            model.exitTrashSelection()
+        if (screen == Screen.TRASH && model.trash.selecting) {
+            model.trash.exitSelection()
             return@BackHandler
         }
         val armed = System.currentTimeMillis() - exitArmedAt < EXIT_CONFIRM_MILLIS
@@ -364,12 +364,12 @@ private fun AppScreen(
                 queue?.let { summary ->
                     TransferStrip(summary = summary, onOpen = { screen = Screen.QUEUE })
                 }
-            } else if (screen == Screen.TRASH && model.trashSelecting) {
+            } else if (screen == Screen.TRASH && model.trash.selecting) {
                 // What happens to what is ticked: put it all back, or erase it
                 // all. Restore is one tap; erase asks first, since it is the
                 // one thing here with no undo. Both grey out with nothing
                 // ticked so the bar is never a button that does nothing.
-                val any = model.trashSelection.isNotEmpty()
+                val any = model.trash.selection.isNotEmpty()
                 Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
                     Row(
                         modifier = Modifier
@@ -378,7 +378,7 @@ private fun AppScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Button(
-                            onClick = { model.restoreSelectedTrash() },
+                            onClick = { model.trash.restoreSelected() },
                             enabled = any,
                             modifier = Modifier.weight(1f),
                             shape = MaterialTheme.shapes.small,
@@ -421,26 +421,26 @@ private fun AppScreen(
             // tab strip, the pane header and the first crumb of the path
             // were already saying the same word.
             if (screen != HOME) {
-              if (screen == Screen.TRASH && model.trashSelecting) {
+              if (screen == Screen.TRASH && model.trash.selecting) {
                 // The trash's own selection bar: how many are ticked, a way to
                 // drop the selection, and select-all. The restore and erase
                 // buttons for what is ticked sit along the foot.
                 TopAppBar(
                     title = {
                         Text(
-                            stringResource(R.string.selection_count, model.trashSelection.size),
+                            stringResource(R.string.selection_count, model.trash.selection.size),
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                     },
                     navigationIcon = {
-                        IconButton(onClick = { model.exitTrashSelection() }) {
+                        IconButton(onClick = { model.trash.exitSelection() }) {
                             Icon(painterResource(R.drawable.ic_action_close), contentDescription = stringResource(R.string.action_cancel))
                         }
                     },
                     actions = {
-                        IconButton(onClick = { model.toggleSelectAllTrash() }) {
+                        IconButton(onClick = { model.trash.toggleSelectAll() }) {
                             Icon(painterResource(R.drawable.ic_menu_select_all), contentDescription = stringResource(R.string.menu_select_all))
                         }
                     },
@@ -567,7 +567,7 @@ private fun AppScreen(
                         // Emptying the trash erases its files for good, so it
                         // is the stronger glyph -- a bin with a cross, not the
                         // broom that only forgets a list.
-                        Screen.TRASH -> IconButton(onClick = { model.emptyTrash() }) {
+                        Screen.TRASH -> IconButton(onClick = { model.trash.empty() }) {
                             Icon(
                                 Icons.Filled.DeleteForever,
                                 contentDescription = stringResource(R.string.trash_empty),
@@ -880,14 +880,14 @@ private fun AppScreen(
     if (deletingSelectedTrash) {
         // Erasing the ticked files for good -- the one action in the trash
         // with no way back -- so it asks, and says how many it will take.
-        val count = model.trashSelection.size
+        val count = model.trash.selection.size
         OloConfirmDialog(
             title = stringResource(R.string.trash_delete_selected_title, count),
             detail = stringResource(R.string.trash_delete_selected_detail),
             confirmLabel = stringResource(R.string.trash_delete_forever),
             onDismiss = { deletingSelectedTrash = false },
             onConfirm = {
-                model.deleteSelectedTrashForever()
+                model.trash.deleteSelectedForever()
                 deletingSelectedTrash = false
             },
         )
