@@ -94,7 +94,7 @@ enum class SyncInterval(val minutes: Long, val label: Int) {
  */
 @Composable
 fun ScheduledSyncScreen(model: MainViewModel, modifier: Modifier = Modifier) {
-    val jobs by model.scheduledSyncJobs.collectAsState()
+    val jobs by model.scheduledSync.jobs.collectAsState()
 
     // The editor, open either on a captured draft (adding) or an existing job
     // (editing). Null means closed.
@@ -113,8 +113,8 @@ fun ScheduledSyncScreen(model: MainViewModel, modifier: Modifier = Modifier) {
                 items(jobs, key = { it.id }) { job ->
                     SyncJobCard(
                         job = job,
-                        onToggle = { on -> model.setSyncJobEnabled(job, on) },
-                        onRunNow = { model.runSyncJobNow(job) },
+                        onToggle = { on -> model.scheduledSync.setEnabled(job, on) },
+                        onRunNow = { model.scheduledSync.runNow(job) },
                         onEdit = { editing = SyncEditorTarget.Edit(job) },
                         onRemove = { removing = job },
                     )
@@ -141,7 +141,7 @@ fun ScheduledSyncScreen(model: MainViewModel, modifier: Modifier = Modifier) {
             existing = null,
             onDismiss = { editing = null },
             onSave = { name, direction, interval, wifi, charging, deleteExtras ->
-                model.addSyncJob(name, target.draft, direction, interval.minutes, wifi, charging, deleteExtras)
+                model.scheduledSync.add(name, target.draft, direction, interval.minutes, wifi, charging, deleteExtras)
                 editing = null
             },
         )
@@ -151,7 +151,7 @@ fun ScheduledSyncScreen(model: MainViewModel, modifier: Modifier = Modifier) {
             existing = target.job,
             onDismiss = { editing = null },
             onSave = { name, direction, interval, wifi, charging, deleteExtras ->
-                model.updateSyncJob(
+                model.scheduledSync.update(
                     target.job.copy(
                         name = name,
                         direction = direction.name,
@@ -175,7 +175,7 @@ fun ScheduledSyncScreen(model: MainViewModel, modifier: Modifier = Modifier) {
             confirmLabel = stringResource(R.string.sched_remove),
             onDismiss = { removing = null },
             onConfirm = {
-                model.deleteSyncJob(job)
+                model.scheduledSync.delete(job)
                 removing = null
             },
         )

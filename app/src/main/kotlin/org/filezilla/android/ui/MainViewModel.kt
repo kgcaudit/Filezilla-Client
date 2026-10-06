@@ -213,10 +213,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val sites: StateFlow<List<SiteEntity>> = graph.database.sites().observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** The standing scheduled mirrors, newest first; see the scheduled-sync region. */
-    val scheduledSyncJobs: StateFlow<List<org.filezilla.android.data.SyncJobEntity>> =
-        graph.database.syncJobs().observeAll()
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /**
+     * The standing scheduled mirrors: the list and its CRUD, lifted out of here
+     * into one class. The draft a new job is built from still comes from the
+     * panes via [syncJobDraftFromPanes], which stays here because only this
+     * knows the panes.
+     */
+    val scheduledSync = ScheduledSyncController(application, graph.database.syncJobs(), viewModelScope)
 
     val transfers: StateFlow<List<TransferRecord>> = graph.transfers.observeTransfers()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -4955,60 +4958,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return parts.takeLast(2).joinToString("/")
     }
 
-    /** Writes a new scheduled job and starts its schedule. */
-    fun addSyncJob(
-        name: String,
-        draft: SyncJobDraft,
-        direction: org.filezilla.android.data.SyncDirection,
-        intervalMinutes: Long,
-        requiresWifi: Boolean,
-        requiresCharging: Boolean,
-        deleteExtras: Boolean,
-    ) {
-        val job = org.filezilla.android.data.SyncJobEntity(
-            id = java.util.UUID.randomUUID().toString(),
-            name = name.ifBlank { draft.suggestedName },
-            localRoot = draft.localRoot,
-            localLabel = draft.localLabel,
-            siteId = draft.siteId,
-            remoteRoot = draft.remoteRoot,
-            remoteLabel = draft.remoteLabel,
-            direction = direction.name,
-            deleteExtras = deleteExtras,
-            intervalMinutes = intervalMinutes,
-            requiresWifi = requiresWifi,
-            requiresCharging = requiresCharging,
-        )
-        viewModelScope.launch {
-            graph.database.syncJobs().upsert(job)
-            org.filezilla.android.sync.SyncScheduler.apply(getApplication(), job)
-        }
-    }
-
-    /** Saves an edited job and brings its schedule in line with the change. */
-    fun updateSyncJob(job: org.filezilla.android.data.SyncJobEntity) {
-        viewModelScope.launch {
-            graph.database.syncJobs().upsert(job)
-            org.filezilla.android.sync.SyncScheduler.apply(getApplication(), job)
-        }
-    }
-
-    /** Turns a job's schedule on or off without losing the job. */
-    fun setSyncJobEnabled(job: org.filezilla.android.data.SyncJobEntity, on: Boolean) =
-        updateSyncJob(job.copy(enabled = on))
-
-    /** Forgets a job and cancels its schedule. */
-    fun deleteSyncJob(job: org.filezilla.android.data.SyncJobEntity) {
-        viewModelScope.launch {
-            graph.database.syncJobs().delete(job)
-            org.filezilla.android.sync.SyncScheduler.cancel(getApplication(), job.id)
-        }
-    }
-
-    /** Runs a job once now, outside its schedule and conditions. */
-    fun runSyncJobNow(job: org.filezilla.android.data.SyncJobEntity) {
-        org.filezilla.android.sync.SyncScheduler.runNow(getApplication(), job)
-    }
+    // Making, editing, enabling, deleting and running a scheduled job now live
+    // in [ScheduledSyncController] (exposed as [scheduledSync]); only the draft
+    // above, which reads the panes, stays here.
 
     /**
      * Scans both panes, works out the mirror, and hands it to the preview.
