@@ -110,7 +110,7 @@
     <string name="sort_type">Type</string>
     <string name="option_show_hidden">Show hidden files</string>
     <string name="option_folders_first">Folders first</string>
-    <string name="filter_hint">Filter by name</string>
+    <string name="filter_hint">Filter by name (or *.jpg)</string>
     <string name="filter_clear">Clear filter</string>
     <string name="filter_none">Nothing matches "%1$s"</string>
     <string name="props_title">Properties</string>

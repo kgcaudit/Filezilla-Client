@@ -57,7 +57,10 @@ object BrowseListing {
             rows = rows.filterNot { it.name.startsWith(".") }
         }
         if (needle.isNotEmpty()) {
-            rows = rows.filter { it.name.contains(needle, ignoreCase = true) }
+            // Plain text matches anywhere; a wildcard ("*" / "?") matches the
+            // whole name as a shape. Compiled once, applied to every row.
+            val match = NameMatch.predicate(needle)
+            rows = rows.filter { match(it.name) }
         }
 
         // Case-insensitive and value-aware, so "album" and "Photos" sort where

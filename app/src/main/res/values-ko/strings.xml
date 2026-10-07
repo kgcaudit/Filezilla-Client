@@ -109,7 +109,7 @@
     <string name="sort_type">형식</string>
     <string name="option_show_hidden">숨김 파일 보기</string>
     <string name="option_folders_first">폴더 먼저</string>
-    <string name="filter_hint">이름으로 거르기</string>
+    <string name="filter_hint">이름으로 거르기 (예: *.jpg)</string>
     <string name="filter_clear">필터 해제</string>
     <string name="filter_none">"%1$s"과(와) 일치하는 항목이 없습니다</string>
     <string name="props_title">속성</string>

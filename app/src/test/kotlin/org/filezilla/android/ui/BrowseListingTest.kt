@@ -91,6 +91,18 @@ class BrowseListingTest {
     }
 
     @Test
+    fun `a wildcard filter matches the whole name as a shape`() {
+        val listing = listOf(file("photo.jpg"), file("scan.JPG"), file("notes.txt"), dir("jpgs"))
+        // "*.jpg" is a shape over the whole name, so a plain "jpgs" folder --
+        // which a bare "jpg" substring would keep -- is left out, and the dot
+        // is a real dot, not any character.
+        assertEquals(
+            listOf("photo.jpg", "scan.JPG"),
+            names(listing, filter = "*.jpg"),
+        )
+    }
+
+    @Test
     fun `hidden entries are left out until they are asked for`() {
         val listing = listOf(file("visible"), file(".hidden"), dir(".config"))
         assertEquals(listOf("visible"), names(listing))
