@@ -79,6 +79,29 @@ class FolderDownloadTest {
         )
     }
 
+    /**
+     * A mixed pick keeps each file at its own depth: the loose one lands in the
+     * chosen folder itself, the one inside a picked folder lands under a folder
+     * of that name. Pinned apart from the paths above because this is the
+     * promise a bulk download makes -- structure preserved, not flattened --
+     * and a regression that dropped the subPath would still pass a check that
+     * only looked at the remote paths.
+     */
+    @Test
+    fun `a mixed selection keeps each file at its own depth`() {
+        val lister = tree(
+            "/HDD1/Vision" to listOf(dir("clips"), file("a.mp4")),
+            "/HDD1/Vision/clips" to listOf(file("deep.mp4")),
+        )
+
+        val plan = FolderDownload.plan(lister, "/HDD1", listOf(file("loose.txt"), dir("Vision")))
+
+        val byPath = plan.files.associate { it.remotePath to it.subPath }
+        assertEquals(emptyList<String>(), byPath["/HDD1/loose.txt"])
+        assertEquals(listOf("Vision"), byPath["/HDD1/Vision/a.mp4"])
+        assertEquals(listOf("Vision", "clips"), byPath["/HDD1/Vision/clips/deep.mp4"])
+    }
+
     /** A link pointing at its own parent would otherwise walk forever. */
     @Test
     fun `a link that loops back does not hang the walk`() {
