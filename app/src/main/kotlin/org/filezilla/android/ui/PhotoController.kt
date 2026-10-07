@@ -30,7 +30,7 @@ data class PhotoInfo(
  * Lifted out of [MainViewModel]. Self-contained: it reads and writes a file's
  * tags through [ImageExif] and tells the media scanner, and knows nothing of
  * panes or servers. The view model, which holds the open image as an
- * [MainViewModel.ImageRef], resolves that to a [File] and hands it to [open].
+ * [ImageRef], resolves that to a [File] and hands it to [open].
  *
  * [scope] is the view model's own, so a running read or edit is cancelled when
  * the view model goes.

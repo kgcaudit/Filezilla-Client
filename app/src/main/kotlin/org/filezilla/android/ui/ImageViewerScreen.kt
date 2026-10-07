@@ -295,7 +295,7 @@ private fun PagedReader(
                 onNarrow = {},
                 onWidthPercent = {},
                 onClose = model::closeImageViewer,
-                onInfo = (currentRef as? MainViewModel.ImageRef.OnDisk)?.let { ref -> { model.photo.open(ref.file) } },
+                onInfo = (currentRef as? ImageRef.OnDisk)?.let { ref -> { model.photo.open(ref.file) } },
             )
         }
 
@@ -464,7 +464,7 @@ private fun WebtoonReader(
 @Composable
 private fun BandImage(
     band: Webtoon.Band,
-    ref: MainViewModel.ImageRef,
+    ref: ImageRef,
     columnWidthPx: Int,
     columnWidthDp: Dp,
     model: MainViewModel,
@@ -637,7 +637,7 @@ private fun ReaderBottomBar(firstPage: Int, lastPage: Int, count: Int, rtl: Bool
  */
 @Composable
 private fun ReaderEndCard(
-    nextVolume: MainViewModel.NextVolume?,
+    nextVolume: NextVolume?,
     onOpenNext: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -687,7 +687,7 @@ private enum class SpreadAlign { FILL, LEFT, RIGHT }
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun ReaderSpread(
-    refs: List<MainViewModel.ImageRef>,
+    refs: List<ImageRef>,
     align: SpreadAlign,
     model: MainViewModel,
     rtl: Boolean,
@@ -772,7 +772,7 @@ private fun ReaderSpread(
 
 @Composable
 private fun PageImage(
-    ref: MainViewModel.ImageRef,
+    ref: ImageRef,
     model: MainViewModel,
     reqWidth: Int,
     reqHeight: Int,

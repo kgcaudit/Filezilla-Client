@@ -1050,7 +1050,7 @@ private fun AppScreen(
                 TextFiles.looksTextual(ready.name) && ready.length() <= TextFiles.MAX_BYTES ->
                     model.openTextViewer(ready, editable = readyOrigin != null, origin = readyOrigin)
                 ImageFiles.looksImage(ready.name) ->
-                    model.openImageViewer(listOf(MainViewModel.ImageRef.OnDisk(ready)), 0, comicKey = null)
+                    model.openImageViewer(listOf(ImageRef.OnDisk(ready)), 0, comicKey = null)
                 // A server video or sound, fetched to the cache, opens in the
                 // app's own player on that copy (Phase 1: cache then play).
                 looksMedia(ready.name) ->
