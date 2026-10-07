@@ -74,6 +74,7 @@ class AppGraph private constructor(context: Context) {
         log = log,
         networkGate = networkGate,
         passwords = passwords,
+        sources = org.filezilla.android.transfer.AndroidUploadSources(app, volumes::volumePaths),
     )
 
     /**

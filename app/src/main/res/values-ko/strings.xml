@@ -155,6 +155,7 @@
     <plurals name="confirm_delete_selected">
         <item quantity="other">%d개 항목을 삭제할까요?</item>
     </plurals>
+    <string name="upload_source_missing">원본 파일을 찾을 수 없습니다 — 옮겨졌거나 이름이 바뀌었거나 삭제됐습니다: %1$s</string>
     <string name="done_channel">전송 완료</string>
     <string name="done_channel_description">대기열이 끝나면 알립니다</string>
     <string name="done_all">%1$d개 전송 완료</string>

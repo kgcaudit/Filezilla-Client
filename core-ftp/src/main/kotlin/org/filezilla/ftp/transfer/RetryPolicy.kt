@@ -43,6 +43,9 @@ data class RetryPolicy(
             // change on a second try.
             is ResumeUnsupportedException -> false
             is ResumeNotHonouredException -> false
+            // A local source that is not there will not be there next time
+            // either -- it was moved past where it could be found, or deleted.
+            is java.io.FileNotFoundException -> false
             // RFC 959 splits replies exactly this way: 4yz is a transient
             // negative reply and invites a retry, 5yz is permanent.
             is FtpCommandException -> error.reply.category == 4

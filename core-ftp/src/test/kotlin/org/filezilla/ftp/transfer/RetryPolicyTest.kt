@@ -53,6 +53,14 @@ class RetryPolicyTest {
     }
 
     @Test
+    fun `never retries a local source that is not there`() {
+        // A moved-past-finding or deleted upload source will not reappear by
+        // trying again, so spending the budget on it only wastes time. It is an
+        // IOException, so without its own case it would be retried like a reset.
+        assertFalse(policy.shouldRetry(java.io.FileNotFoundException("no such file"), attempt = 1))
+    }
+
+    @Test
     fun `stops once the attempt budget is spent`() {
         assertTrue(policy.shouldRetry(IOException("reset"), attempt = 4))
         assertFalse(policy.shouldRetry(IOException("reset"), attempt = 5))

@@ -157,6 +157,7 @@
         <item quantity="one">Delete this item?</item>
         <item quantity="other">Delete %d items?</item>
     </plurals>
+    <string name="upload_source_missing">Source file not found — it was moved, renamed, or deleted: %1$s</string>
     <string name="done_channel">Finished transfers</string>
     <string name="done_channel_description">A notice when the queue has finished</string>
     <string name="done_all">%1$d transfers finished</string>

@@ -91,6 +91,8 @@ class TransferManager(
     private val log: AppLog,
     private val networkGate: TransferGate,
     private val passwords: PasswordCipher,
+    /** Finds a queued upload's file again when it has moved; see [UploadSources]. */
+    private val sources: UploadSources = UploadSources.AsIs,
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
 
@@ -465,10 +467,18 @@ class TransferManager(
             // now the rarer of the two.
             val reason = (e as? TransferPausedException)?.reason ?: pauseSignal.reasonFor(record.id)
             if (reason == null) {
-                // JournalledTransfer has already written INTERRUPTED for a
-                // download; for anything it did not reach, record it here so
-                // the queue does not spin on the same record.
-                markInterrupted(record, e.message ?: e.javaClass.simpleName)
+                if (e is SourceMissingException) {
+                    // A moved-and-not-found or deleted upload source. Retrying
+                    // cannot bring the file back, so this is a permanent
+                    // failure with a line the user can act on, not an
+                    // INTERRUPTED the queue would pick up and fail again.
+                    fail(record, e.message ?: e.javaClass.simpleName)
+                } else {
+                    // JournalledTransfer has already written INTERRUPTED for a
+                    // download; for anything it did not reach, record it here so
+                    // the queue does not spin on the same record.
+                    markInterrupted(record, e.message ?: e.javaClass.simpleName)
+                }
             } else {
                 // Written after JournalledTransfer has had its say: it marks
                 // the record INTERRUPTED on the way out, and this has to be
@@ -733,11 +743,19 @@ class TransferManager(
             readerFactory: () -> TransferReader,
         ) -> ResilientOutcome,
     ) = changingTheServer(record) {
-        val source = Uri.parse(record.localPath)
+        val stored = Uri.parse(record.localPath)
+        // Where the file actually is now: unchanged when it is still there,
+        // somewhere new when it was moved and found again, or a thrown
+        // SourceMissingException when it is gone -- which runOne fails on
+        // rather than spending the retry budget on a file that will not return.
+        val source = sources.resolve(stored, record.totalBytes?.takeIf { it > 0 })
         var running = record.copy(
             state = TransferState.RUNNING,
             attempts = record.attempts + 1,
             lastError = null,
+            // Remember a recovery, so a restart and the queue screen read the
+            // file where it now is rather than where it was queued.
+            localPath = if (source == stored) record.localPath else source.toString(),
             updatedAtMillis = System.currentTimeMillis(),
         )
         journal.put(running)
