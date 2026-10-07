@@ -173,11 +173,15 @@ object LocalOperations {
                     }
                 }
             }
-        } catch (cancelled: Cancelled) {
-            // A half-written file would read as whole. Take it back out, so
-            // stopping leaves the copied files beside an absence, not a lie.
+        } catch (failure: Throwable) {
+            // A half-written file would read as whole, whether the copy was
+            // stopped on purpose (Cancelled) or failed partway -- a full disk
+            // is the common one. Take the partial file back out either way, so
+            // what is left is an honest absence rather than a file that looks
+            // complete, then let the caller see what happened (a move relies on
+            // this throwing so it does not then delete the original).
             target.delete()
-            throw cancelled
+            throw failure
         }
         keepModifiedTime(source, target)
     }

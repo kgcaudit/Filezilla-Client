@@ -247,6 +247,33 @@ class LocalOperationsTest {
         assertFalse(File(temp.root, "target/big.bin").exists())
     }
 
+    @Test
+    fun `a copy that fails partway removes the half-written file`() {
+        File(temp.root, "big.bin").writeBytes(ByteArray(1_000_000))
+        temp.newFolder("target")
+
+        // A write failure partway -- a full disk is the usual one -- raised
+        // here once the first chunk has landed, so the target exists and is
+        // only half there when it strikes.
+        val boom = IOException("no space left on device")
+        var written = 0L
+        assertThrows(IOException::class.java) {
+            LocalOperations.copy(
+                path("big.bin"),
+                path("target"),
+                onBytes = {
+                    written += it
+                    if (written > 0) throw boom
+                },
+            )
+        }
+
+        assertFalse(
+            "a failed copy must not leave a file that looks whole",
+            File(temp.root, "target/big.bin").exists(),
+        )
+    }
+
     /**
      * The two ways a copy eats itself. Both walk forever, and both start
      * writing before they do, so they are refused before anything is made
