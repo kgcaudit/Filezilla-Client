@@ -318,11 +318,12 @@ private fun MusicPlayer(
         loadQueue(
             player,
             viewer.items,
+            viewer.items.indices.map { viewer.uriOf(it) },
             viewer.index,
             model,
             onSameQueue = { index = player.currentMediaItemIndex },
         ) {
-            viewer.items.map { audioMediaItem(it) }
+            viewer.items.indices.map { audioMediaItem(viewer.uriOf(it)) }
         }
     }
 
@@ -989,7 +990,7 @@ private fun musicSubtitle(tags: MusicTags?, unknownArtist: String): String {
 
 /** A playable for a song: a plain media item, no subtitle sidecars to look for. */
 @androidx.annotation.OptIn(UnstableApi::class)
-private fun audioMediaItem(file: File): MediaItem = buildMediaItem(Uri.fromFile(file), emptyList())
+private fun audioMediaItem(uri: Uri): MediaItem = buildMediaItem(uri, emptyList())
 
 /**
  * Sets the player's queue to [items] and starts at [index] where that file was
@@ -1007,12 +1008,14 @@ private fun audioMediaItem(file: File): MediaItem = buildMediaItem(Uri.fromFile(
 private suspend fun loadQueue(
     player: MediaController,
     items: List<File>,
+    /** The URIs the items actually play from -- a file's own, or a handed-in stream. */
+    uris: List<Uri>,
     index: Int,
     model: MainViewModel,
     onSameQueue: () -> Unit,
     build: suspend () -> List<MediaItem>,
 ) {
-    val wantUris = items.map { Uri.fromFile(it) }
+    val wantUris = uris
     val haveUris = (0 until player.mediaItemCount).map {
         player.getMediaItemAt(it).requestMetadata.mediaUri
     }
@@ -1308,11 +1311,19 @@ private fun MediaPlayer(
         loadQueue(
             player,
             viewer.items,
+            viewer.items.indices.map { viewer.uriOf(it) },
             viewer.index,
             model,
             onSameQueue = { index = player.currentMediaItemIndex },
         ) {
-            withContext(Dispatchers.IO) { viewer.items.map { mediaItemFor(it, context.cacheDir) } }
+            withContext(Dispatchers.IO) {
+                viewer.items.indices.map { i ->
+                    // A stream has no sidecar subtitles to scan a folder for; a
+                    // file on disk does, so only it goes through mediaItemFor.
+                    if (viewer.sources != null) buildMediaItem(viewer.uriOf(i), emptyList())
+                    else mediaItemFor(viewer.items[i], context.cacheDir)
+                }
+            }
         }
     }
 

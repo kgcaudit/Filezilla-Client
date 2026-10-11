@@ -125,6 +125,15 @@ class SafStorage(private val context: Context) {
         }
     }
 
+    /** The display name of a handed-in document, or its last path segment, or null. */
+    fun displayName(uri: Uri): String? =
+        describeDocument(uri)?.first?.takeIf { it.isNotBlank() }
+            ?: uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+
+    /** The media type a provider declares for a handed-in document, or null. */
+    fun contentType(uri: Uri): String? =
+        runCatching { context.contentResolver.getType(uri) }.getOrNull()
+
     /** Name and size of a document the user picked to upload. */
     fun describeDocument(documentUri: Uri): Pair<String, Long>? =
         runCatching {

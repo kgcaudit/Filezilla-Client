@@ -63,6 +63,22 @@ fun looksEpub(name: String): Boolean =
 /** A video, so the player shows a picture rather than only controls. */
 fun looksVideo(name: String): Boolean = kindOf(name, false) == FileKind.VIDEO
 
+/**
+ * Whether a document handed in from another app should stream in the player
+ * rather than be copied to a file first.
+ *
+ * The player reads a URI, so a sound or a film can play straight from the one
+ * the other app grants -- no waiting on a copy, which for a large video off a
+ * cloud app is the whole file. The kind is taken from the declared type first,
+ * since a streaming provider often names its document without an extension, and
+ * from the name when there is no type. Everything else (a picture, a PDF, a zip)
+ * still becomes a file, because those viewers read one.
+ */
+fun streamsAsMedia(name: String?, mimeType: String?): Boolean {
+    if (mimeType != null && (mimeType.startsWith("audio/") || mimeType.startsWith("video/"))) return true
+    return name != null && looksMedia(name)
+}
+
 private val BY_EXTENSION: Map<String, FileKind> = buildMap {
     // alz and egg are ESTsoft's, they are everywhere in Korea, and this
     // app opens both -- so a row that is one should look like an archive

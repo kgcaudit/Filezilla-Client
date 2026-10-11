@@ -2031,7 +2031,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     data class MediaViewer(
         val items: List<java.io.File>,
         val index: Int,
-    )
+        /**
+         * The real playable URI for each item, when it is not a plain file --
+         * a document another app handed in to stream. Null for the ordinary
+         * case, where each item is a file on disk and plays from its own path.
+         * Same order and length as [items]; [items] still carries the name the
+         * title shows and the key the resume position is kept under.
+         */
+        val sources: List<android.net.Uri>? = null,
+    ) {
+        /** The URI the player reads [items] at [index] from: the stream, or the file. */
+        fun uriOf(index: Int): android.net.Uri =
+            sources?.getOrNull(index) ?: android.net.Uri.fromFile(items[index])
+    }
 
     var mediaViewer by mutableStateOf<MediaViewer?>(null)
         private set
@@ -2455,6 +2467,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun openExternalDocument(uri: Uri) {
         viewModelScope.launch {
+            val name = withContext(Dispatchers.IO) { graph.storage.displayName(uri) }
+            val type = withContext(Dispatchers.IO) { graph.storage.contentType(uri) }
+            // A sound or a film plays straight from the handed-in URI, so a large
+            // video off a cloud app starts at once instead of after a full copy.
+            // Everything else becomes a file, because those viewers read one.
+            if (streamsAsMedia(name, type)) {
+                openStreamedMedia(uri, streamName(name, type))
+                return@launch
+            }
             val file = withContext(Dispatchers.IO) { graph.storage.resolveForViewing(uri) }
             if (file == null) {
                 graph.log.log(
@@ -2465,6 +2486,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             openResolved(file, activePane)?.let { pendingScreen = it }
         }
+    }
+
+    /**
+     * Opens a handed-in media URI in the player, streaming rather than copying.
+     *
+     * The player keys the title, the resume position and the audio-or-video
+     * choice off a file's name, so a stand-in file carries [name] -- its path is
+     * never read, only its name -- while [MediaViewer.sources] carries the URI
+     * the bytes actually come from.
+     */
+    private fun openStreamedMedia(uri: Uri, name: String) {
+        val placeholder = java.io.File(java.io.File(getApplication<Application>().cacheDir, "stream"), name)
+        mediaViewer = MediaViewer(items = listOf(placeholder), index = 0, sources = listOf(uri))
+    }
+
+    /**
+     * A name for a streamed document that the player can read a kind from.
+     *
+     * A streaming provider often names its document without an extension, so one
+     * is taken from the declared type when the name has no media kind of its own
+     * -- audio or video, since that is all this path is reached for.
+     */
+    private fun streamName(name: String?, mimeType: String?): String {
+        val base = name?.takeIf { it.isNotBlank() } ?: "media"
+        if (looksMedia(base)) return base
+        val extension = mimeType
+            ?.let { android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
+            ?: if (mimeType?.startsWith("video/") == true) "mp4" else "mp3"
+        return "$base.$extension"
     }
 
     /** Points a recents entry at where its file was found after a move. */

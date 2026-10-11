@@ -101,4 +101,24 @@ class FileKindTest {
             assert(kind.glyph != 0) { "$kind has no glyph" }
         }
     }
+
+    /**
+     * What a handed-in document streams rather than being copied to a file.
+     * Audio and video stream; everything else becomes a file for its viewer.
+     * The declared type decides first, so a streaming provider's extensionless
+     * name still plays.
+     */
+    @Test
+    fun `only audio and video stream, by type or by name`() {
+        assert(streamsAsMedia("song.mp3", null))
+        assert(streamsAsMedia("film.mkv", null))
+        // Type wins when the name carries no extension, as a streaming provider's often does.
+        assert(streamsAsMedia("1a2b3c", "audio/mpeg"))
+        assert(streamsAsMedia(null, "video/mp4"))
+        // A picture, a document or an archive is copied to a file, not streamed.
+        assert(!streamsAsMedia("photo.jpg", "image/jpeg"))
+        assert(!streamsAsMedia("book.pdf", "application/pdf"))
+        assert(!streamsAsMedia("bundle.zip", "application/zip"))
+        assert(!streamsAsMedia(null, null))
+    }
 }
