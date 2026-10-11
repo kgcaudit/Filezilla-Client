@@ -3,6 +3,7 @@ package org.filezilla.android.storage
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.MediaStore
 import android.webkit.MimeTypeMap
 import androidx.documentfile.provider.DocumentFile
 import org.filezilla.ftp.io.TransferReader
@@ -60,6 +61,69 @@ class SafStorage(private val context: Context) {
     /** Human-readable name of a granted folder, for the UI. */
     fun displayNameOfTree(treeUri: Uri): String? =
         runCatching { DocumentFile.fromTreeUri(context, treeUri)?.name }.getOrNull()
+
+    /**
+     * A real local file for a URI another app handed in to be viewed, or null
+     * when it cannot be read.
+     *
+     * The viewers all read a [File], so a document from an "Open with" has to
+     * become one. A file URI already is a path; a content URI is given back as
+     * its real path when the provider exposes one (so a photo or video opens in
+     * place, nothing copied), and otherwise is streamed into a small cache so
+     * even a provider that only offers a stream -- a cloud app's -- can be
+     * opened. The cache is pruned so repeated opens do not let it grow without
+     * bound.
+     */
+    fun resolveForViewing(uri: Uri): File? = when (uri.scheme) {
+        "file" -> uri.path?.let(::File)?.takeIf { it.isFile }
+        "content" -> directPathOf(uri)?.let { File(it).takeIf(File::canRead) } ?: copyInToView(uri)
+        else -> null
+    }
+
+    /** The real on-disk path a content URI stands for, when the provider exposes one. */
+    private fun directPathOf(uri: Uri): String? = runCatching {
+        context.contentResolver.query(
+            uri,
+            arrayOf(MediaStore.MediaColumns.DATA),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            val at = cursor.getColumnIndex(MediaStore.MediaColumns.DATA)
+            if (at >= 0 && cursor.moveToFirst()) cursor.getString(at) else null
+        }
+    }.getOrNull()
+
+    /** Streams a content URI into the view cache folder and returns the copy. */
+    private fun copyInToView(uri: Uri): File? {
+        val name = describeDocument(uri)?.first?.takeIf { it.isNotBlank() }
+            ?: uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+            ?: "opened"
+        val dir = File(context.cacheDir, OPENED_DIR).apply { mkdirs() }
+        pruneOpened(dir)
+        val into = File(dir, name.replace('/', '_').replace('\u0000', '_'))
+        return runCatching {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                into.outputStream().use { output -> input.copyTo(output) }
+            } ?: return null
+            into
+        }.getOrElse {
+            into.delete()
+            null
+        }
+    }
+
+    /** Keeps the opened-file cache under a cap, dropping the oldest first. */
+    private fun pruneOpened(dir: File) {
+        val files = dir.listFiles()?.filter { it.isFile } ?: return
+        var total = files.sumOf { it.length() }
+        if (total <= OPENED_CACHE_CAP) return
+        for (file in files.sortedBy { it.lastModified() }) {
+            if (total <= OPENED_CACHE_CAP) break
+            val size = file.length()
+            if (file.delete()) total -= size
+        }
+    }
 
     /** Name and size of a document the user picked to upload. */
     fun describeDocument(documentUri: Uri): Pair<String, Long>? =
@@ -370,6 +434,12 @@ private class SafTransferReader(
 
 /** An honest generic type, for a file whose extension means nothing here. */
 private const val FALLBACK_MIME_TYPE = "application/octet-stream"
+
+/** The cache folder a handed-in content URI is streamed into to be viewed. */
+private const val OPENED_DIR = "opened"
+
+/** How large that folder may grow before the oldest opened files are dropped. */
+private const val OPENED_CACHE_CAP = 512L * 1024 * 1024
 
 /** How many numbered names to try before giving up and letting the provider pick. */
 private const val MAX_NUMBERED = 999

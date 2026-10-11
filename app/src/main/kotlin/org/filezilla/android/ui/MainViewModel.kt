@@ -2443,6 +2443,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return null
     }
 
+    /**
+     * Opens a file another app handed in through an "Open with" (a VIEW
+     * intent), in the viewer its kind calls for.
+     *
+     * The document is resolved to a real file off the main thread -- a file
+     * already is one, a content URI is read in place when it has a path or
+     * copied into the cache when it does not -- and then opened the same way a
+     * tap in the file list opens a recent, with the screen switched through
+     * [pendingScreen] once it is ready.
+     */
+    fun openExternalDocument(uri: Uri) {
+        viewModelScope.launch {
+            val file = withContext(Dispatchers.IO) { graph.storage.resolveForViewing(uri) }
+            if (file == null) {
+                graph.log.log(
+                    org.filezilla.ftp.protocol.LogLevel.ERROR,
+                    "could not open the file handed in: $uri",
+                )
+                return@launch
+            }
+            openResolved(file, activePane)?.let { pendingScreen = it }
+        }
+    }
+
     /** Points a recents entry at where its file was found after a move. */
     private fun healRecentPath(oldPath: String, newPath: String) {
         if (oldPath == newPath) return

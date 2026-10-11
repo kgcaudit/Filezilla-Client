@@ -92,15 +92,24 @@ class MainActivity : ComponentActivity() {
      */
     private val openAt = androidx.compose.runtime.mutableStateOf<Screen?>(null)
 
+    /** A file another app asked this one to open (an "Open with"), until it is honoured. */
+    private val openUri = androidx.compose.runtime.mutableStateOf<android.net.Uri?>(null)
+
+    /** The document a VIEW intent carries, or null when the intent is not one. */
+    private fun viewUriFrom(intent: Intent?): android.net.Uri? =
+        intent?.takeIf { it.action == Intent.ACTION_VIEW }?.data
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         openAt.value = OpenAt.screenFor(intent)
+        openUri.value = viewUriFrom(intent)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         openAt.value = OpenAt.screenFor(intent)
+        openUri.value = viewUriFrom(intent)
         // The app bar runs under the status bar, so the status bar itself is
         // transparent and takes the app bar's colour. Which way its icons
         // should face depends on the theme, so OloTheme decides that.
@@ -109,7 +118,7 @@ class MainActivity : ComponentActivity() {
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         setContent {
             OloTheme {
-                AppScreen(openAt = openAt)
+                AppScreen(openAt = openAt, openUri = openUri)
             }
         }
     }
@@ -121,6 +130,9 @@ private fun AppScreen(
     model: MainViewModel = viewModel(),
     /** See [MainActivity.openAt]; null once it has been honoured. */
     openAt: androidx.compose.runtime.MutableState<Screen?> =
+        androidx.compose.runtime.mutableStateOf(null),
+    /** See [MainActivity.openUri]; null once it has been handed to the view model. */
+    openUri: androidx.compose.runtime.MutableState<android.net.Uri?> =
         androidx.compose.runtime.mutableStateOf(null),
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -144,6 +156,16 @@ private fun AppScreen(
         openAt.value?.let {
             screen = it
             openAt.value = null
+        }
+    }
+
+    // A file another app handed in to open. The view model resolves it and
+    // opens the viewer; the screen switch, if any, comes back through
+    // pendingScreen above. Cleared at once so a config change does not reopen it.
+    LaunchedEffect(openUri.value) {
+        openUri.value?.let {
+            model.openExternalDocument(it)
+            openUri.value = null
         }
     }
     var queueSettingsOpen by remember { mutableStateOf(false) }
