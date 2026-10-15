@@ -91,6 +91,15 @@ class BrowseListingTest {
     }
 
     @Test
+    fun `a name listed twice is shown once`() {
+        // A real filesystem never lists one name twice; a malformed server can,
+        // and the row list is keyed by name, so a duplicate would crash it. The
+        // first line for a name is kept.
+        val listing = listOf(file("dup.txt"), file("other.txt"), file("dup.txt"))
+        assertEquals(listOf("dup.txt", "other.txt"), names(listing))
+    }
+
+    @Test
     fun `a wildcard filter matches the whole name as a shape`() {
         val listing = listOf(file("photo.jpg"), file("scan.JPG"), file("notes.txt"), dir("jpgs"))
         // "*.jpg" is a shape over the whole name, so a plain "jpgs" folder --

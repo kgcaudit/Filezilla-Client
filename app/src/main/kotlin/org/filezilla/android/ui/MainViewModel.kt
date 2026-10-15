@@ -2369,8 +2369,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 !removeMissing -> out.add(entry)
             }
         }
-        graph.preferences.setRecents(out)
-        return out
+        // Healing can land two entries on one path -- a moved file found where
+        // another recent already sits -- and the recents list is keyed by path,
+        // so a duplicate would crash the screen on its next draw. Keep the first
+        // (the more recent, since the list is newest-first) and drop the rest.
+        val deduped = out.distinctBy { it.path }
+        graph.preferences.setRecents(deduped)
+        return deduped
     }
 
     /**
@@ -2520,9 +2525,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Points a recents entry at where its file was found after a move. */
     private fun healRecentPath(oldPath: String, newPath: String) {
         if (oldPath == newPath) return
-        val updated = graph.preferences.recents().map {
-            if (it.path == oldPath) it.copy(path = newPath) else it
-        }
+        // Keyed by path, so if the found path already names another recent the
+        // heal would make two entries share one key and crash the screen. Keep
+        // the first (the more recent) and drop the duplicate.
+        val updated = graph.preferences.recents()
+            .map { if (it.path == oldPath) it.copy(path = newPath) else it }
+            .distinctBy { it.path }
         graph.preferences.setRecents(updated)
         recents = updated
     }
@@ -4536,6 +4544,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             update(id) { pane ->
                 val current = pane.search ?: return@update pane
                 if (current.needle != needle) return@update pane
+                // The results list is keyed by path, so a path already found --
+                // a server that lists one name twice in a folder -- must not be
+                // added again, or the list would crash rather than draw.
+                if (current.hits.any { it.path == hit.path }) return@update pane
                 pane.copy(search = current.copy(hits = current.hits + hit))
             }
         }

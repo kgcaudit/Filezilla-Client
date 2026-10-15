@@ -608,6 +608,11 @@ class AppPreferences(context: Context) {
             ?.split(KEY_SEPARATOR)
             ?.filter { it.isNotEmpty() }
             ?.mapNotNull(RecentEntry::decode)
+            // One path, one row: the recents screen is keyed by path, so a
+            // duplicate -- which an older build's path-healing could leave
+            // stored -- would crash it. Healed on every read, keeping the first
+            // (the more recent), so even data written before the fix is safe.
+            ?.distinctBy { it.path }
             .orEmpty()
 
     /**
@@ -645,6 +650,10 @@ class AppPreferences(context: Context) {
             ?.split(KEY_SEPARATOR)
             ?.filter { it.isNotEmpty() }
             ?.mapNotNull(TrashEntry::decode)
+            // Keyed by trash path on the screen, so a duplicate would crash it;
+            // one path, one row. Legacy entries stored only a bare name, which
+            // two files could share, so this is not merely defensive.
+            ?.distinctBy { it.trashPath }
             .orEmpty()
 
     /** Records a file just moved into the trash, at the front of the list. */

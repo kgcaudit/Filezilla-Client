@@ -53,6 +53,12 @@ object BrowseListing {
         // user scroll past them.
         rows = rows.filterNot { it.name == "." || it.name == ".." }
 
+        // A name twice over cannot be shown twice: the list is keyed by name, so
+        // a server that reports one name on two lines -- malformed, but seen in
+        // the wild -- would crash the browser rather than draw it. Keep the
+        // first line for that name; a real filesystem never produces two.
+        rows = rows.distinctBy { it.name }
+
         if (!options.showHidden) {
             rows = rows.filterNot { it.name.startsWith(".") }
         }
