@@ -1,6 +1,9 @@
 package org.filezilla.android.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -23,6 +27,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,6 +47,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -60,6 +66,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.filezilla.android.files.Checksums
 import org.filezilla.android.files.FilePath
@@ -132,6 +139,12 @@ fun BrowseScreen(
     onStopWalking: () -> Unit,
     onCloseSearch: () -> Unit,
     onOpenHit: (SearchHit) -> Unit,
+    /**
+     * Told that the spotlight entry has been scrolled to and flashed, so the
+     * pane can forget it. Without this the same row would flash again on the
+     * next recomposition, since the name stays in the state until cleared.
+     */
+    onSpotlightShown: () -> Unit = {},
     modifier: Modifier = Modifier,
     /**
      * Fetches thumbnails for pictures and songs on a server, or null where
@@ -184,6 +197,41 @@ fun BrowseScreen(
         // Counted rather than flagged: see [refreshIndicatorShown]. The
         // indicator's whole lifecycle hangs off this going up.
         var pulls by remember { mutableLongStateOf(0L) }
+
+        // Where the list and the grid are scrolled, hoisted so the spotlight
+        // can move them. Whichever one the current view mode draws is the one
+        // that gets scrolled; the other sits unused.
+        val listState = rememberLazyListState()
+        val gridState = rememberLazyGridState()
+
+        // The row that just landed -- a file copied in, a folder made, an
+        // upload that finished here -- scrolled into view and lit for a
+        // moment, so the result of an action is where the eye already is
+        // rather than somewhere the user has to go looking. Set by the model
+        // as [BrowseState.spotlight]; held here through the brief flash, since
+        // the model forgets it the instant we have shown it.
+        var flashing by remember { mutableStateOf<String?>(null) }
+        LaunchedEffect(state.spotlight, rows) {
+            val name = state.spotlight ?: return@LaunchedEffect
+            val index = rows.indexOfFirst { it.name == name }
+            if (index < 0) return@LaunchedEffect
+            // Forget it on the model's side at once: the scroll and the flash
+            // live here now, and leaving it set would relight the row on the
+            // next unrelated recomposition.
+            onSpotlightShown()
+            flashing = name
+            runCatching {
+                if (options.viewMode == ViewMode.GRID || options.viewMode == ViewMode.GALLERY) {
+                    gridState.animateScrollToItem(index)
+                } else {
+                    listState.animateScrollToItem(index)
+                }
+            }
+            delay(SPOTLIGHT_FLASH_MILLIS)
+            // Only if nothing newer has taken the light in the meantime.
+            if (flashing == name) flashing = null
+        }
+
         PullToRefreshBox(
             isRefreshing = refreshIndicatorShown(pulls, state.loading),
             onRefresh = {
@@ -193,6 +241,29 @@ fun BrowseScreen(
             modifier = Modifier.fillMaxSize(),
         ) {
             when {
+                // A fresh load with nothing to show yet: say what it is doing,
+                // and which leg it is on. A blank pane that sits there for
+                // seconds reads as a hang; the two-phase text tells the user
+                // whether we are still reaching the server ("연결 중") or already
+                // talking to it and reading the folder ("불러오는 중"). Only while
+                // empty -- once rows are in hand the refresh happens over them.
+                state.loading && rows.isEmpty() -> Column(
+                    modifier = Modifier.fillMaxSize().padding(32.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    CircularProgressIndicator(strokeWidth = 3.dp)
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        stringResource(
+                            if (state.connecting) R.string.browse_connecting
+                            else R.string.browse_listing,
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
                 // A filter that matches nothing must say so. An empty list
                 // otherwise looks like an empty directory, and the user has
                 // no way to tell which it is.
@@ -211,6 +282,7 @@ fun BrowseScreen(
                 }
 
                 options.viewMode == ViewMode.GRID -> LazyVerticalGrid(
+                    state = gridState,
                     columns = GridCells.Adaptive(minSize = 108.dp),
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(8.dp),
@@ -225,6 +297,7 @@ fun BrowseScreen(
                             actions,
                             site = state.site,
                             thumbs = thumbs,
+                            highlighted = entry.name == flashing,
                         )
                     }
                 }
@@ -233,6 +306,7 @@ fun BrowseScreen(
                 // square, no name -- for a folder of photos. A long press picks,
                 // the same as the tile does elsewhere.
                 options.viewMode == ViewMode.GALLERY -> LazyVerticalGrid(
+                    state = gridState,
                     // Adaptive rather than a fixed three, so a wide pane on the
                     // fold's main display fills with more squares instead of
                     // three oversized ones, and a narrow phone still gets three.
@@ -250,12 +324,12 @@ fun BrowseScreen(
                             actions = actions,
                             site = state.site,
                             thumbs = thumbs,
+                            highlighted = entry.name == flashing,
                         )
                     }
                 }
 
                 else -> Box(modifier = Modifier.fillMaxSize()) {
-                    val listState = rememberLazyListState()
                     // Letters only when the rows are in an order letters
                     // describe. Sorted by date, a rail reading ㄱ ㄴ ㄷ would
                     // be a lie about where a tap lands.
@@ -298,6 +372,7 @@ fun BrowseScreen(
                                 onDelete = { deleting = entry },
                                 site = state.site,
                                 thumbs = thumbs,
+                                highlighted = entry.name == flashing,
                             )
                             HorizontalDivider()
                         }
@@ -435,6 +510,8 @@ private fun EntryRow(
     /** The server this row is on, for fetching a thumbnail; null on the phone. */
     site: SiteEntity? = null,
     thumbs: ServerThumbnails? = null,
+    /** Lit for a moment because the action that just ran landed on this row. */
+    highlighted: Boolean = false,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val chip = if (entry.isDirectory) {
@@ -443,12 +520,22 @@ private fun EntryRow(
         MaterialTheme.colorScheme.secondary
     }
 
+    // The flash fades out rather than snapping off, so a row that was scrolled
+    // to settles into the list instead of blinking.
+    val flash by animateColorAsState(
+        targetValue = when {
+            selected -> MaterialTheme.colorScheme.primaryContainer
+            highlighted -> MaterialTheme.colorScheme.tertiaryContainer
+            else -> MaterialTheme.colorScheme.surface
+        },
+        animationSpec = tween(durationMillis = if (highlighted) 0 else 600),
+        label = "rowFlash",
+    )
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-            )
+            .background(flash)
             .clickable {
                 // In selection mode every tap picks rather than navigates, or
                 // choosing several files would keep walking into folders.
@@ -680,6 +767,10 @@ private const val GALLERY_THUMB_PX = 320
 // squares rather than bigger ones.
 private val GALLERY_MIN_CELL = 110.dp
 
+// How long the just-landed row stays lit. Long enough to catch the eye after
+// the scroll settles, short enough not to look like a selection that stuck.
+private const val SPOTLIGHT_FLASH_MILLIS = 1300L
+
 /**
  * One square of the gallery: a big thumbnail filling the cell for a local
  * picture or film, a coloured tile with the kind's glyph for anything else. A
@@ -697,6 +788,8 @@ private fun GalleryCell(
     actions: EntryActions,
     site: SiteEntity? = null,
     thumbs: ServerThumbnails? = null,
+    /** Ringed for a moment because the action that just ran landed on this cell. */
+    highlighted: Boolean = false,
 ) {
     val kind = remember(entry.name, entry.isDirectory) { kindOf(entry.name, entry.isDirectory) }
     val thumbFile = if (isLocal && !entry.isDirectory && Thumbnails.handles(kind)) {
@@ -725,12 +818,18 @@ private fun GalleryCell(
     val serverBitmap = (serverState as? ServerThumbState.Ready)?.bitmap
     val hasThumb = thumbFile != null || serverBitmap != null
     val description = stringResource(R.string.browse_select, entry.name)
+    val ring by animateColorAsState(
+        targetValue = if (highlighted) MaterialTheme.colorScheme.tertiary else Color.Transparent,
+        animationSpec = tween(durationMillis = if (highlighted) 0 else 600),
+        label = "cellRing",
+    )
     Box(
         modifier = Modifier
             .padding(2.dp)
             .fillMaxWidth()
             .aspectRatio(1f)
             .clip(RoundedCornerShape(10.dp))
+            .border(3.dp, ring, RoundedCornerShape(10.dp))
             .background(if (hasThumb) Color.Black else colourFor(kind))
             .combinedClickable(
                 onClick = {
@@ -810,6 +909,8 @@ private fun GridTile(
     actions: EntryActions,
     site: SiteEntity? = null,
     thumbs: ServerThumbnails? = null,
+    /** Tinted for a moment because the action that just ran landed on this tile. */
+    highlighted: Boolean = false,
 ) {
     val kind = remember(entry.name, entry.isDirectory) { kindOf(entry.name, entry.isDirectory) }
     val chip = colourFor(kind)
@@ -818,13 +919,19 @@ private fun GridTile(
     } else {
         null
     }
+    val tile by animateColorAsState(
+        targetValue = when {
+            selected -> MaterialTheme.colorScheme.primaryContainer
+            highlighted -> MaterialTheme.colorScheme.tertiaryContainer
+            else -> MaterialTheme.colorScheme.surface
+        },
+        animationSpec = tween(durationMillis = if (highlighted) 0 else 600),
+        label = "tileFlash",
+    )
     Column(
         modifier = Modifier
             .padding(4.dp)
-            .background(
-                if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                RoundedCornerShape(12.dp),
-            )
+            .background(tile, RoundedCornerShape(12.dp))
             .clickable {
                 when {
                     selecting -> actions.onToggleSelected(entry)

@@ -574,6 +574,7 @@ private fun PaneBody(
                 onStopWalking = { model.stopWalking(id) },
                 onCloseSearch = { model.stopSearch(id) },
                 onOpenHit = { model.openHit(id, it) },
+                onSpotlightShown = { model.spotlit(id) },
                 actions = EntryActions(
                     onOpen = { if (state.archive != null) model.archiveTap(id, it.name) else model.openChild(id, it.name) },
                     // The button beside a server row, and nothing else. It

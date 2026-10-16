@@ -82,6 +82,14 @@ data class BrowseState(
     val path: String = "",
     val entries: List<DirectoryEntry> = emptyList(),
     val loading: Boolean = false,
+    /**
+     * True for the first leg of a remote load -- opening (or reopening) the
+     * connection -- and cleared the moment the session is ready, before the
+     * directory is listed. [loading] stays set across both legs; this only
+     * says which leg we are in, so a slow connect can say "연결 중" and a slow
+     * listing "불러오는 중". On the phone, and once connected, it is false.
+     */
+    val connecting: Boolean = false,
     val error: ConnectionFailure? = null,
 
     /** Names of the selected rows; empty means selection mode is off. */
@@ -100,6 +108,19 @@ data class BrowseState(
     val search: SearchState? = null,
     /** The entry whose properties are being shown, if any. */
     val properties: DirectoryEntry? = null,
+
+    /**
+     * The name of a row to scroll to and flash once, or null.
+     *
+     * Set when an action lands a result in this folder -- a folder just made,
+     * a file copied or moved in, an upload that finished here -- so the screen
+     * goes to the result rather than leaving the user to find it. Carried
+     * across the refresh that follows the action (a plain [copy] keeps it),
+     * read by the pane, and cleared the moment it has been shown. Cleared on
+     * any ordinary navigation, so it never flashes a same-named row in another
+     * folder.
+     */
+    val spotlight: String? = null,
 
     /**
      * The archive this pane is looking inside, or null for an ordinary folder.
@@ -432,7 +453,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             is PaneSource.Remote -> loadRemote(
                 id,
                 source.site,
-                pane(id).path.ifEmpty { rememberedRemote(id, source.site).orEmpty() }
+                // A fresh pane -- a restart, or a server just picked -- starts
+                // at the site's own initial folder, not wherever it was last
+                // left. A deep last folder with a lot in it is slow to list, and
+                // a launch should not wait on it; a null path then lets the
+                // server's PWD decide. The current folder (a refresh) is kept.
+                pane(id).path.ifEmpty { source.site.initialPath.orEmpty() }
                     .takeIf { it.isNotEmpty() },
                 // This is the refresh gesture as well as the first load, and
                 // refresh means ask the server. A pane that answered a pull
@@ -447,11 +473,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Lists [path] in [id], whichever kind of place it is. */
     fun openPath(id: PaneId, path: String) {
+        // Ordinary navigation forgets any pending spotlight: a row flagged to
+        // flash in the folder we are leaving must not relight a same-named row
+        // in the one we arrive at.
+        if (pane(id).spotlight != null) update(id) { it.copy(spotlight = null) }
         when (val source = pane(id).source) {
             is PaneSource.Local -> openLocal(id, path)
             is PaneSource.Remote -> loadRemote(id, source.site, path)
             PaneSource.Empty -> Unit
         }
+    }
+
+    /**
+     * Flags [name] to be scrolled to and flashed in [id] once it next appears.
+     *
+     * Set before the refresh that an action triggers; the refresh keeps it,
+     * and the pane clears it through [spotlit] the instant it has been shown.
+     */
+    private fun spotlight(id: PaneId, name: String?) {
+        update(id) { it.copy(spotlight = name) }
+    }
+
+    /** The pane has scrolled to and flashed its spotlight row; forget it. */
+    fun spotlit(id: PaneId) {
+        if (pane(id).spotlight != null) update(id) { it.copy(spotlight = null) }
     }
 
     fun openChild(id: PaneId, name: String) = openPath(id, FilePath.child(pane(id).path, name))
@@ -628,18 +673,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return graph.volumes.defaultPath()
     }
 
-    private fun rememberedRemote(id: PaneId, site: SiteEntity): String? =
-        graph.preferences.panePath(id.name, siteSourceKey(site))
-            ?: site.initialPath?.takeIf { it.isNotBlank() }
-
-    /**
-     * The slot a path is remembered in.
-     *
-     * Per server rather than one for all of them, so moving a pane between
-     * two servers does not take one's folder to the other -- the same
-     * mistake, one level down.
-     */
-    private fun siteSourceKey(site: SiteEntity) = "site:${site.id}"
 
 
     // ------------------------------------------------------- the clipboard
@@ -1416,6 +1449,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     if (other != id && pane(other).path == held.directory) open(other)
                 }
             }
+            // Scroll to what was pasted. One name is enough -- the first, so a
+            // batch lands the eye on the group rather than on nothing -- and
+            // the refresh that follows keeps the flag.
+            held.names.firstOrNull()?.let { spotlight(id, it) }
             listLocal(id, pane(id).path)
 
             when {
@@ -1471,6 +1508,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Renames one row of [id], wherever that pane is pointed. */
     fun renameIn(id: PaneId, entry: DirectoryEntry, newName: String) {
+        // The renamed row under its new name is where the eye should land.
+        spotlight(id, newName)
         if (pane(id).isLocal) {
             renameLocal(id, entry, newName)
         } else {
@@ -1513,6 +1552,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Makes a folder in [id]'s current directory, wherever that is. */
     fun createFolderIn(id: PaneId, name: String) {
+        // The new folder, so the refresh that follows scrolls to it and lights
+        // it rather than leaving the user to find where it was dropped in.
+        spotlight(id, name)
         if (pane(id).isLocal) {
             createFolder(id, name)
         } else {
@@ -1528,7 +1570,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * be a surprise. Refused visibly instead of half-done.
      */
     fun createFileIn(id: PaneId, name: String) {
-        if (pane(id).isLocal) createFile(id, name)
+        if (pane(id).isLocal) {
+            spotlight(id, name)
+            createFile(id, name)
+        }
     }
 
     fun clearSelectionIn(id: PaneId) {
@@ -4273,7 +4318,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             // hand would put a flicker where the win was supposed to be.
             val known = graph.transfers.listings.recall(site, path)
             if (known != null) {
-                graph.preferences.setPanePath(id.name, siteSourceKey(site), known.path)
                 update(id) {
                     it.copy(
                         source = PaneSource.Remote(site),
@@ -4285,13 +4329,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             emptySet()
                         },
                         loading = false,
+                        connecting = false,
                         error = null,
                     )
                 }
                 return
             }
         }
-        update(id) { it.copy(source = PaneSource.Remote(site), loading = true, error = null) }
+        update(id) {
+            it.copy(source = PaneSource.Remote(site), loading = true, connecting = true, error = null)
+        }
         // Read before the question is asked, handed back with the answer.
         // A write that lands while this listing is in flight empties the
         // cache, and without this the answer -- taken before the write --
@@ -4300,6 +4347,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             runCatching {
                 graph.transfers.browse(site) { session ->
+                    // Connected: the first leg is over. The listing is the
+                    // second, and [loading] stays set for it.
+                    if (stillWanted(id, asked) && pane(id).connecting) {
+                        update(id) { it.copy(connecting = false) }
+                    }
                     // Where the server says we are, never the path that was
                     // asked for: it may have been relative or a symbolic
                     // link, and building the next path on a guess is how a
@@ -4319,7 +4371,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 // the server resolved it to: the next visit will ask by the
                 // same name this one did.
                 if (path != null) graph.transfers.listings.remember(site, path, here, entries, asOf)
-                graph.preferences.setPanePath(id.name, siteSourceKey(site), here)
                 update(id) {
                     it.copy(
                         path = here,
@@ -4328,6 +4379,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         // and a refresh keeps only what is still there.
                         selection = if (here == it.path) it.prunedSelection(entries) else emptySet(),
                         loading = false,
+                        connecting = false,
                         error = null,
                     )
                 }
@@ -4336,6 +4388,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 update(id) {
                     it.copy(
                         loading = false,
+                        connecting = false,
                         error = failureOn(pane(id).site, error),
                     )
                 }
@@ -5380,6 +5433,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var finishedSeen: Set<String>? = null
 
     /**
+     * Completed transfers waiting for the queue to fall quiet before the panes
+     * they landed in are refreshed.
+     *
+     * A refresh on a server is a LIST round trip, and a paste of a hundred
+     * files completes a hundred times. Refreshing on each one meant a hundred
+     * listings of the same folder while the copy was still going -- the list
+     * flickering, the connection busy with work no one asked for. FileZilla
+     * refreshes once, when the queue finishes; this holds the finished records
+     * and flushes them in one pass the moment nothing is pending or running, so
+     * a burst costs one listing per touched pane instead of one per file.
+     */
+    private val finishedAwaitingRefresh = mutableListOf<TransferRecord>()
+
+    /**
      * Re-lists a pane when a transfer puts something new in the folder it is
      * showing; see [finishedTransferTouches].
      */
@@ -5404,11 +5471,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 finishedSeen = finished.keys
                 if (seen == null) return@collect
                 val fresh = finished.filterKeys { it !in seen }.values
-                if (fresh.isEmpty()) return@collect
+                finishedAwaitingRefresh += fresh
+
+                // Still working: hold the refresh until the burst is over. A
+                // transfer that is pending or running (or waiting for a
+                // network it will get back) means more completions are coming,
+                // and refreshing now would only be undone by the next one.
+                val busy = records.any {
+                    it.state == TransferState.PENDING ||
+                        it.state == TransferState.RUNNING ||
+                        it.state == TransferState.WAITING_FOR_NETWORK
+                }
+                if (busy || finishedAwaitingRefresh.isEmpty()) return@collect
+
+                // The queue is quiet and something finished since the last
+                // flush: refresh each pane the results landed in, once. The
+                // touch is judged against the pane's path now, not at the
+                // moment each transfer finished -- a pane the user has since
+                // moved away from is left alone.
+                val landed = finishedAwaitingRefresh.toList()
+                finishedAwaitingRefresh.clear()
                 for (id in PaneId.entries) {
                     val state = pane(id)
                     if (state.path.isEmpty()) continue
-                    val touched = fresh.any {
+                    val here = landed.filter {
                         finishedTransferTouches(
                             record = it,
                             isLocal = state.isLocal,
@@ -5418,7 +5504,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             user = state.site?.user,
                         )
                     }
-                    if (touched) open(id)
+                    if (here.isEmpty()) continue
+                    // Light the uploaded file on the server side, where the row
+                    // name is exactly the file's name. A download lands through
+                    // the storage framework under a name the folder, not the
+                    // transfer, decides, so that side is refreshed but not
+                    // flagged -- a wrong flag would be worse than none.
+                    if (!state.isLocal) {
+                        here.lastOrNull()?.let { spotlight(id, FilePath.name(it.remotePath)) }
+                    }
+                    open(id)
                 }
             }
         }
