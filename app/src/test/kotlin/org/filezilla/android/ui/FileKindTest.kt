@@ -41,6 +41,7 @@ class FileKindTest {
     fun `svg is an image but tiff is not`() {
         assertEquals(FileKind.IMAGE, kindOf("logo.svg", false))
         assertEquals(FileKind.IMAGE, kindOf("Logo.SVG", false))
+        assertEquals(FileKind.IMAGE, kindOf("logo.svgz", false))
         assertEquals(FileKind.OTHER, kindOf("scan.tiff", false))
         assertEquals(FileKind.OTHER, kindOf("scan.tif", false))
     }

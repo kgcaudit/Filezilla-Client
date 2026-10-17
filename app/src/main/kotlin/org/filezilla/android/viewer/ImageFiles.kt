@@ -11,6 +11,9 @@ import androidx.exifinterface.media.ExifInterface
 import com.caverock.androidsvg.SVG
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.InputStream
+import java.io.PushbackInputStream
+import java.util.zip.GZIPInputStream
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -29,10 +32,10 @@ import kotlin.math.sqrt
 object ImageFiles {
 
     private val IMAGE_EXTENSIONS: Set<String> =
-        // svg is here but is not a bitmap: BitmapFactory cannot touch it, so
-        // [decode] sends it down the vector path instead. The rest are what
-        // BitmapFactory decodes natively.
-        "jpg jpeg png gif webp bmp heic heif svg".split(" ").toSet()
+        // svg (and svgz, a gzip-compressed svg) are here but are not bitmaps:
+        // BitmapFactory cannot touch them, so [decode] sends them down the
+        // vector path instead. The rest are what BitmapFactory decodes natively.
+        "jpg jpeg png gif webp bmp heic heif svg svgz".split(" ").toSet()
 
     /** Whether a name is one the image viewer shows. */
     fun looksImage(name: String): Boolean {
@@ -46,10 +49,12 @@ object ImageFiles {
      * A server preview is fetched to a scratch file with no real extension, so
      * the name cannot be trusted there; and a renamed file lies. SVG is text,
      * so the first non-blank markup is a quick and certain tell: an optional
-     * XML prolog or comment, then an `<svg` root. Only the head is read.
+     * XML prolog or comment, then an `<svg` root. Only the head is read. A
+     * gzip-compressed svg (svgz) is unzipped just far enough to sniff first.
      */
     fun isSvg(bytes: ByteArray): Boolean {
-        val head = String(bytes, 0, min(bytes.size, SVG_SNIFF_BYTES), Charsets.ISO_8859_1)
+        val plain = if (isGzip(bytes)) gunzipHead(bytes) ?: return false else bytes
+        val head = String(plain, 0, min(plain.size, SVG_SNIFF_BYTES), Charsets.ISO_8859_1)
         // Strip a UTF-8/UTF-16 BOM, then look for the root. "<svg" may trail an
         // XML declaration or a comment, so a plain prefix check is not enough.
         val trimmed = head.trimStart('﻿', '￾', ' ', '\t', '\r', '\n')
@@ -81,7 +86,7 @@ object ImageFiles {
     fun decode(file: File, reqWidth: Int, reqHeight: Int): Bitmap? {
         if (isSvg(file)) {
             return runCatching {
-                file.inputStream().use { renderSvg(SVG.getFromInputStream(it), reqWidth, reqHeight) }
+                file.inputStream().use { renderSvg(SVG.getFromInputStream(maybeGunzip(it)), reqWidth, reqHeight) }
             }.getOrNull()
         }
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -106,7 +111,9 @@ object ImageFiles {
     fun decode(bytes: ByteArray, reqWidth: Int, reqHeight: Int): Bitmap? {
         if (isSvg(bytes)) {
             return runCatching {
-                renderSvg(SVG.getFromInputStream(ByteArrayInputStream(bytes)), reqWidth, reqHeight)
+                maybeGunzip(ByteArrayInputStream(bytes)).use {
+                    renderSvg(SVG.getFromInputStream(it), reqWidth, reqHeight)
+                }
             }.getOrNull()
         }
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -311,9 +318,49 @@ object ImageFiles {
         return bitmap
     }
 
+    /** The gzip magic, which an svgz (a compressed svg) begins with. */
+    private fun isGzip(bytes: ByteArray): Boolean =
+        bytes.size >= 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()
+
+    /**
+     * Unzips just the head of a gzip stream, for the sniff.
+     *
+     * Only [SVG_SNIFF_BYTES] of the decompressed start is wanted, and the input
+     * is itself only a head (so the stream ends early on purpose). Whatever came
+     * out before it ran dry is returned; a stream that is not really gzip, or
+     * yields nothing, is null.
+     */
+    private fun gunzipHead(bytes: ByteArray): ByteArray? = runCatching {
+        GZIPInputStream(ByteArrayInputStream(bytes)).use { gz ->
+            val out = ByteArray(SVG_SNIFF_BYTES)
+            var filled = 0
+            while (filled < out.size) {
+                val n = gz.read(out, filled, out.size - filled)
+                if (n < 0) break
+                filled += n
+            }
+            if (filled == 0) null else out.copyOf(filled)
+        }
+    }.getOrNull()
+
+    /**
+     * The stream itself, or a gunzipping wrapper when it starts with the gzip
+     * magic -- so an svgz is handed to the parser as the plain svg inside it.
+     * The first two bytes are peeked and pushed back, leaving the stream whole.
+     */
+    private fun maybeGunzip(stream: InputStream): InputStream {
+        val pushback = PushbackInputStream(stream, 2)
+        val first = pushback.read()
+        val second = pushback.read()
+        if (second != -1) pushback.unread(second)
+        if (first != -1) pushback.unread(first)
+        return if (first == 0x1f && second == 0x8b) GZIPInputStream(pushback) else pushback
+    }
+
     // How far into a file to read when telling whether it is an SVG. An SVG's
     // root sits after at most a short prolog, a comment and some whitespace, so
-    // a kilobyte is more than enough and costs nothing.
+    // a kilobyte is more than enough and costs nothing. For an svgz this is the
+    // compressed head, which unzips to plenty more than the root.
     private const val SVG_SNIFF_BYTES = 1024
 
     // The longest a decoded side may be, kept under the smallest GPU texture

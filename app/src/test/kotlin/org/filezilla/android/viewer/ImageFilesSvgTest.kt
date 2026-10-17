@@ -7,8 +7,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
+import java.util.zip.GZIPOutputStream
 
 /**
  * That the image viewer recognises and rasterises SVG.
@@ -33,6 +35,12 @@ class ImageFilesSvgTest {
              <rect width="400" height="100" fill="#cc3366"/>
            </svg>""".trimIndent()
 
+    private fun gzip(bytes: ByteArray): ByteArray {
+        val out = ByteArrayOutputStream()
+        GZIPOutputStream(out).use { it.write(bytes) }
+        return out.toByteArray()
+    }
+
     // ----------------------------------------------------------- the sniff
 
     @Test
@@ -56,6 +64,15 @@ class ImageFilesSvgTest {
         val scratch = File.createTempFile("srvthumb-", ".tmp").also { it.deleteOnExit() }
         Files.write(scratch.toPath(), squareSvg.toByteArray())
         assertTrue(ImageFiles.isSvg(scratch))
+    }
+
+    @Test
+    fun `a gzip-compressed svgz is recognised by name and by content`() {
+        assertTrue(ImageFiles.looksImage("logo.svgz"))
+        // The raw bytes are gzip, not text, so the sniff has to unzip first.
+        assertTrue(ImageFiles.isSvg(gzip(squareSvg.toByteArray())))
+        // Gzip of something that is not an svg is still not an svg.
+        assertFalse(ImageFiles.isSvg(gzip("<?xml version='1.0'?><rss></rss>".toByteArray())))
     }
 
     // --------------------------------------------------------- the render
@@ -84,5 +101,21 @@ class ImageFilesSvgTest {
         val bitmap = ImageFiles.decode(file, 64, 64)
         assertNotNull(bitmap)
         assertEquals(64, bitmap!!.width)
+    }
+
+    @Test
+    fun `a gzipped svgz renders from bytes and from a file`() {
+        val gz = gzip(squareSvg.toByteArray())
+
+        val fromBytes = ImageFiles.decode(gz, 128, 128)
+        assertNotNull(fromBytes)
+        assertEquals(128, fromBytes!!.width)
+        assertEquals(128, fromBytes.height)
+
+        val file = File.createTempFile("drawing-", ".svgz").also { it.deleteOnExit() }
+        Files.write(file.toPath(), gz)
+        val fromFile = ImageFiles.decode(file, 48, 48)
+        assertNotNull(fromFile)
+        assertEquals(48, fromFile!!.width)
     }
 }
