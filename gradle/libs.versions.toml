@@ -16,6 +16,7 @@ work = "2.9.1"
 ksp = "2.1.0-1.0.29"
 jsch = "0.2.23"
 sshd = "2.14.0"
+androidsvg = "1.4"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -43,6 +44,10 @@ room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 androidx-work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 
 androidx-exifinterface = { module = "androidx.exifinterface:exifinterface", version = "1.4.2" }
+
+# SVG rasteriser. Android's BitmapFactory decodes only bitmaps; an SVG is
+# vector XML, so the image viewer renders it to a bitmap through this instead.
+androidsvg = { module = "com.caverock:androidsvg-aar", version.ref = "androidsvg" }
 
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }

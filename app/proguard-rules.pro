@@ -55,3 +55,8 @@
 -keep class org.filezilla.android.archive.SevenZipNative { *; }
 -keep interface org.filezilla.android.archive.SevenZipNative$Sink { *; }
 -keepclassmembers class * implements org.filezilla.android.archive.SevenZipNative$Sink { *; }
+
+# AndroidSVG parses SVG/CSS by reflecting over its own attribute setters, so
+# R8 renaming its internals turns a valid SVG into a blank bitmap only in
+# release. The library is small and ships no rules of its own.
+-keep class com.caverock.androidsvg.** { *; }

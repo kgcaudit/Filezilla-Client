@@ -88,7 +88,12 @@ private val BY_EXTENSION: Map<String, FileKind> = buildMap {
     // They are archives, but common enough on a phone full of manga to earn
     // their own open-book tile so a shelf of them is told from a shelf of zips.
     for (e in "cbz cbr cb7 cbt".split(" ")) put(e, FileKind.COMIC)
-    for (e in "jpg jpeg png gif webp bmp heic heif tiff tif svg".split(" ")) put(e, FileKind.IMAGE)
+    // The image tile marks exactly what the in-app viewer can open (see
+    // ImageFiles.looksImage), so a picture-coloured row always opens as a
+    // picture. svg is in -- it rasterises through the vector path; tiff/tif
+    // are out, since nothing on Android decodes them reliably and a tile that
+    // promised a viewer that then bounced to "open with" was the confusing bit.
+    for (e in "jpg jpeg png gif webp bmp heic heif svg".split(" ")) put(e, FileKind.IMAGE)
     for (e in "mkv mp4 avi mov wmv flv webm m4v mpg mpeg ts m2ts".split(" ")) put(e, FileKind.VIDEO)
     for (e in "mp3 flac wav aac ogg m4a wma opus".split(" ")) put(e, FileKind.AUDIO)
     // An e-book earns the open-book tile so a shelf of them reads apart from

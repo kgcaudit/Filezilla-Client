@@ -30,6 +30,21 @@ class FileKindTest {
         assertEquals(FileKind.DOCUMENT, kindOf("report.pdf", false))
     }
 
+    /**
+     * The image tile marks exactly what the viewer can open.
+     *
+     * svg is in -- it rasterises through the vector path; tiff is out, since
+     * nothing on Android decodes it reliably, and a picture-coloured row that
+     * then bounced to "open with" was the confusing part this aligns away.
+     */
+    @Test
+    fun `svg is an image but tiff is not`() {
+        assertEquals(FileKind.IMAGE, kindOf("logo.svg", false))
+        assertEquals(FileKind.IMAGE, kindOf("Logo.SVG", false))
+        assertEquals(FileKind.OTHER, kindOf("scan.tiff", false))
+        assertEquals(FileKind.OTHER, kindOf("scan.tif", false))
+    }
+
     /** Comic archives get the open-book tile, not the plain archive box. */
     @Test
     fun `a comic archive reads as a comic`() {

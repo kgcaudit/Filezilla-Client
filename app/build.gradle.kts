@@ -206,6 +206,7 @@ dependencies {
 
     implementation(libs.androidx.work.runtime)
     implementation(libs.androidx.exifinterface)
+    implementation(libs.androidsvg)
     ksp(libs.room.compiler)
 
     implementation(platform(libs.compose.bom))

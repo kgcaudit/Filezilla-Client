@@ -85,6 +85,10 @@ object Thumbnails {
     // photo is never held in memory just to draw it at 40dp, then turned upright
     // by its EXIF tag so a portrait photo is not shown on its side.
     private fun decodeImage(file: File, sizePx: Int): Bitmap? {
+        // An SVG is vector XML, not a bitmap, so it goes through the viewer's
+        // rasteriser rather than BitmapFactory -- the same path the full-screen
+        // view uses, asked for a square the size of the tile.
+        if (ImageFiles.isSvg(file)) return ImageFiles.decode(file, sizePx, sizePx)
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.path, bounds)
         val longest = maxOf(bounds.outWidth, bounds.outHeight).takeIf { it > 0 } ?: return null

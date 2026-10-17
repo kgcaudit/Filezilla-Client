@@ -3,12 +3,18 @@ package org.filezilla.android.viewer
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.BitmapRegionDecoder
+import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Rect
 import android.util.Size
 import androidx.exifinterface.media.ExifInterface
+import com.caverock.androidsvg.SVG
 import java.io.ByteArrayInputStream
 import java.io.File
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 /**
  * Turning an image file into a bitmap the screen can hold.
@@ -23,13 +29,45 @@ import java.io.File
 object ImageFiles {
 
     private val IMAGE_EXTENSIONS: Set<String> =
-        "jpg jpeg png gif webp bmp heic heif".split(" ").toSet()
+        // svg is here but is not a bitmap: BitmapFactory cannot touch it, so
+        // [decode] sends it down the vector path instead. The rest are what
+        // BitmapFactory decodes natively.
+        "jpg jpeg png gif webp bmp heic heif svg".split(" ").toSet()
 
     /** Whether a name is one the image viewer shows. */
     fun looksImage(name: String): Boolean {
         val extension = name.substringAfterLast('.', "").lowercase()
         return extension.isNotEmpty() && extension in IMAGE_EXTENSIONS
     }
+
+    /**
+     * Whether these bytes are an SVG, by sniffing rather than by name.
+     *
+     * A server preview is fetched to a scratch file with no real extension, so
+     * the name cannot be trusted there; and a renamed file lies. SVG is text,
+     * so the first non-blank markup is a quick and certain tell: an optional
+     * XML prolog or comment, then an `<svg` root. Only the head is read.
+     */
+    fun isSvg(bytes: ByteArray): Boolean {
+        val head = String(bytes, 0, min(bytes.size, SVG_SNIFF_BYTES), Charsets.ISO_8859_1)
+        // Strip a UTF-8/UTF-16 BOM, then look for the root. "<svg" may trail an
+        // XML declaration or a comment, so a plain prefix check is not enough.
+        val trimmed = head.trimStart('﻿', '￾', ' ', '\t', '\r', '\n')
+        return trimmed.contains("<svg", ignoreCase = true) &&
+            (trimmed.startsWith("<svg", ignoreCase = true) ||
+                trimmed.startsWith("<?xml", ignoreCase = true) ||
+                trimmed.startsWith("<!--", ignoreCase = true) ||
+                trimmed.startsWith("<!doctype", ignoreCase = true))
+    }
+
+    /** The same for a file, reading only its head. */
+    fun isSvg(file: File): Boolean = runCatching {
+        file.inputStream().use { stream ->
+            val head = ByteArray(SVG_SNIFF_BYTES)
+            val read = stream.read(head)
+            read > 0 && isSvg(head.copyOf(read))
+        }
+    }.getOrDefault(false)
 
     /**
      * Decodes [file], no larger than [reqWidth] by [reqHeight] asks for.
@@ -41,6 +79,11 @@ object ImageFiles {
      * happens and is not worth a crash.
      */
     fun decode(file: File, reqWidth: Int, reqHeight: Int): Bitmap? {
+        if (isSvg(file)) {
+            return runCatching {
+                file.inputStream().use { renderSvg(SVG.getFromInputStream(it), reqWidth, reqHeight) }
+            }.getOrNull()
+        }
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.path, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
@@ -61,6 +104,11 @@ object ImageFiles {
      * in-memory array, so the header sniff costs nothing extra.
      */
     fun decode(bytes: ByteArray, reqWidth: Int, reqHeight: Int): Bitmap? {
+        if (isSvg(bytes)) {
+            return runCatching {
+                renderSvg(SVG.getFromInputStream(ByteArrayInputStream(bytes)), reqWidth, reqHeight)
+            }.getOrNull()
+        }
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
@@ -211,6 +259,62 @@ object ImageFiles {
             decoder.recycle()
         }
     }
+
+    /**
+     * Rasterises [svg] to fill [reqWidth] by [reqHeight], preserving its shape.
+     *
+     * A vector has no pixels of its own, so unlike a photo there is nothing to
+     * sample down -- it is drawn fresh at the size asked for, which is what
+     * keeps it crisp when the viewer zooms in. The intrinsic size (its width
+     * and height, or its viewBox) sets the aspect; the picture is then scaled
+     * to sit inside the requested box, and the same ceiling on side length and
+     * total pixels that guards the bitmap path guards this one, so a document
+     * declaring an enormous size cannot blow past what a Canvas can draw.
+     */
+    private fun renderSvg(svg: SVG, reqWidth: Int, reqHeight: Int): Bitmap? {
+        // Intrinsic shape: the declared size first, then the viewBox, then --
+        // for a document that gives neither -- the requested box itself.
+        var w = svg.documentWidth
+        var h = svg.documentHeight
+        if (w <= 0f || h <= 0f) {
+            val box = svg.documentViewBox
+            if (box != null && box.width() > 0f && box.height() > 0f) {
+                w = box.width()
+                h = box.height()
+            } else {
+                w = reqWidth.toFloat()
+                h = reqHeight.toFloat()
+            }
+        }
+        if (w <= 0f || h <= 0f) return null
+
+        // Fit inside the box when one is given, keeping the aspect; render at
+        // the intrinsic size when it is not (a thumbnail always gives a box).
+        val fit = if (reqWidth > 0 && reqHeight > 0) min(reqWidth / w, reqHeight / h) else 1f
+        var targetW = max(1, (w * fit).roundToInt())
+        var targetH = max(1, (h * fit).roundToInt())
+
+        // The same ceiling the bitmap path lives under, applied as one scale so
+        // the aspect is kept.
+        val cap = min(
+            min(MAX_DIMENSION.toFloat() / targetW, MAX_DIMENSION.toFloat() / targetH),
+            sqrt(MAX_PIXELS.toFloat() / (targetW.toLong() * targetH)),
+        )
+        if (cap < 1f) {
+            targetW = max(1, (targetW * cap).roundToInt())
+            targetH = max(1, (targetH * cap).roundToInt())
+        }
+
+        val picture = svg.renderToPicture(targetW, targetH)
+        val bitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
+        Canvas(bitmap).drawPicture(picture)
+        return bitmap
+    }
+
+    // How far into a file to read when telling whether it is an SVG. An SVG's
+    // root sits after at most a short prolog, a comment and some whitespace, so
+    // a kilobyte is more than enough and costs nothing.
+    private const val SVG_SNIFF_BYTES = 1024
 
     // The longest a decoded side may be, kept under the smallest GPU texture
     // limit worth supporting, and the most pixels one may hold, so three of
