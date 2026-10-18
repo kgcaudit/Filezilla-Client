@@ -59,6 +59,36 @@ class ImageFilesSvgTest {
         assertFalse(ImageFiles.isSvg("<?xml version='1.0'?><rss></rss>".toByteArray()))
     }
 
+    // ------------------------------------------------- avif, wbmp routing
+
+    @Test
+    fun `wbmp and avif are image formats the viewer opens`() {
+        // Robolectric runs on a recent SDK, so avif is above its Android 12 gate.
+        assertTrue(ImageFiles.looksImage("doc.wbmp"))
+        assertTrue(ImageFiles.looksImage("photo.avif"))
+    }
+
+    // ----------------------------------------- the animatable (gif/webp) sniff
+
+    @Test
+    fun `gif and animated webp are spotted by their magic`() {
+        assertTrue(ImageFiles.looksAnimatable("GIF89a...............".toByteArray()))
+        assertTrue(ImageFiles.looksAnimatable("GIF87a...............".toByteArray()))
+        // RIFF....WEBP -- the four size bytes between are not inspected here.
+        val webp = "RIFF".toByteArray() + byteArrayOf(0, 0, 0, 0) + "WEBP".toByteArray()
+        assertTrue(ImageFiles.looksAnimatable(webp))
+    }
+
+    @Test
+    fun `a jpeg or png is not treated as animatable`() {
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte()) + ByteArray(12)
+        assertFalse(ImageFiles.looksAnimatable(jpeg))
+        val png = byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte()) + ByteArray(12)
+        assertFalse(ImageFiles.looksAnimatable(png))
+        // A still image, however tiny, never trips the animatable sniff.
+        assertFalse(ImageFiles.looksAnimatable(ByteArray(4)))
+    }
+
     @Test
     fun `the sniff reads a scratch file with no telling extension`() {
         val scratch = File.createTempFile("srvthumb-", ".tmp").also { it.deleteOnExit() }

@@ -3001,6 +3001,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
     /**
+     * A moving image -- an animated GIF or WebP -- ready to play, or null when
+     * the file is a still (every other image, and these two when they hold one
+     * frame). The caller shows the drawable when it is here and falls back to
+     * [loadImage]'s one frame when it is not.
+     */
+    suspend fun loadAnimatedImage(
+        ref: ImageRef,
+        reqWidth: Int,
+        reqHeight: Int,
+    ): android.graphics.drawable.Drawable? =
+        withContext(Dispatchers.IO) {
+            when (ref) {
+                is ImageRef.OnDisk -> ImageFiles.decodeAnimated(ref.file, reqWidth, reqHeight)
+                is ImageRef.InArchive -> {
+                    val bytes = imageBytes(ref) ?: return@withContext null
+                    ImageFiles.decodeAnimated(bytes, reqWidth, reqHeight)
+                }
+            }
+        }
+
+    /**
      * A few recently read image files, kept whole in memory.
      *
      * A webtoon strip is decoded a band at a time, and every band reads the

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
@@ -782,17 +783,43 @@ private fun PageImage(
     // nothing else here would notice, so this re-decodes it when one lands.
     val revision = model.photo.revision
     var bitmap by remember(ref, revision) { mutableStateOf<Bitmap?>(null) }
+    // An animated GIF or WebP, kept whole and played; null for every still.
+    var animated by remember(ref, revision) { mutableStateOf<android.graphics.drawable.Drawable?>(null) }
     var failed by remember(ref, revision) { mutableStateOf(false) }
     LaunchedEffect(ref, reqWidth, reqHeight, revision) {
+        // Ask for a moving image first; most files are not one and this returns
+        // at once, so only a real GIF or WebP pays for the attempt.
+        val moving = model.loadAnimatedImage(ref, reqWidth, reqHeight)
+        if (moving != null) {
+            animated = moving
+            return@LaunchedEffect
+        }
         val decoded = model.loadImage(ref, reqWidth, reqHeight)
         if (decoded == null) failed = true else bitmap = decoded
     }
     Box(modifier, contentAlignment = Alignment.Center) {
+        val moving = animated
         when {
             failed -> Text(
                 stringResource(R.string.viewer_image_failed),
                 color = Color.White,
                 style = MaterialTheme.typography.bodyLarge,
+            )
+            moving != null -> AndroidView(
+                // The platform draws the animation; an ImageView hosts the
+                // drawable and starts it. The parent's zoom/pan transform still
+                // applies, since it sits on the row above this.
+                factory = { context ->
+                    android.widget.ImageView(context).apply {
+                        scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                        contentDescription = ref.name
+                    }
+                },
+                update = { view ->
+                    view.setImageDrawable(moving)
+                    (moving as? android.graphics.drawable.Animatable)?.start()
+                },
+                modifier = Modifier.fillMaxSize(),
             )
             bitmap == null -> CircularProgressIndicator(color = Color.White)
             else -> androidx.compose.foundation.Image(

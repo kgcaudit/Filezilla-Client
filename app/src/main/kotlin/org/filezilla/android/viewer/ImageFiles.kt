@@ -4,8 +4,12 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.BitmapRegionDecoder
 import android.graphics.Canvas
+import android.graphics.ImageDecoder
 import android.graphics.Matrix
 import android.graphics.Rect
+import android.graphics.drawable.AnimatedImageDrawable
+import android.graphics.drawable.Drawable
+import android.os.Build
 import android.util.Size
 import androidx.exifinterface.media.ExifInterface
 import com.caverock.androidsvg.SVG
@@ -13,6 +17,7 @@ import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.InputStream
 import java.io.PushbackInputStream
+import java.nio.ByteBuffer
 import java.util.zip.GZIPInputStream
 import kotlin.math.max
 import kotlin.math.min
@@ -34,13 +39,18 @@ object ImageFiles {
     private val IMAGE_EXTENSIONS: Set<String> =
         // svg (and svgz, a gzip-compressed svg) are here but are not bitmaps:
         // BitmapFactory cannot touch them, so [decode] sends them down the
-        // vector path instead. The rest are what BitmapFactory decodes natively.
-        "jpg jpeg png gif webp bmp heic heif svg svgz".split(" ").toSet()
+        // vector path instead. wbmp and avif round out what BitmapFactory reads
+        // natively; avif only decodes on Android 12+, which [looksImage] gates.
+        "jpg jpeg png gif webp bmp heic heif wbmp avif svg svgz".split(" ").toSet()
 
     /** Whether a name is one the image viewer shows. */
     fun looksImage(name: String): Boolean {
         val extension = name.substringAfterLast('.', "").lowercase()
-        return extension.isNotEmpty() && extension in IMAGE_EXTENSIONS
+        if (extension.isEmpty()) return false
+        // AVIF is decodable only from Android 12; below that it is not a
+        // viewable image, so the tap falls through to another app instead.
+        if (extension == "avif" && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
+        return extension in IMAGE_EXTENSIONS
     }
 
     /**
@@ -73,6 +83,72 @@ object ImageFiles {
             read > 0 && isSvg(head.copyOf(read))
         }
     }.getOrDefault(false)
+
+    /**
+     * Whether these bytes are a format that can carry an animation -- a GIF or
+     * a WebP -- which is worth trying to play rather than showing one frame of.
+     *
+     * By the magic rather than the name: a server preview arrives as a nameless
+     * scratch file. A still GIF or WebP matches too; that is fine, since the
+     * animated decode simply reports back that it holds only one frame and the
+     * still path takes over. Only whether it is worth *asking* is decided here.
+     */
+    fun looksAnimatable(bytes: ByteArray): Boolean {
+        if (bytes.size < 12) return false
+        // "GIF8" -- both GIF87a and GIF89a begin with it.
+        val gif = bytes[0] == 'G'.code.toByte() && bytes[1] == 'I'.code.toByte() &&
+            bytes[2] == 'F'.code.toByte() && bytes[3] == '8'.code.toByte()
+        // RIFF....WEBP
+        val webp = bytes[0] == 'R'.code.toByte() && bytes[1] == 'I'.code.toByte() &&
+            bytes[2] == 'F'.code.toByte() && bytes[3] == 'F'.code.toByte() &&
+            bytes[8] == 'W'.code.toByte() && bytes[9] == 'E'.code.toByte() &&
+            bytes[10] == 'B'.code.toByte() && bytes[11] == 'P'.code.toByte()
+        return gif || webp
+    }
+
+    /** The same for a file, reading only its head. */
+    fun looksAnimatable(file: File): Boolean = runCatching {
+        file.inputStream().use { stream ->
+            val head = ByteArray(16)
+            val read = stream.read(head)
+            read >= 12 && looksAnimatable(head.copyOf(read))
+        }
+    }.getOrDefault(false)
+
+    /**
+     * Decodes [file] as a moving image, or null when it is not one.
+     *
+     * A GIF or an animated WebP comes back as an [AnimatedImageDrawable] set to
+     * loop; a still of either kind comes back as something else, which is
+     * reported as null so the caller falls back to the one-frame bitmap path.
+     * Needs the platform image decoder, so below API 28 nothing moves and every
+     * such file is a still -- which is what the old build always did.
+     */
+    fun decodeAnimated(file: File, reqWidth: Int, reqHeight: Int): Drawable? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P || !looksAnimatable(file)) return null
+        return decodeAnimated(ImageDecoder.createSource(file), reqWidth, reqHeight)
+    }
+
+    /** The same from bytes already in hand (a page inside an archive). */
+    fun decodeAnimated(bytes: ByteArray, reqWidth: Int, reqHeight: Int): Drawable? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P || !looksAnimatable(bytes)) return null
+        return decodeAnimated(ImageDecoder.createSource(ByteBuffer.wrap(bytes)), reqWidth, reqHeight)
+    }
+
+    private fun decodeAnimated(source: ImageDecoder.Source, reqWidth: Int, reqHeight: Int): Drawable? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
+        val drawable = runCatching {
+            ImageDecoder.decodeDrawable(source) { decoder, info, _ ->
+                // Shrunk to the space it fills, like the bitmap path, so a huge
+                // animation is not held at full size frame by frame.
+                val sample = sampleSize(info.size.width, info.size.height, reqWidth, reqHeight)
+                if (sample > 1) decoder.setTargetSampleSize(sample)
+            }
+        }.getOrNull()
+        // Only a genuinely animated image is handed back; a one-frame GIF or
+        // WebP decodes to a plain drawable and is left to the still path.
+        return (drawable as? AnimatedImageDrawable)?.apply { repeatCount = AnimatedImageDrawable.REPEAT_INFINITE }
+    }
 
     /**
      * Decodes [file], no larger than [reqWidth] by [reqHeight] asks for.

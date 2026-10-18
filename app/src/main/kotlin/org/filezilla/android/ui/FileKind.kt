@@ -1,5 +1,6 @@
 package org.filezilla.android.ui
 
+import android.os.Build
 import androidx.annotation.DrawableRes
 import org.filezilla.android.R
 
@@ -40,7 +41,12 @@ fun kindOf(name: String, isDirectory: Boolean): FileKind {
     if (isDirectory) return FileKind.FOLDER
     val cut = name.lastIndexOf('.')
     if (cut <= 0) return FileKind.OTHER
-    return BY_EXTENSION[name.substring(cut + 1).lowercase()] ?: FileKind.OTHER
+    val extension = name.substring(cut + 1).lowercase()
+    // AVIF decodes only on Android 12+, so below that it is not a viewable
+    // image and must not wear the image tile -- the viewer would bounce it to
+    // another app, the same mismatch tiff was carrying before.
+    if (extension == "avif" && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return FileKind.OTHER
+    return BY_EXTENSION[extension] ?: FileKind.OTHER
 }
 
 /** Whether the app's own player shows this file: a video or a sound. */
@@ -93,7 +99,9 @@ private val BY_EXTENSION: Map<String, FileKind> = buildMap {
     // picture. svg is in -- it rasterises through the vector path; tiff/tif
     // are out, since nothing on Android decodes them reliably and a tile that
     // promised a viewer that then bounced to "open with" was the confusing bit.
-    for (e in "jpg jpeg png gif webp bmp heic heif svg svgz".split(" ")) put(e, FileKind.IMAGE)
+    // wbmp and avif are what BitmapFactory also decodes; avif is gated to
+    // Android 12+ in kindOf, where a tap would otherwise bounce to another app.
+    for (e in "jpg jpeg png gif webp bmp heic heif wbmp avif svg svgz".split(" ")) put(e, FileKind.IMAGE)
     for (e in "mkv mp4 avi mov wmv flv webm m4v mpg mpeg ts m2ts".split(" ")) put(e, FileKind.VIDEO)
     for (e in "mp3 flac wav aac ogg m4a wma opus".split(" ")) put(e, FileKind.AUDIO)
     // An e-book earns the open-book tile so a shelf of them reads apart from

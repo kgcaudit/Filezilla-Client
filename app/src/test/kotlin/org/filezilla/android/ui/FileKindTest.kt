@@ -42,6 +42,9 @@ class FileKindTest {
         assertEquals(FileKind.IMAGE, kindOf("logo.svg", false))
         assertEquals(FileKind.IMAGE, kindOf("Logo.SVG", false))
         assertEquals(FileKind.IMAGE, kindOf("logo.svgz", false))
+        // wbmp has no OS gate, so it is an image everywhere; avif's gate is
+        // covered where an SDK is in play (ImageFilesSvgTest).
+        assertEquals(FileKind.IMAGE, kindOf("fax.wbmp", false))
         assertEquals(FileKind.OTHER, kindOf("scan.tiff", false))
         assertEquals(FileKind.OTHER, kindOf("scan.tif", false))
     }
