@@ -53,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
@@ -139,7 +140,11 @@ private fun AppScreen(
     val scope = rememberCoroutineScope()
     val snackbars = remember { SnackbarHostState() }
 
-    var screen by remember { mutableStateOf(HOME) }
+    // Saveable, so the activity being recreated -- a rotation, a theme switch,
+    // the system reclaiming it in the background -- comes back on the same
+    // screen rather than snapping to HOME, which is what turned a back press on
+    // a tool into one that left the app.
+    var screen by rememberSaveable { mutableStateOf(HOME) }
 
     // A screen the view model asks for after finishing work off the main thread
     // -- reopening a moved archive from recents, found by a background walk.
@@ -209,7 +214,12 @@ private fun AppScreen(
         ) {
             BackAction.CLEAR_SELECTION -> model.clearSelection()
             BackAction.GO_UP -> model.goUp()
-            BackAction.CLOSE_SCREEN -> screen = HOME
+            BackAction.CLOSE_SCREEN -> {
+                screen = HOME
+                // Back off a tool returns to the storage sheet it was opened
+                // from, when it was opened from one.
+                model.onReturnedHome()
+            }
             BackAction.CONFIRM_EXIT -> {
                 exitArmedAt = System.currentTimeMillis()
                 scope.launch {
@@ -484,7 +494,12 @@ private fun AppScreen(
                         )
                     },
                     navigationIcon = {
-                        IconButton(onClick = { screen = HOME }) {
+                        IconButton(onClick = {
+                            screen = HOME
+                            // The arrow is the other way to close a tool, so it
+                            // returns to the sheet the same way back does.
+                            model.onReturnedHome()
+                        }) {
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = stringResource(R.string.action_back),
@@ -624,6 +639,9 @@ private fun AppScreen(
                 onDelete = model::deleteSite,
                 onConnect = { site ->
                     model.connect(site)
+                    // Forward into the connected pane, not back to the sheet:
+                    // the user chose this server, so the menu stays away.
+                    model.cancelSheetReopen()
                     screen = Screen.FILES
                 },
                 onMove = model::moveSite,
@@ -760,7 +778,12 @@ private fun AppScreen(
                 onOpen = { entry ->
                     // An archive opens in a pane and takes the screen with it; a
                     // viewer opens over the top and leaves the screen where it is.
-                    model.openRecent(entry, PaneId.entries.first())?.let { screen = it }
+                    model.openRecent(entry, PaneId.entries.first())?.let {
+                        // Forward into what was opened, so the sheet it came
+                        // from does not spring back over the file.
+                        model.cancelSheetReopen()
+                        screen = it
+                    }
                 },
                 modifier = Modifier.padding(padding),
             )

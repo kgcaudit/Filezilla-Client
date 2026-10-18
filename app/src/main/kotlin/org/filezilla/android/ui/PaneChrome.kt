@@ -56,7 +56,9 @@ fun PaneHeader(
     onOpenScreen: (Screen) -> Unit,
 ) {
     val state = model.pane(id)
-    var storageOpen by remember { mutableStateOf(false) }
+    // Held on the model, not here, so it survives the activity being recreated
+    // and can be reopened when a tool launched from it is closed.
+    val storageOpen = model.storageSheetPane == id
     var viewOptionsOpen by remember { mutableStateOf(false) }
     var associationsOpen by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -87,7 +89,7 @@ fun PaneHeader(
             // button says the current state and what pressing it changes at
             // the same time -- and the little chevron says it is a choice
             // rather than a label.
-            IconButton(onClick = here { storageOpen = true }) {
+            IconButton(onClick = here { model.openStorageSheet(id) }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         painter = painterResource(
@@ -184,8 +186,13 @@ fun PaneHeader(
             id = id,
             model = model,
             onGrant = onGrant,
-            onOpenScreen = onOpenScreen,
-            onDismiss = { storageOpen = false },
+            // A tool chosen here remembers the sheet it came from, so closing
+            // the tool returns to the sheet rather than to a bare files screen.
+            onOpenScreen = { screen ->
+                model.toolOpenedFromSheet(id)
+                onOpenScreen(screen)
+            },
+            onDismiss = { model.closeStorageSheet() },
         )
     }
 

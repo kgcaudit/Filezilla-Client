@@ -1533,6 +1533,71 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (!pane(id).isLocal) changingMode = id to entry
     }
 
+    // -------------------------------------------------- the storage sheet
+
+    /**
+     * Which pane's storage sheet is open, or null when none is.
+     *
+     * Held here, in the view model, rather than inside the pane's own chrome,
+     * for two reasons. It outlives an activity the system recreates -- a
+     * rotation, a theme switch -- so the sheet is still there afterwards. And
+     * it lets the sheet be reopened from elsewhere: a tool opened from the
+     * sheet (recents, the queue, the log...) remembers where it came from, so
+     * closing that tool returns to the sheet it was launched from rather than
+     * to a bare files screen the user never asked to see.
+     */
+    var storageSheetPane by mutableStateOf<PaneId?>(null)
+        private set
+
+    // The pane whose sheet to reopen once the tool it launched is closed, or
+    // null when the current screen was not reached through the sheet.
+    private var reopenSheetPane: PaneId? = null
+
+    /** Opens [id]'s storage sheet. */
+    fun openStorageSheet(id: PaneId) {
+        storageSheetPane = id
+    }
+
+    /** Closes the storage sheet, without arming any reopen. */
+    fun closeStorageSheet() {
+        storageSheetPane = null
+    }
+
+    /**
+     * A tool screen is being opened from [id]'s storage sheet. The sheet is put
+     * away for now, and armed to come back when the tool closes -- which is what
+     * makes back from the tool land on the sheet it was launched from.
+     */
+    fun toolOpenedFromSheet(id: PaneId) {
+        reopenSheetPane = id
+        storageSheetPane = null
+    }
+
+    /**
+     * Called when a tool is closed and the app returns to the files screen. If
+     * the tool was launched from the storage sheet, the sheet reopens where it
+     * left off; otherwise nothing happens, so an ordinary trip to the files
+     * screen stays bare.
+     */
+    fun onReturnedHome() {
+        reopenSheetPane?.let {
+            storageSheetPane = it
+            reopenSheetPane = null
+        }
+    }
+
+    /**
+     * Cancels a pending sheet reopen without opening it.
+     *
+     * For when a tool moves *forward* into content rather than being closed --
+     * connecting to a server picked in the sheet, opening a file from recents.
+     * The user chose to go somewhere, so the menu they came through should not
+     * spring back over what they chose.
+     */
+    fun cancelSheetReopen() {
+        reopenSheetPane = null
+    }
+
     fun dismissChangeMode() {
         changingMode = null
     }
