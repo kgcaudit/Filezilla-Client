@@ -31,6 +31,18 @@ dependencies {
     // tests here in the plain-JVM module just like the rest of the engine does.
     implementation(libs.jsch)
 
+    // SMB: the SMB2 client for the SMB engine. smbj's NTLM login reaches
+    // straight for BouncyCastle's `org.bouncycastle.util.Arrays`, so BouncyCastle
+    // has to be on the classpath -- but its *crypto* is the Android hazard: the
+    // platform ships an old stripped `org.bouncycastle` on the bootclasspath
+    // (<=API 27) that shadows the bundled one, and smbj's default provider calls
+    // newer BouncyCastle APIs that the shadow lacks. So SmbClient forces smbj's
+    // JCE security provider -- all ciphers, digests and MACs through the platform
+    // (SMB 2.1's HMAC-SHA256 signing, which every Android has) -- and the only
+    // BouncyCastle class ever touched is that stable `Arrays` utility. See
+    // SmbClient for why SMB 3 (AES-CMAC/CCM, which the JCE lacks) is left out.
+    implementation(libs.smbj)
+
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.kotlinx.coroutines.test)
     // A real in-process SSH/SFTP server (Apache MINA SSHD) for the SFTP engine
@@ -40,8 +52,6 @@ dependencies {
     // constraint, so the SFTP transfer path is proven against a real server here.
     testImplementation(libs.sshd.core)
     testImplementation(libs.sshd.sftp)
-    // SMB client, for proving the SMB path against a real Samba server.
-    testImplementation(libs.smbj)
     testRuntimeOnly(libs.junit.platform.launcher)
 }
 
