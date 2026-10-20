@@ -332,21 +332,18 @@ fun SiteEditor(
                 // Try the settings against the server before committing them --
                 // the fastest way to find a wrong share, password or HTTP/HTTPS
                 // choice. The result reads through the same wording the panes use.
-                TextButton(
-                    onClick = {
-                        testResult = null
-                        testing = true
-                        scope.launch {
-                            testResult = runCatching { onTest(currentDraft()) }
-                                .getOrElse { SiteTestResult.Failure(describeFailure(it, online = true)) }
-                            testing = false
-                        }
-                    },
-                    enabled = !testing && host.isNotBlank(),
-                ) {
-                    Text(
-                        stringResource(if (testing) R.string.site_testing else R.string.site_test_connection),
-                    )
+                val runTest = {
+                    testResult = null
+                    testing = true
+                    scope.launch {
+                        testResult = runCatching { onTest(currentDraft()) }
+                            .getOrElse { SiteTestResult.Failure(describeFailure(it, online = true)) }
+                        testing = false
+                    }
+                    Unit
+                }
+                TextButton(onClick = runTest, enabled = !testing && host.isNotBlank()) {
+                    Text(stringResource(if (testing) R.string.site_testing else R.string.site_test_connection))
                 }
                 when (val result = testResult) {
                     is SiteTestResult.Success -> Text(
@@ -354,12 +351,27 @@ fun SiteEditor(
                         color = MaterialTheme.colorScheme.primary,
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    is SiteTestResult.Failure -> Text(
-                        stringResource(result.failure.title) + " — " +
-                            stringResource(result.failure.advice),
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                    is SiteTestResult.Failure -> {
+                        Text(
+                            stringResource(result.failure.title) + " — " +
+                                stringResource(result.failure.advice),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        // First meeting with a self-signed server: let the person
+                        // accept what it presented and try again, pinning it onto
+                        // the draft so Save keeps it.
+                        result.acceptCertificate?.let { fingerprint ->
+                            TextButton(onClick = { pinned = fingerprint; runTest() }, enabled = !testing) {
+                                Text(stringResource(R.string.site_accept_certificate))
+                            }
+                        }
+                        result.acceptHostKey?.let { fingerprint ->
+                            TextButton(onClick = { knownHostKey = fingerprint; runTest() }, enabled = !testing) {
+                                Text(stringResource(R.string.site_accept_host_key))
+                            }
+                        }
+                    }
                     null -> Unit
                 }
             }

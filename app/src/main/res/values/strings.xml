@@ -505,6 +505,8 @@
     <string name="site_test_connection">Test connection</string>
     <string name="site_testing">Testing…</string>
     <string name="site_test_ok">Connected successfully</string>
+    <string name="site_accept_certificate">Accept this certificate and retry</string>
+    <string name="site_accept_host_key">Accept this host key and retry</string>
     <string name="field_webdav_encryption">Encryption</string>
     <string name="webdav_http">HTTP</string>
     <string name="webdav_https">HTTPS</string>

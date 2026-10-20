@@ -51,7 +51,39 @@ data class ConnectionFailure(
  */
 sealed interface SiteTestResult {
     object Success : SiteTestResult
-    data class Failure(val failure: ConnectionFailure) : SiteTestResult
+
+    /**
+     * A failed test. When the only thing wrong is that the server's certificate
+     * or SSH host key has never been accepted -- the ordinary first meeting with
+     * a home server signed by nobody -- [acceptCertificate]/[acceptHostKey]
+     * carry the fingerprint to pin, so the editor can offer to accept it and try
+     * again. They are null for every other failure, and for a certificate or key
+     * that *changed* from one already accepted, which is the serious case that
+     * should be looked at rather than waved through from here.
+     */
+    data class Failure(
+        val failure: ConnectionFailure,
+        val acceptCertificate: String? = null,
+        val acceptHostKey: String? = null,
+    ) : SiteTestResult
+}
+
+/**
+ * The certificate and host-key fingerprints a *first meeting* with a server
+ * invites accepting -- a home server signed by nobody -- or nulls.
+ *
+ * Only a first meeting (nothing accepted before) returns a fingerprint. A
+ * certificate or key that *changed* from one already accepted returns null: that
+ * is the serious case -- a rotated key or somebody in the middle, identical from
+ * here -- and it must be looked at, not accepted with one tap from a test.
+ */
+fun acceptableFirstMeeting(error: Throwable): Pair<String?, String?> {
+    val causes = generateSequence(error) { it.cause }
+    val cert = causes.filterIsInstance<org.filezilla.ftp.net.CertificateNotTrusted>().firstOrNull()
+        ?.takeIf { it.previouslyTrusted == null }?.certificate?.fingerprint
+    val hostKey = causes.filterIsInstance<org.filezilla.ftp.sftp.HostKeyNotTrusted>().firstOrNull()
+        ?.takeIf { it.previouslyTrusted == null }?.hostKey?.fingerprint
+    return cert to hostKey
 }
 
 fun describeFailure(error: Throwable, online: Boolean): ConnectionFailure {

@@ -497,6 +497,8 @@
     <string name="site_test_connection">연결 테스트</string>
     <string name="site_testing">테스트 중…</string>
     <string name="site_test_ok">연결에 성공했습니다</string>
+    <string name="site_accept_certificate">이 인증서를 수락하고 다시 시도</string>
+    <string name="site_accept_host_key">이 호스트 키를 수락하고 다시 시도</string>
     <string name="field_webdav_encryption">암호화</string>
     <string name="webdav_http">HTTP</string>
     <string name="webdav_https">HTTPS</string>

@@ -181,6 +181,33 @@ class ConnectionFailureTest {
     }
 
     @Test
+    fun `a first-meeting certificate is offered for acceptance`() {
+        val cert = org.filezilla.ftp.net.ServerCertificate(
+            fingerprint = "AA:BB", subject = "nas", issuer = "nas",
+            notBeforeMillis = 0, notAfterMillis = 0,
+        )
+        val (offered, hostKey) = acceptableFirstMeeting(
+            org.filezilla.ftp.net.CertificateNotTrusted(cert, previouslyTrusted = null),
+        )
+        assertEquals("AA:BB", offered)
+        assertEquals(null, hostKey)
+    }
+
+    @Test
+    fun `a changed certificate is not offered for one-tap acceptance`() {
+        val cert = org.filezilla.ftp.net.ServerCertificate(
+            fingerprint = "CC:DD", subject = "nas", issuer = "nas",
+            notBeforeMillis = 0, notAfterMillis = 0,
+        )
+        // Something was trusted before and the server now presents something
+        // else -- the serious case, left to be looked at rather than waved on.
+        val (offered, _) = acceptableFirstMeeting(
+            org.filezilla.ftp.net.CertificateNotTrusted(cert, previouslyTrusted = "AA:BB"),
+        )
+        assertEquals(null, offered)
+    }
+
+    @Test
     fun `a plain IO failure is a connection problem when online`() {
         assertEquals(
             R.string.fail_network,

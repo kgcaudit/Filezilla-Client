@@ -1959,7 +1959,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             graph.transfers.browse(site) { it.currentDirectory() }
             SiteTestResult.Success
         } catch (e: Exception) {
-            SiteTestResult.Failure(describeFailure(e, graph.networkGate.currentlyOnline()))
+            val (cert, hostKey) = acceptableFirstMeeting(e)
+            SiteTestResult.Failure(
+                failure = describeFailure(e, graph.networkGate.currentlyOnline()),
+                acceptCertificate = cert,
+                acceptHostKey = hostKey,
+            )
         } finally {
             graph.transfers.forget(site)
         }
