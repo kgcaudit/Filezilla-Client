@@ -484,6 +484,10 @@
     <string name="field_protocol">프로토콜</string>
     <string name="protocol_ftp">FTP / FTPS</string>
     <string name="protocol_sftp">SFTP (SSH)</string>
+    <string name="protocol_webdav">WebDAV</string>
+    <string name="field_webdav_encryption">암호화</string>
+    <string name="webdav_http">HTTP</string>
+    <string name="webdav_https">HTTPS</string>
     <string name="field_private_key">개인키 (SFTP)</string>
     <string name="private_key_hint">비밀번호 대신 PEM 개인키를 붙여넣어 로그인합니다</string>
     <string name="field_passphrase">키 암호</string>

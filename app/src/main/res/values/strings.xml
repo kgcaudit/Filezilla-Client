@@ -492,6 +492,10 @@
     <string name="field_protocol">Protocol</string>
     <string name="protocol_ftp">FTP / FTPS</string>
     <string name="protocol_sftp">SFTP (SSH)</string>
+    <string name="protocol_webdav">WebDAV</string>
+    <string name="field_webdav_encryption">Encryption</string>
+    <string name="webdav_http">HTTP</string>
+    <string name="webdav_https">HTTPS</string>
     <string name="field_private_key">Private key (SFTP)</string>
     <string name="private_key_hint">Paste a PEM key to log in with it instead of a password</string>
     <string name="field_passphrase">Passphrase</string>

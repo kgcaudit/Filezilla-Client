@@ -171,6 +171,7 @@ class BrowseConnections<S : java.io.Closeable>(
             val session: RemoteSession = when (site.protocolEnum) {
                 SiteProtocol.SFTP -> SftpSession(site.toSftpSettings(passwords), log)
                 SiteProtocol.FTP -> FtpSession(site.toSettings(passwords), capabilities, log)
+                SiteProtocol.WEBDAV -> WebDavSession(site.toWebDavSettings(passwords))
             }
             session.also { it.connect() }
         }

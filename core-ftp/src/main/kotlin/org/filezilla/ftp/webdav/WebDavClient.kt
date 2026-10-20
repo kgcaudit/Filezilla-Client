@@ -4,8 +4,11 @@ import org.filezilla.ftp.journal.RemoteFingerprint
 import org.filezilla.ftp.listing.DirectoryEntry
 import org.filezilla.ftp.listing.EntryTime
 import org.filezilla.ftp.listing.TimeAccuracy
+import org.filezilla.ftp.net.CertificateNotTrusted
+import org.filezilla.ftp.net.PinningTrustManager
 import org.w3c.dom.Element
 import java.io.ByteArrayInputStream
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.URI
@@ -13,14 +16,14 @@ import java.net.URLDecoder
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
-import java.security.cert.X509Certificate
+import java.security.SecureRandom
 import java.text.SimpleDateFormat
 import java.util.Base64
-import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import javax.net.ssl.SSLContext
-import javax.net.ssl.X509TrustManager
+import javax.net.ssl.SSLParameters
+import javax.net.ssl.TrustManager
 import javax.xml.parsers.DocumentBuilderFactory
 
 /**
@@ -43,12 +46,48 @@ class WebDavClient(private val settings: WebDavSettings) {
     private val auth = "Basic " + Base64.getEncoder()
         .encodeToString("${settings.user}:${settings.password}".toByteArray())
 
+    /**
+     * The server's certificate is trusted the same way FTPS's is: by chaining
+     * to a root the phone ships, or by being the exact one already pinned.
+     * Kept so a failed handshake can say which certificate was refused -- the
+     * [CertificateException] a trust manager throws does not always survive the
+     * trip out through the socket.
+     */
+    private val trust = PinningTrustManager(settings.pinnedFingerprint)
+
     private val http: HttpClient = HttpClient.newBuilder().apply {
         connectTimeout(java.time.Duration.ofSeconds(20))
-        if (settings.https && settings.allowUntrustedCertificate) {
-            sslContext(trustEverything())
+        if (settings.https) {
+            sslContext(
+                SSLContext.getInstance("TLS").apply {
+                    init(null, arrayOf<TrustManager>(trust), SecureRandom())
+                },
+            )
+            // A pinned server is identified by its exact certificate, which is
+            // stricter than its name, so -- as [TlsFactory] does for FTPS -- the
+            // host-name check is left off for it; a home certificate rarely
+            // names the address it is reached at. An unpinned server keeps the
+            // ordinary HTTPS endpoint check the JDK client does by default.
+            if (settings.pinnedFingerprint != null) {
+                sslParameters(
+                    SSLParameters().apply { endpointIdentificationAlgorithm = null },
+                )
+            }
         }
     }.build()
+
+    /**
+     * Sends a request, turning a handshake the [trust] manager refused into a
+     * [CertificateNotTrusted] the app can show -- the WebDAV parallel of
+     * [org.filezilla.ftp.protocol.FtpControlConnection]'s handshake handling.
+     */
+    private fun <T> send(request: HttpRequest, handler: HttpResponse.BodyHandler<T>): HttpResponse<T> =
+        try {
+            http.send(request, handler)
+        } catch (failed: IOException) {
+            val refused = trust.refusalFor(failed) ?: throw failed
+            throw CertificateNotTrusted(refused.certificate, refused.previouslyTrusted, failed)
+        }
 
     /** The URL for a path relative to the base, each segment percent-encoded. */
     private fun url(relativePath: String): URI {
@@ -71,7 +110,7 @@ class WebDavClient(private val settings: WebDavSettings) {
 
     /** Whether the server answers as a WebDAV server at the base path. */
     fun connect() {
-        val response = http.send(
+        val response = send(
             request("OPTIONS", "").build(),
             HttpResponse.BodyHandlers.discarding(),
         )
@@ -83,7 +122,7 @@ class WebDavClient(private val settings: WebDavSettings) {
 
     /** The immediate children of [dirPath] (relative to the base). */
     fun list(dirPath: String): List<DirectoryEntry> {
-        val response = http.send(
+        val response = send(
             request("PROPFIND", ensureTrailingSlash(dirPath))
                 .header("Depth", "1")
                 .header("Content-Type", "application/xml")
@@ -105,7 +144,7 @@ class WebDavClient(private val settings: WebDavSettings) {
 
     /** A file's size and time, or null when it is not there. */
     fun info(path: String): DirectoryEntry? {
-        val response = http.send(
+        val response = send(
             request("PROPFIND", path)
                 .header("Depth", "0")
                 .header("Content-Type", "application/xml")
@@ -119,26 +158,50 @@ class WebDavClient(private val settings: WebDavSettings) {
     }
 
     fun makeCollection(path: String) {
-        val code = http.send(request("MKCOL", path).build(), HttpResponse.BodyHandlers.discarding()).statusCode()
+        val code = send(request("MKCOL", path).build(), HttpResponse.BodyHandlers.discarding()).statusCode()
         if (code !in 200..201 && code != 405) throw WebDavException(code, "could not make the folder")
     }
 
     fun delete(path: String) {
-        val code = http.send(request("DELETE", path).build(), HttpResponse.BodyHandlers.discarding()).statusCode()
-        if (code !in 200..204 && code != 404) throw WebDavException(code, "could not delete")
+        val code = sendDelete(path)
+        if (code in 200..204 || code == 404) return
+        // As with MOVE, a collection's slash-less URL answers DELETE with a 301
+        // to the trailing-slash form; retry naming it as a collection.
+        if (code == 301) {
+            val retry = sendDelete(ensureTrailingSlash(path))
+            if (retry in 200..204 || retry == 404) return
+            throw WebDavException(retry, "could not delete")
+        }
+        throw WebDavException(code, "could not delete")
     }
 
+    private fun sendDelete(path: String): Int =
+        send(request("DELETE", path).build(), HttpResponse.BodyHandlers.discarding()).statusCode()
+
     fun move(fromPath: String, toPath: String) {
+        val code = sendMove(fromPath, toPath)
+        if (code in 200..204) return
+        // A collection answers MOVE of its slash-less URL with a 301 to the
+        // trailing-slash form, just as PROPFIND does; retry naming both ends as
+        // collections so a folder renames as readily as a file.
+        if (code == 301) {
+            val retry = sendMove(ensureTrailingSlash(fromPath), ensureTrailingSlash(toPath))
+            if (retry in 200..204) return
+            throw WebDavException(retry, "could not rename")
+        }
+        throw WebDavException(code, "could not rename")
+    }
+
+    private fun sendMove(fromPath: String, toPath: String): Int {
         val destination = url(toPath).toString()
-        val code = http.send(
+        return send(
             request("MOVE", fromPath).header("Destination", destination).header("Overwrite", "T").build(),
             HttpResponse.BodyHandlers.discarding(),
         ).statusCode()
-        if (code !in 200..204) throw WebDavException(code, "could not rename")
     }
 
     fun fingerprint(path: String): RemoteFingerprint {
-        val response = http.send(request("HEAD", path).build(), HttpResponse.BodyHandlers.discarding())
+        val response = send(request("HEAD", path).build(), HttpResponse.BodyHandlers.discarding())
         val size = response.headers().firstValue("Content-Length").orElse(null)?.toLongOrNull()
         val modified = response.headers().firstValue("Last-Modified").orElse(null)?.let(::parseHttpDate)
         return RemoteFingerprint(size = size, modifiedMillis = modified)
@@ -155,7 +218,7 @@ class WebDavClient(private val settings: WebDavSettings) {
     fun download(path: String, offset: Long, out: OutputStream, onProgress: (Long) -> Unit): Long? {
         val builder = request("GET", path).method("GET", HttpRequest.BodyPublishers.noBody())
         if (offset > 0) builder.header("Range", "bytes=$offset-")
-        val response = http.send(builder.build(), HttpResponse.BodyHandlers.ofInputStream())
+        val response = send(builder.build(), HttpResponse.BodyHandlers.ofInputStream())
         val code = response.statusCode()
         if (code == 404) throw WebDavException(404, "no such file")
         if (offset > 0 && code == 200) throw WebDavResumeUnsupported()
@@ -183,7 +246,7 @@ class WebDavClient(private val settings: WebDavSettings) {
             HttpRequest.BodyPublishers.ofInputStream { counting },
             length,
         )
-        val code = http.send(
+        val code = send(
             request("PUT", path).header("Content-Type", "application/octet-stream")
                 .method("PUT", body).build(),
             HttpResponse.BodyHandlers.discarding(),
@@ -254,17 +317,6 @@ class WebDavClient(private val settings: WebDavSettings) {
         format.timeZone = TimeZone.getTimeZone("GMT")
         format.parse(value)?.time
     }.getOrNull()
-
-    private fun trustEverything(): SSLContext {
-        val trustAll = object : X509TrustManager {
-            override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-            override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-            override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
-        }
-        return SSLContext.getInstance("TLS").apply {
-            init(null, arrayOf(trustAll), java.security.SecureRandom())
-        }
-    }
 }
 
 /** An HTTP status the WebDAV client could not make sense of. */

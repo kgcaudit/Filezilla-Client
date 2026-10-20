@@ -178,6 +178,29 @@ fun SiteEditor(
                     }
                 }
 
+                // WebDAV is HTTP, so the one connection choice is whether it is
+                // encrypted. PLAIN is http, IMPLICIT_TLS is https -- reusing the
+                // security field rather than a column of WebDAV's own.
+                if (protocol == SiteProtocol.WEBDAV) {
+                    Picker(
+                        label = stringResource(R.string.field_webdav_encryption),
+                        selected = webdavEncryptionLabel(security),
+                        options = listOf(
+                            FtpSecurity.PLAIN to stringResource(R.string.webdav_http),
+                            FtpSecurity.IMPLICIT_TLS to stringResource(R.string.webdav_https),
+                        ),
+                        onSelect = { chosen ->
+                            // An untouched port follows http<->https (80<->443);
+                            // a port the user typed is theirs and stays.
+                            val typed = port.toIntOrNull()
+                            if (typed == null || typed == defaultPortForProtocol(protocol, security)) {
+                                port = defaultPortForProtocol(protocol, chosen).toString()
+                            }
+                            security = chosen
+                        },
+                    )
+                }
+
                 SectionLabel(R.string.site_section_login)
                 OloTextField(
                     value = user,
@@ -237,10 +260,13 @@ fun SiteEditor(
                 // form. What this offers is the other direction: seeing what was
                 // accepted, and taking it back. FTP shows the certificate; SFTP
                 // shows the host key.
-                if (protocol == SiteProtocol.FTP) {
-                    CertificateStatus(pinned = pinned, onForget = { pinned = null })
-                } else {
+                // SFTP has a host key; FTP and WebDAV (over HTTPS) have a
+                // certificate. Either is accepted by recognising it on
+                // connecting, not chosen here; this only shows and forgets one.
+                if (protocol == SiteProtocol.SFTP) {
                     HostKeyStatus(known = knownHostKey, onForget = { knownHostKey = null })
+                } else {
+                    CertificateStatus(pinned = pinned, onForget = { pinned = null })
                 }
             }
         },
@@ -348,9 +374,12 @@ private fun Hint(text: String) {
 fun defaultPortFor(security: FtpSecurity): Int =
     if (security == FtpSecurity.IMPLICIT_TLS) 990 else 21
 
-/** The standard port for a protocol: 22 for SFTP, the FTP default otherwise. */
-fun defaultPortForProtocol(protocol: SiteProtocol, security: FtpSecurity): Int =
-    if (protocol == SiteProtocol.SFTP) 22 else defaultPortFor(security)
+/** The standard port for a protocol: 22 for SFTP, 80/443 for WebDAV, FTP otherwise. */
+fun defaultPortForProtocol(protocol: SiteProtocol, security: FtpSecurity): Int = when (protocol) {
+    SiteProtocol.SFTP -> 22
+    SiteProtocol.WEBDAV -> if (security != FtpSecurity.PLAIN) 443 else 80
+    SiteProtocol.FTP -> defaultPortFor(security)
+}
 
 /**
  * The port to show after the user switches protocol.
@@ -394,7 +423,13 @@ fun protocolLabel(protocol: SiteProtocol): String = stringResource(
     when (protocol) {
         SiteProtocol.FTP -> R.string.protocol_ftp
         SiteProtocol.SFTP -> R.string.protocol_sftp
+        SiteProtocol.WEBDAV -> R.string.protocol_webdav
     },
+)
+
+@Composable
+fun webdavEncryptionLabel(security: FtpSecurity): String = stringResource(
+    if (security == FtpSecurity.PLAIN) R.string.webdav_http else R.string.webdav_https,
 )
 
 @Composable

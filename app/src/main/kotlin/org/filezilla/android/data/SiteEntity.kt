@@ -16,7 +16,7 @@ import org.filezilla.ftp.sftp.SftpSettings
  * than inferred. Stored as its name so a value added later does not renumber
  * the existing rows.
  */
-enum class SiteProtocol { FTP, SFTP }
+enum class SiteProtocol { FTP, SFTP, WEBDAV }
 
 /**
  * A saved server, the app's equivalent of a FileZilla Site Manager entry.
@@ -122,4 +122,26 @@ data class SiteEntity(
         // than an exception, the same forgiving path the password takes.
         privateKeyPem = privateKeyCipher?.let { passwords.decrypt(it) }?.takeIf { it.isNotBlank() },
     )
+
+    /**
+     * The WebDAV connection settings, password decrypted for the moment it is
+     * needed -- the WebDAV parallel of [toSettings].
+     *
+     * HTTP versus HTTPS is carried on [security] (PLAIN is http, anything else
+     * https), so WebDAV needs no columns of its own. The base is the server
+     * root; [initialPath] is the starting folder, exactly as it is for FTP and
+     * SFTP -- a Nextcloud user puts their `/remote.php/dav/files/<user>` there.
+     * A self-signed certificate the user has accepted is remembered as a pinned
+     * certificate, exactly as FTPS does.
+     */
+    fun toWebDavSettings(passwords: PasswordCipher): org.filezilla.ftp.webdav.WebDavSettings =
+        org.filezilla.ftp.webdav.WebDavSettings(
+            host = host,
+            port = port,
+            https = securityEnum != FtpSecurity.PLAIN,
+            user = user,
+            password = passwords.decrypt(passwordCipher).orEmpty(),
+            basePath = initialPath?.takeIf { it.isNotBlank() } ?: "/",
+            pinnedFingerprint = pinnedCertificate,
+        )
 }

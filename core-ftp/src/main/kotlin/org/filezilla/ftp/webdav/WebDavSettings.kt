@@ -19,11 +19,14 @@ data class WebDavSettings(
     /** The collection the root maps to, e.g. "/" or "/remote.php/dav/files/me". */
     val basePath: String = "/",
     /**
-     * Accept a TLS certificate that does not chain to a trusted root -- a home
-     * server's self-signed one. Off by default; the app turns it on only once
-     * the user has seen and accepted the certificate, as it does for FTPS.
+     * The certificate fingerprint already accepted for this server, if any --
+     * the exact parallel of FTPS's pin. Null means the certificate has to be
+     * valid on its own terms (signed by a root the phone ships); a fingerprint
+     * means only that one certificate is trusted, matched exactly, which is how
+     * a home server signed by nobody is reached without trusting everything.
+     * See [org.filezilla.ftp.net.PinningTrustManager] for both rules.
      */
-    val allowUntrustedCertificate: Boolean = false,
+    val pinnedFingerprint: String? = null,
 ) {
     /** The scheme-host-port the paths hang off, with no trailing slash. */
     val origin: String get() = "${if (https) "https" else "http"}://$host:$port"
