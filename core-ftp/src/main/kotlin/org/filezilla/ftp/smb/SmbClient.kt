@@ -7,7 +7,6 @@ import com.hierynomus.mssmb2.SMB2CreateDisposition
 import com.hierynomus.mssmb2.SMB2Dialect
 import com.hierynomus.mssmb2.SMB2ShareAccess
 import com.hierynomus.mssmb2.SMBApiException
-import com.hierynomus.security.jce.JceSecurityProvider
 import com.hierynomus.smbj.SMBClient
 import com.hierynomus.smbj.SmbConfig
 import com.hierynomus.smbj.auth.AuthenticationContext
@@ -15,6 +14,7 @@ import com.hierynomus.smbj.auth.NtlmAuthenticator
 import com.hierynomus.smbj.connection.Connection
 import com.hierynomus.smbj.session.Session
 import com.hierynomus.smbj.share.DiskShare
+import org.filezilla.ftp.smb.crypto.AndroidSmbSecurityProvider
 import org.filezilla.ftp.journal.RemoteFingerprint
 import org.filezilla.ftp.listing.DirectoryEntry
 import org.filezilla.ftp.listing.EntryTime
@@ -31,19 +31,20 @@ import java.util.concurrent.TimeUnit
  * Built on smbj, the pure-Java SMB2 client, but pinned to a shape that runs on
  * Android as readily as on the JVM:
  *
- *  - **smbj's JCE security provider, never BouncyCastle's.** smbj's crypto
+ *  - **A JCE-based security provider, never BouncyCastle's.** smbj's crypto
  *    defaults to BouncyCastle, which on Android (<=API 27) is shadowed by the
  *    stripped `org.bouncycastle` on the platform bootclasspath, so a call into a
- *    newer BouncyCastle API crashes. [JceSecurityProvider] routes every cipher,
- *    digest and MAC through the platform's own crypto plus smbj's own MD4, so no
- *    BouncyCastle crypto runs. (BouncyCastle still ships, because smbj's NTLM
+ *    newer BouncyCastle API crashes. [AndroidSmbSecurityProvider] routes crypto
+ *    through the platform's own JCE and fills the two gaps Android has
+ *    (AES-CMAC, AES-CCM) with its own code on the platform AES block cipher, so
+ *    no BouncyCastle crypto runs. (BouncyCastle still ships, because smbj's NTLM
  *    login uses its `org.bouncycastle.util.Arrays` directly -- a stable utility
  *    that is safe shadowed -- but none of its crypto is reached.)
- *  - **SMB 2.0.2 and 2.1 only.** Their message signing is HMAC-SHA256, which
- *    every Android JCE provides. SMB 3's signing and encryption are AES-CMAC and
- *    AES-CCM/GCM, which Android's JCE does not, and reaching for BouncyCastle to
- *    get them is the crash above. 2.1 is what Samba and the NAS boxes this is for
- *    speak; 3 is a later job, gated on a crypto provider that works on Android.
+ *  - **SMB 2.0.2 through 3.1.1.** Signing is HMAC-SHA256 (2.x) or AES-CMAC (3.x);
+ *    encryption, when a share requires it, is AES-CCM (3.0/3.0.2) or AES-GCM
+ *    (3.1.1). GCM, SHA-512 pre-auth and the SP800-108 key derivation are the
+ *    platform's; CMAC and CCM are [AndroidSmbSecurityProvider]'s own. The highest
+ *    dialect the server offers is taken.
  *
  * Server-side answers (no such file, access denied) arrive from smbj as
  * [SMBApiException], a `RuntimeException` -- so, exactly as
@@ -69,14 +70,27 @@ class SmbClient(private val settings: SmbSettings) : Closeable {
 
     fun connect() {
         val config = SmbConfig.builder()
-            .withSecurityProvider(JceSecurityProvider())
-            .withDialects(SMB2Dialect.SMB_2_0_2, SMB2Dialect.SMB_2_1)
+            .withSecurityProvider(AndroidSmbSecurityProvider())
+            .withDialects(
+                SMB2Dialect.SMB_3_1_1,
+                SMB2Dialect.SMB_3_0_2,
+                SMB2Dialect.SMB_3_0,
+                SMB2Dialect.SMB_2_1,
+                SMB2Dialect.SMB_2_0_2,
+            )
             // NTLM only. smbj's default list also carries a SPNEGO/Kerberos
             // authenticator that reaches for `org.ietf.jgss`, which Android does
             // not ship; a user-and-password login never needs it, so it is left
             // out rather than risked. User/password auth to Samba and Windows is
             // NTLM, which this keeps.
             .withAuthenticators(NtlmAuthenticator.Factory())
+            // Advertise encryption so an encrypted share is reachable -- Samba
+            // refuses the tree connect otherwise -- and encrypt SMB 3 traffic by
+            // default. It is not a demand: a server that cannot or will not
+            // encrypt (SMB 2.x, or SMB 3 with encryption off) is still used
+            // unencrypted. AES-GCM (3.1.1) and AES-CCM (3.0/3.0.2) come from
+            // AndroidSmbSecurityProvider.
+            .withEncryptData(true)
             .withTimeout(settings.readTimeoutMillis.toLong(), TimeUnit.MILLISECONDS)
             .withSoTimeout(settings.readTimeoutMillis.toLong(), TimeUnit.MILLISECONDS)
             .build()

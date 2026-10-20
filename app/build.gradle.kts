@@ -158,10 +158,11 @@ android {
     packaging {
         resources.excludes += setOf(
             "META-INF/LICENSE*", "META-INF/NOTICE*",
-            // androidx.exifinterface's dependency ships a multi-release OSGi
-            // manifest that collides with another on the merged classpath; it
-            // is metadata the app does not need, so it is dropped here.
-            "META-INF/versions/9/OSGI-INF/MANIFEST.MF",
+            // Some dependencies (androidx.exifinterface's, and smbj's bundled
+            // bcprov) ship a multi-release OSGi manifest that collides with
+            // another on the merged classpath; it is metadata the app does not
+            // need, so every release of it is dropped here.
+            "META-INF/versions/*/OSGI-INF/MANIFEST.MF",
         )
     }
 }

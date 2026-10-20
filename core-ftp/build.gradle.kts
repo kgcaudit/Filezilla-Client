@@ -37,10 +37,10 @@ dependencies {
     // platform ships an old stripped `org.bouncycastle` on the bootclasspath
     // (<=API 27) that shadows the bundled one, and smbj's default provider calls
     // newer BouncyCastle APIs that the shadow lacks. So SmbClient forces smbj's
-    // JCE security provider -- all ciphers, digests and MACs through the platform
-    // (SMB 2.1's HMAC-SHA256 signing, which every Android has) -- and the only
-    // BouncyCastle class ever touched is that stable `Arrays` utility. See
-    // SmbClient for why SMB 3 (AES-CMAC/CCM, which the JCE lacks) is left out.
+    // JCE-based security provider -- platform crypto, with the two primitives
+    // Android lacks (AES-CMAC, AES-CCM) supplied as our own code on the platform
+    // AES block cipher -- so the only BouncyCastle class ever touched is that
+    // stable `Arrays` utility. See SmbClient and crypto/AndroidSmbSecurityProvider.
     implementation(libs.smbj)
 
     testImplementation(libs.junit.jupiter)
