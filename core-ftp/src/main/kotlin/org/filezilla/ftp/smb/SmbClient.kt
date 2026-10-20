@@ -11,6 +11,7 @@ import com.hierynomus.security.jce.JceSecurityProvider
 import com.hierynomus.smbj.SMBClient
 import com.hierynomus.smbj.SmbConfig
 import com.hierynomus.smbj.auth.AuthenticationContext
+import com.hierynomus.smbj.auth.NtlmAuthenticator
 import com.hierynomus.smbj.connection.Connection
 import com.hierynomus.smbj.session.Session
 import com.hierynomus.smbj.share.DiskShare
@@ -70,6 +71,12 @@ class SmbClient(private val settings: SmbSettings) : Closeable {
         val config = SmbConfig.builder()
             .withSecurityProvider(JceSecurityProvider())
             .withDialects(SMB2Dialect.SMB_2_0_2, SMB2Dialect.SMB_2_1)
+            // NTLM only. smbj's default list also carries a SPNEGO/Kerberos
+            // authenticator that reaches for `org.ietf.jgss`, which Android does
+            // not ship; a user-and-password login never needs it, so it is left
+            // out rather than risked. User/password auth to Samba and Windows is
+            // NTLM, which this keeps.
+            .withAuthenticators(NtlmAuthenticator.Factory())
             .withTimeout(settings.readTimeoutMillis.toLong(), TimeUnit.MILLISECONDS)
             .withSoTimeout(settings.readTimeoutMillis.toLong(), TimeUnit.MILLISECONDS)
             .build()
@@ -232,8 +239,21 @@ class SmbClient(private val settings: SmbSettings) : Closeable {
         )
     }
 
-    /** An app path (`/a/b`, share-relative) as the backslash path smbj wants. */
-    private fun smbPath(appPath: String): String = appPath.trim('/').replace('/', '\\')
+    /**
+     * An app path (`/a/b`, relative to the session root) as the backslash path
+     * smbj wants, under [SmbSettings.basePath] -- so a site rooted at a folder
+     * within the share browses relative to it, as WebDAV's base does.
+     */
+    private fun smbPath(appPath: String): String {
+        val base = settings.basePath.trim('/')
+        val rel = appPath.trim('/')
+        val joined = when {
+            base.isEmpty() -> rel
+            rel.isEmpty() -> base
+            else -> "$base/$rel"
+        }
+        return joined.replace('/', '\\')
+    }
 
     private companion object {
         const val BUFFER = 64 * 1024

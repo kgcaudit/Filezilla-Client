@@ -172,6 +172,7 @@ class BrowseConnections<S : java.io.Closeable>(
                 SiteProtocol.SFTP -> SftpSession(site.toSftpSettings(passwords), log)
                 SiteProtocol.FTP -> FtpSession(site.toSettings(passwords), capabilities, log)
                 SiteProtocol.WEBDAV -> WebDavSession(site.toWebDavSettings(passwords))
+                SiteProtocol.SMB -> SmbSession(site.toSmbSettings(passwords))
             }
             session.also { it.connect() }
         }

@@ -60,3 +60,21 @@
 # R8 renaming its internals turns a valid SVG into a blank bitmap only in
 # release. The library is small and ships no rules of its own.
 -keep class com.caverock.androidsvg.** { *; }
+
+# The SMB client (smbj) publishes its connection events through mbassador,
+# which finds @Handler methods by reflection -- so shrinking or renaming
+# smbj's internals can break event delivery in release only, exactly the
+# AndroidSVG hazard above. Neither ships R8 rules of its own, so both are
+# kept whole, and annotations are kept so mbassador can still read @Handler.
+-keep class com.hierynomus.** { *; }
+-keep class net.engio.** { *; }
+-keepattributes *Annotation*
+
+# smbj's SPNEGO/Kerberos authenticator and mbassador's expression-language
+# filter reference classes Android does not ship -- org.ietf.jgss and
+# javax.el. Neither path is taken here: the SMB client logs in with NTLM
+# (SmbClient pins it) and publishes plain events, so these are compiled
+# against but never loaded. Their absence is expected, so R8 is told not to
+# warn -- unlike a class on a live path, which would be a real break.
+-dontwarn org.ietf.jgss.**
+-dontwarn javax.el.**

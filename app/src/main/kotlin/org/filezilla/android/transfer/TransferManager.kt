@@ -462,6 +462,14 @@ class TransferManager(
                         TransferDirection.UPLOAD -> runWebDavUpload(record, settings, abort)
                     }
                 }
+
+                SiteProtocol.SMB -> {
+                    val settings = site.toSmbSettings(passwords)
+                    when (record.direction) {
+                        TransferDirection.DOWNLOAD -> runSmbDownload(record, settings, abort)
+                        TransferDirection.UPLOAD -> runSmbUpload(record, settings, abort)
+                    }
+                }
             }
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
@@ -1083,6 +1091,128 @@ class TransferManager(
     private fun deleteOnServerWebDav(settings: org.filezilla.ftp.webdav.WebDavSettings, remotePath: String) =
         org.filezilla.ftp.webdav.WebDavClient(settings).delete(remotePath)
 
+    /**
+     * The SMB counterpart of [runWebDavDownload]. SMB resumes both ways, so this
+     * is the same resume-safety path as the others, over the SMB engine.
+     */
+    private fun runSmbDownload(
+        record: TransferRecord,
+        settings: org.filezilla.ftp.smb.SmbSettings,
+        abort: TransferAbort,
+    ) {
+        val currentRemote = org.filezilla.ftp.smb.SmbEngine(settings).use {
+            it.connect()
+            it.fingerprint(record.remotePath)
+        }
+        val partial = partials.forTransfer(record.id)
+        val startOffset = when (val decision =
+            org.filezilla.ftp.journal.ResumeSafety.decide(record, currentRemote, partials.sizeOf(record.id))) {
+            is org.filezilla.ftp.journal.ResumeDecision.AlreadyComplete -> {
+                log.log(LogLevel.STATUS, "${record.remotePath} is already complete")
+                val done = record.copy(
+                    state = TransferState.COMPLETED,
+                    fingerprint = currentRemote,
+                    updatedAtMillis = System.currentTimeMillis(),
+                )
+                journal.put(done)
+                val delivered = publish(done, partial)
+                if (MovedSource.mayRemoveRemote(done, delivered)) {
+                    removeRemoteSource(done) { deleteOnServerSmb(settings, done.remotePath) }
+                }
+                return
+            }
+            is org.filezilla.ftp.journal.ResumeDecision.ResumeFrom -> {
+                log.log(LogLevel.STATUS, "Resuming ${record.remotePath} from ${decision.offset} bytes")
+                decision.offset
+            }
+            is org.filezilla.ftp.journal.ResumeDecision.RestartFromZero -> {
+                log.log(LogLevel.STATUS, "Restarting ${record.remotePath} from the beginning: ${decision.reason}")
+                0L
+            }
+        }
+
+        var running = record.copy(
+            state = TransferState.RUNNING,
+            bytesTransferred = startOffset,
+            fingerprint = currentRemote,
+            attempts = record.attempts + 1,
+            lastError = null,
+            updatedAtMillis = System.currentTimeMillis(),
+        )
+        journal.put(running)
+
+        var lastJournalled = startOffset
+        val base = progressListener(record)
+        val recording = TransferProgressListener { transferred, resumeOffset, totalSize ->
+            val position = resumeOffset + transferred
+            if (position - lastJournalled >= (1L shl 20)) {
+                lastJournalled = position
+                running = running.copy(
+                    bytesTransferred = position,
+                    totalBytes = totalSize ?: running.totalBytes,
+                    updatedAtMillis = System.currentTimeMillis(),
+                )
+                journal.put(running)
+            }
+            base.onProgress(transferred, resumeOffset, totalSize)
+        }
+
+        val finished = try {
+            val result = org.filezilla.ftp.smb.SmbResilientTransfer(
+                settings = settings,
+                retryPolicy = RetryPolicy(),
+                logger = log,
+                sleep = retrySleep(abort),
+                abort = abort,
+            ).download(
+                remoteFile = record.remotePath,
+                forcedResumeOffset = startOffset,
+                progress = recording,
+            ) { partial.asTransferWriter() }
+            val total = result.outcome.totalSize
+                ?: (result.outcome.resumeOffset + result.outcome.bytesTransferred)
+            running.copy(
+                state = TransferState.COMPLETED,
+                bytesTransferred = total,
+                totalBytes = total,
+                fingerprint = currentRemote,
+                updatedAtMillis = System.currentTimeMillis(),
+            ).also { journal.put(it) }
+        } catch (e: Exception) {
+            journal.put(
+                running.copy(
+                    state = TransferState.INTERRUPTED,
+                    lastError = e.message ?: e.javaClass.simpleName,
+                    updatedAtMillis = System.currentTimeMillis(),
+                ),
+            )
+            throw e
+        }
+
+        val delivered = publish(finished, partial)
+        if (MovedSource.mayRemoveRemote(finished, delivered)) {
+            removeRemoteSource(finished) { deleteOnServerSmb(settings, finished.remotePath) }
+        }
+    }
+
+    /** The SMB counterpart of [runWebDavUpload]. */
+    private fun runSmbUpload(
+        record: TransferRecord,
+        settings: org.filezilla.ftp.smb.SmbSettings,
+        abort: TransferAbort,
+    ) = runUploadVia(record) { remoteFile, resume, progress, readerFactory ->
+        org.filezilla.ftp.smb.SmbResilientTransfer(
+            settings = settings,
+            retryPolicy = RetryPolicy(),
+            logger = log,
+            sleep = retrySleep(abort),
+            abort = abort,
+        ).upload(remoteFile, resume = resume, progress = progress, readerFactory = readerFactory)
+    }
+
+    private fun deleteOnServerSmb(settings: org.filezilla.ftp.smb.SmbSettings, remotePath: String) =
+        org.filezilla.ftp.smb.SmbClient(settings).use { it.connect(); it.deleteFile(remotePath) }
+
     // ----------------------------------------------------------------- helpers
 
     private fun progressListener(record: TransferRecord) =
@@ -1507,6 +1637,23 @@ class TransferManager(
                     ) { into.asTransferWriter() }
                 }
             }
+
+            SiteProtocol.SMB -> {
+                val settings = site.toSmbSettings(passwords)
+                runInterruptible {
+                    org.filezilla.ftp.smb.SmbResilientTransfer(
+                        settings = settings,
+                        retryPolicy = RetryPolicy(),
+                        logger = log,
+                        sleep = retrySleep(abort),
+                        abort = abort,
+                    ).download(
+                        remoteFile = remotePath,
+                        forcedResumeOffset = 0,
+                        progress = { transferred, _, total -> progress(transferred, total) },
+                    ) { into.asTransferWriter() }
+                }
+            }
         }
         Unit
     }
@@ -1578,6 +1725,23 @@ class TransferManager(
                     val settings = site.toWebDavSettings(passwords)
                     runInterruptible {
                         org.filezilla.ftp.webdav.WebDavResilientTransfer(
+                            settings = settings,
+                            retryPolicy = RetryPolicy(),
+                            logger = log,
+                            sleep = retrySleep(abort),
+                            abort = abort,
+                        ).upload(
+                            remoteFile = remotePath,
+                            resume = false,
+                            progress = { transferred, _, total -> progress(transferred, total) },
+                        ) { from.asTransferReader() }
+                    }
+                }
+
+                SiteProtocol.SMB -> {
+                    val settings = site.toSmbSettings(passwords)
+                    runInterruptible {
+                        org.filezilla.ftp.smb.SmbResilientTransfer(
                             settings = settings,
                             retryPolicy = RetryPolicy(),
                             logger = log,

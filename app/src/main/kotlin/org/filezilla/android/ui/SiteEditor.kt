@@ -201,6 +201,13 @@ fun SiteEditor(
                     )
                 }
 
+                // SMB has no column of its own: the share is the first part of
+                // the path (so /Public or /Public/docs), and an NT domain, if
+                // there is one, goes on the user as DOMAIN\\user. The hint says so.
+                if (protocol == SiteProtocol.SMB) {
+                    Hint(stringResource(R.string.smb_note))
+                }
+
                 SectionLabel(R.string.site_section_login)
                 OloTextField(
                     value = user,
@@ -263,10 +270,15 @@ fun SiteEditor(
                 // SFTP has a host key; FTP and WebDAV (over HTTPS) have a
                 // certificate. Either is accepted by recognising it on
                 // connecting, not chosen here; this only shows and forgets one.
-                if (protocol == SiteProtocol.SFTP) {
-                    HostKeyStatus(known = knownHostKey, onForget = { knownHostKey = null })
-                } else {
-                    CertificateStatus(pinned = pinned, onForget = { pinned = null })
+                when (protocol) {
+                    SiteProtocol.SFTP ->
+                        HostKeyStatus(known = knownHostKey, onForget = { knownHostKey = null })
+                    // FTP and WebDAV (over HTTPS) identify a server by a pinned
+                    // certificate; SMB has neither a host key nor a certificate,
+                    // so there is nothing to show or forget.
+                    SiteProtocol.FTP, SiteProtocol.WEBDAV ->
+                        CertificateStatus(pinned = pinned, onForget = { pinned = null })
+                    SiteProtocol.SMB -> Unit
                 }
             }
         },
@@ -378,6 +390,7 @@ fun defaultPortFor(security: FtpSecurity): Int =
 fun defaultPortForProtocol(protocol: SiteProtocol, security: FtpSecurity): Int = when (protocol) {
     SiteProtocol.SFTP -> 22
     SiteProtocol.WEBDAV -> if (security != FtpSecurity.PLAIN) 443 else 80
+    SiteProtocol.SMB -> 445
     SiteProtocol.FTP -> defaultPortFor(security)
 }
 
@@ -424,6 +437,7 @@ fun protocolLabel(protocol: SiteProtocol): String = stringResource(
         SiteProtocol.FTP -> R.string.protocol_ftp
         SiteProtocol.SFTP -> R.string.protocol_sftp
         SiteProtocol.WEBDAV -> R.string.protocol_webdav
+        SiteProtocol.SMB -> R.string.protocol_smb
     },
 )
 

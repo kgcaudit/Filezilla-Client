@@ -7,6 +7,7 @@ import org.filezilla.ftp.protocol.FtpSecurity
 import org.filezilla.ftp.protocol.FtpSettings
 import org.filezilla.ftp.protocol.TransferMode
 import org.filezilla.ftp.sftp.SftpSettings
+import org.filezilla.ftp.smb.SmbSettings
 
 /**
  * Which protocol a saved server speaks.
@@ -16,7 +17,7 @@ import org.filezilla.ftp.sftp.SftpSettings
  * than inferred. Stored as its name so a value added later does not renumber
  * the existing rows.
  */
-enum class SiteProtocol { FTP, SFTP, WEBDAV }
+enum class SiteProtocol { FTP, SFTP, WEBDAV, SMB }
 
 /**
  * A saved server, the app's equivalent of a FileZilla Site Manager entry.
@@ -144,4 +145,34 @@ data class SiteEntity(
             basePath = initialPath?.takeIf { it.isNotBlank() } ?: "/",
             pinnedFingerprint = pinnedCertificate,
         )
+
+    /**
+     * The SMB connection settings, password decrypted for the moment it is
+     * needed -- the SMB parallel of [toSettings].
+     *
+     * SMB has no column of its own, so two fields are read for two parts each,
+     * the way an SMB address is written:
+     *  - [initialPath] is `\\server\SHARE\folder`'s tail: its first segment is
+     *    the [SmbSettings.share] to connect, and the rest is the folder within it
+     *    the root maps to. `/Public/docs` is share `Public`, folder `/docs`.
+     *  - [user] may carry the NT domain the Windows way, `DOMAIN\user`; the part
+     *    before the backslash is the domain, the rest the user. A plain `user`
+     *    logs in with no domain, which is what a workgroup share wants.
+     */
+    fun toSmbSettings(passwords: PasswordCipher): SmbSettings {
+        val path = initialPath?.trim('/').orEmpty()
+        val share = path.substringBefore('/')
+        val folder = path.substringAfter('/', "")
+        val domain = user.substringBefore('\\', "").takeIf { it.isNotBlank() && user.contains('\\') }
+        val account = if (user.contains('\\')) user.substringAfter('\\') else user
+        return SmbSettings(
+            host = host,
+            port = port,
+            user = account,
+            password = passwords.decrypt(passwordCipher).orEmpty(),
+            domain = domain,
+            share = share,
+            basePath = if (folder.isEmpty()) "/" else "/$folder",
+        )
+    }
 }
