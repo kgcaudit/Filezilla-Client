@@ -44,6 +44,16 @@ data class ConnectionFailure(
     val detailArg: String,
 )
 
+/**
+ * The outcome of the site editor's "Test connection": it either reached the
+ * server and logged in, or it did not, with the same [ConnectionFailure] the
+ * panes show so the reason and the next step read identically everywhere.
+ */
+sealed interface SiteTestResult {
+    object Success : SiteTestResult
+    data class Failure(val failure: ConnectionFailure) : SiteTestResult
+}
+
 fun describeFailure(error: Throwable, online: Boolean): ConnectionFailure {
     val host = (error as? UnknownHostException)?.message.orEmpty()
     val message = error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName

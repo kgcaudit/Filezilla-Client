@@ -680,6 +680,7 @@ private fun AppScreen(
                 editing = editingSite,
                 onEdit = { site -> editingSite = site?.let(model::draftOf) },
                 onSave = model::saveSite,
+                onTest = model::testConnection,
                 onDelete = model::deleteSite,
                 onConnect = { site ->
                     model.connect(site)

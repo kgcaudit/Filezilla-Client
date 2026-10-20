@@ -39,6 +39,7 @@ fun SitesScreen(
     editing: SiteDraft?,
     onEdit: (SiteEntity?) -> Unit,
     onSave: (SiteDraft) -> Unit,
+    onTest: suspend (SiteDraft) -> SiteTestResult,
     onDelete: (SiteEntity) -> Unit,
     onConnect: (SiteEntity) -> Unit,
     onMove: (SiteEntity, Move) -> Unit,
@@ -163,6 +164,7 @@ fun SitesScreen(
                 onSave(it)
                 onEdit(null)
             },
+            onTest = onTest,
         )
     }
 }

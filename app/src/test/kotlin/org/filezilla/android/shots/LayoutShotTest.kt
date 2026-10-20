@@ -549,6 +549,7 @@ class LayoutShotTest {
                 ),
                 onDismiss = {},
                 onSave = {},
+                onTest = { org.filezilla.android.ui.SiteTestResult.Success },
             )
         }
     }
@@ -652,6 +653,7 @@ class LayoutShotTest {
                 editing = null,
                 onEdit = {},
                 onSave = {},
+                onTest = { org.filezilla.android.ui.SiteTestResult.Success },
                 onDelete = {},
                 onConnect = {},
                 onMove = { _, _ -> },

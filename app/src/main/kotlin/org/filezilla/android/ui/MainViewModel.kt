@@ -1941,6 +1941,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Opens a site for editing, decrypting its password for the form only. */
     fun draftOf(site: SiteEntity): SiteDraft = SiteDraft.of(site, graph.passwords)
 
+    /**
+     * Tries the draft's settings against the server, without saving it, so the
+     * editor can say whether they work before they are committed.
+     *
+     * It opens a connection and logs in -- which for SMB and WebDAV also proves
+     * the share and the HTTP/HTTPS choice -- then lets it go. A transient entity,
+     * never written, so testing an edit cannot overwrite the saved site; and the
+     * throwaway connection is forgotten afterwards rather than left in the pool
+     * under an id nothing will reuse. Failures read through the same
+     * [describeFailure] the panes use, so "login rejected" or "share not found"
+     * is worded identically here.
+     */
+    suspend fun testConnection(draft: SiteDraft): SiteTestResult {
+        val site = draft.toEntity(graph.passwords)
+        return try {
+            graph.transfers.browse(site) { it.currentDirectory() }
+            SiteTestResult.Success
+        } catch (e: Exception) {
+            SiteTestResult.Failure(describeFailure(e, graph.networkGate.currentlyOnline()))
+        } finally {
+            graph.transfers.forget(site)
+        }
+    }
+
     // ----------------------------------------------- backup and restore
 
     /**

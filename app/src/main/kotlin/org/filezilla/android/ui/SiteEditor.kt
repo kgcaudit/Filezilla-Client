@@ -26,7 +26,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -65,6 +67,7 @@ fun SiteEditor(
     initial: SiteDraft,
     onDismiss: () -> Unit,
     onSave: (SiteDraft) -> Unit,
+    onTest: suspend (SiteDraft) -> SiteTestResult,
 ) {
     var name by remember { mutableStateOf(initial.name) }
     var host by remember { mutableStateOf(initial.host) }
@@ -81,6 +84,32 @@ fun SiteEditor(
     var initialPath by remember { mutableStateOf(initial.initialPath.orEmpty()) }
     var smbShare by remember { mutableStateOf(initial.smbShare.orEmpty()) }
     var smbDomain by remember { mutableStateOf(initial.smbDomain.orEmpty()) }
+
+    // One place builds the draft from the fields, used by both Test and Save, so
+    // the connection tested is exactly the one that would be saved.
+    val currentDraft = {
+        initial.copy(
+            name = name,
+            host = host,
+            port = port.toIntOrNull() ?: defaultPortForProtocol(protocol, security),
+            user = user,
+            password = password,
+            protocol = protocol,
+            security = security,
+            transferMode = mode,
+            encoding = encoding,
+            pinnedCertificate = pinned,
+            knownHostKey = knownHostKey,
+            privateKeyPem = privateKey,
+            initialPath = initialPath,
+            smbShare = if (protocol == SiteProtocol.SMB) smbShare else null,
+            smbDomain = if (protocol == SiteProtocol.SMB) smbDomain else null,
+        )
+    }
+
+    val scope = rememberCoroutineScope()
+    var testing by remember { mutableStateOf(false) }
+    var testResult by remember { mutableStateOf<SiteTestResult?>(null) }
 
     OloDialog(
         title = stringResource(
@@ -299,36 +328,47 @@ fun SiteEditor(
                         CertificateStatus(pinned = pinned, onForget = { pinned = null })
                     SiteProtocol.SMB -> Unit
                 }
+
+                // Try the settings against the server before committing them --
+                // the fastest way to find a wrong share, password or HTTP/HTTPS
+                // choice. The result reads through the same wording the panes use.
+                TextButton(
+                    onClick = {
+                        testResult = null
+                        testing = true
+                        scope.launch {
+                            testResult = runCatching { onTest(currentDraft()) }
+                                .getOrElse { SiteTestResult.Failure(describeFailure(it, online = true)) }
+                            testing = false
+                        }
+                    },
+                    enabled = !testing && host.isNotBlank(),
+                ) {
+                    Text(
+                        stringResource(if (testing) R.string.site_testing else R.string.site_test_connection),
+                    )
+                }
+                when (val result = testResult) {
+                    is SiteTestResult.Success -> Text(
+                        stringResource(R.string.site_test_ok),
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    is SiteTestResult.Failure -> Text(
+                        stringResource(result.failure.title) + " — " +
+                            stringResource(result.failure.advice),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    null -> Unit
+                }
             }
         },
         action = {
             ConfirmButton(
                 text = stringResource(R.string.action_save),
                 enabled = host.isNotBlank() && port.isNotBlank(),
-                onClick = {
-                    onSave(
-                        initial.copy(
-                            name = name,
-                            host = host,
-                            port = port.toIntOrNull() ?: defaultPortForProtocol(protocol, security),
-                            user = user,
-                            password = password,
-                            protocol = protocol,
-                            security = security,
-                            transferMode = mode,
-                            encoding = encoding,
-                            pinnedCertificate = pinned,
-                            knownHostKey = knownHostKey,
-                            privateKeyPem = privateKey,
-                            initialPath = initialPath,
-                            // Kept only for SMB, so switching a site to another
-                            // protocol and back does not leave a stale share or
-                            // domain pinned to it.
-                            smbShare = if (protocol == SiteProtocol.SMB) smbShare else null,
-                            smbDomain = if (protocol == SiteProtocol.SMB) smbDomain else null,
-                        ),
-                    )
-                },
+                onClick = { onSave(currentDraft()) },
             )
         },
     )

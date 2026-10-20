@@ -494,6 +494,9 @@
     <string name="smb_share_hint">예: Public</string>
     <string name="field_smb_domain">도메인 (선택)</string>
     <string name="smb_domain_hint">NT 도메인 또는 워크그룹(있으면)</string>
+    <string name="site_test_connection">연결 테스트</string>
+    <string name="site_testing">테스트 중…</string>
+    <string name="site_test_ok">연결에 성공했습니다</string>
     <string name="field_webdav_encryption">암호화</string>
     <string name="webdav_http">HTTP</string>
     <string name="webdav_https">HTTPS</string>

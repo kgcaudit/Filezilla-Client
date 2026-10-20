@@ -502,6 +502,9 @@
     <string name="smb_share_hint">e.g. Public</string>
     <string name="field_smb_domain">Domain (optional)</string>
     <string name="smb_domain_hint">NT domain or workgroup, if any</string>
+    <string name="site_test_connection">Test connection</string>
+    <string name="site_testing">Testing…</string>
+    <string name="site_test_ok">Connected successfully</string>
     <string name="field_webdav_encryption">Encryption</string>
     <string name="webdav_http">HTTP</string>
     <string name="webdav_https">HTTPS</string>
