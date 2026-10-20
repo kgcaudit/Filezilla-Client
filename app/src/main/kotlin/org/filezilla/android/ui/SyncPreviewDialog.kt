@@ -42,10 +42,18 @@ private const val MAX_LISTED = 8
 fun SyncPreviewDialog(
     state: SyncState,
     onToggleDelete: (Boolean) -> Unit,
+    onToggleTwoWay: (Boolean) -> Unit,
     onRun: () -> Unit,
     onStop: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val two = state.twoWay
+    val reverse = state.reversePlan
+    val directionText = if (two) {
+        stringResource(R.string.sync_direction_two_way, state.source.label, state.target.label)
+    } else {
+        stringResource(R.string.sync_direction, state.source.label, state.target.label)
+    }
     if (state.running) {
         OloDialog(
             title = stringResource(R.string.sync_running),
@@ -58,7 +66,7 @@ fun SyncPreviewDialog(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(modifier = Modifier.size(22.dp))
                     Text(
-                        stringResource(R.string.sync_direction, state.source.label, state.target.label),
+                        directionText,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2,
@@ -73,24 +81,31 @@ fun SyncPreviewDialog(
     }
 
     val plan = state.plan
+    // In two-way mode the totals and the list span both directions.
+    val copyTotal = plan.copyCount + (reverse?.copyCount ?: 0)
+    val makeTotal = plan.makeDirCount + (reverse?.makeDirCount ?: 0)
+    val skipTotal = plan.skipCount + (reverse?.skipCount ?: 0)
+    val listActions = if (two && reverse != null) plan.actions + reverse.actions else plan.actions
+    val noop = plan.isNoop && (reverse?.isNoop ?: true)
+    val showDeletes = state.deleteExtras && !two
     OloDialog(
         title = stringResource(R.string.sync_title),
         onDismiss = onDismiss,
-        detail = stringResource(R.string.sync_direction, state.source.label, state.target.label),
+        detail = directionText,
         content = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(R.string.sync_copy_count, plan.copyCount), style = MaterialTheme.typography.bodyMedium)
-                if (plan.makeDirCount > 0) {
-                    Text(stringResource(R.string.sync_make_count, plan.makeDirCount), style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.sync_copy_count, copyTotal), style = MaterialTheme.typography.bodyMedium)
+                if (makeTotal > 0) {
+                    Text(stringResource(R.string.sync_make_count, makeTotal), style = MaterialTheme.typography.bodyMedium)
                 }
-                if (plan.skipCount > 0) {
+                if (skipTotal > 0) {
                     Text(
-                        stringResource(R.string.sync_skip_count, plan.skipCount),
+                        stringResource(R.string.sync_skip_count, skipTotal),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                if (state.deleteExtras && plan.deleteCount > 0) {
+                if (showDeletes && plan.deleteCount > 0) {
                     Text(
                         stringResource(R.string.sync_delete_count, plan.deleteCount),
                         style = MaterialTheme.typography.bodyMedium,
@@ -98,29 +113,28 @@ fun SyncPreviewDialog(
                     )
                 }
 
-                PlanList(plan.actions, showDeletes = state.deleteExtras)
+                PlanList(listActions, showDeletes = showDeletes)
 
-                // The one destructive switch, off to begin with. Its own line
-                // says what it does and that it cannot be undone.
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .selectable(selected = state.deleteExtras, onClick = { onToggleDelete(!state.deleteExtras) })
-                        .padding(vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Checkbox(checked = state.deleteExtras, onCheckedChange = onToggleDelete)
-                    Column(modifier = Modifier.padding(start = 4.dp)) {
-                        Text(stringResource(R.string.sync_delete_extras))
-                        Text(
-                            stringResource(R.string.sync_delete_extras_detail),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                // Two-way, or one-way with deletions: the two switches that
+                // decide what the sync does. Each says plainly what it means.
+                ToggleRow(
+                    checked = two,
+                    onToggle = onToggleTwoWay,
+                    title = stringResource(R.string.sync_two_way),
+                    detail = stringResource(R.string.sync_two_way_detail),
+                )
+                // The destructive switch is one-way only -- a two-way sync never
+                // deletes -- so it steps aside while two-way is on.
+                if (!two) {
+                    ToggleRow(
+                        checked = state.deleteExtras,
+                        onToggle = onToggleDelete,
+                        title = stringResource(R.string.sync_delete_extras),
+                        detail = stringResource(R.string.sync_delete_extras_detail),
+                    )
                 }
 
-                // What the mirror could not do cleanly, said rather than hidden.
+                // What the sync could not do cleanly, said rather than hidden.
                 if (plan.conflicts.isNotEmpty()) {
                     Note(stringResource(R.string.sync_conflicts_note, plan.conflicts.size))
                 }
@@ -130,7 +144,7 @@ fun SyncPreviewDialog(
                 if (state.truncated) {
                     Note(stringResource(R.string.sync_truncated_note))
                 }
-                if (plan.isNoop) {
+                if (noop) {
                     Text(
                         stringResource(R.string.sync_nothing),
                         style = MaterialTheme.typography.bodyMedium,
@@ -143,13 +157,34 @@ fun SyncPreviewDialog(
             ConfirmButton(
                 text = stringResource(R.string.sync_run),
                 onClick = onRun,
-                enabled = !plan.isNoop,
+                enabled = !noop,
                 // Reaches for the error colour once it will delete, so the
                 // button matches what turning the switch on made it do.
-                destructive = state.deleteExtras && plan.deleteCount > 0,
+                destructive = showDeletes && plan.deleteCount > 0,
             )
         },
     )
+}
+
+@Composable
+private fun ToggleRow(checked: Boolean, onToggle: (Boolean) -> Unit, title: String, detail: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectable(selected = checked, onClick = { onToggle(!checked) })
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked = checked, onCheckedChange = onToggle)
+        Column(modifier = Modifier.padding(start = 4.dp)) {
+            Text(title)
+            Text(
+                detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }
 
 /** A capped, scrollable look at what the plan will actually touch. */

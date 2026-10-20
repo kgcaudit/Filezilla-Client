@@ -4857,6 +4857,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         syncState = syncState?.copy(deleteExtras = on)
     }
 
+    /**
+     * Switches the preview between a one-way mirror and a two-way sync, redoing
+     * the diff from the listings already in hand. Two-way never deletes, so the
+     * delete switch is turned off with it.
+     */
+    fun setSyncTwoWay(on: Boolean) {
+        val state = syncState ?: return
+        syncState = if (on) {
+            val two = org.filezilla.android.files.TwoWayDiff.diff(state.sourceTree, state.targetTree)
+            state.copy(
+                twoWay = true,
+                deleteExtras = false,
+                plan = two.forward,
+                reversePlan = two.backward,
+            )
+        } else {
+            state.copy(
+                twoWay = false,
+                reversePlan = null,
+                plan = org.filezilla.android.files.SyncDiff.diff(
+                    state.sourceTree, state.targetTree, deleteExtras = true,
+                ),
+            )
+        }
+    }
+
     /** Stops the mirror -- the scan through its work dialog, the run through this. */
     fun stopSync() {
         syncStop?.stop()
@@ -4973,6 +4999,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     deleteExtras = false,
                     truncated = sourceTree.truncated || targetTree.truncated,
                     skippedLinks = sourceTree.skippedLinks + targetTree.skippedLinks,
+                    sourceTree = sourceTree.entries,
+                    targetTree = targetTree.entries,
                 )
             }.onFailure {
                 syncRefusal = R.string.sync_scan_failed
@@ -5035,6 +5063,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun carryOutSync(state: SyncState, stop: Stoppable): SyncOutcome {
+        // A two-way sync is the one-way carry-out run both ways: source onto
+        // target, then target onto source, neither deleting. The sub-states
+        // carry no reverse plan, so this does not recurse past the two halves.
+        state.reversePlan?.let { back ->
+            val forward = carryOutSync(
+                state.copy(reversePlan = null, deleteExtras = false), stop,
+            )
+            if (stop.stopped()) return forward.copy(cancelled = true)
+            val backward = carryOutSync(
+                SyncState(
+                    source = state.target,
+                    target = state.source,
+                    plan = back,
+                    deleteExtras = false,
+                ),
+                stop,
+            )
+            return SyncOutcome(
+                made = forward.made + backward.made,
+                copied = forward.copied + backward.copied,
+                deleted = 0,
+                failed = forward.failed + backward.failed,
+                cancelled = forward.cancelled || backward.cancelled,
+            )
+        }
         val source = state.source
         val target = state.target
         return when {

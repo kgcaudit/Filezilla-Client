@@ -1,6 +1,7 @@
 package org.filezilla.android.ui
 
 import org.filezilla.android.data.SiteEntity
+import org.filezilla.android.files.Meta
 import org.filezilla.android.files.SyncPlan
 
 /**
@@ -46,6 +47,22 @@ data class SyncState(
     val skippedLinks: Int = 0,
     /** True once the user has said go and the mirror is being carried out. */
     val running: Boolean = false,
+    /**
+     * The two scanned listings, kept so the preview can switch between a one-way
+     * mirror and a two-way sync without scanning again -- the diff is pure and
+     * cheap, so the toggle just re-runs it.
+     */
+    val sourceTree: Map<String, Meta> = emptyMap(),
+    val targetTree: Map<String, Meta> = emptyMap(),
+    /**
+     * True for a two-way sync: each side gains what the other has and, for a
+     * file on both, the newer wins. Nothing is deleted (without a record of what
+     * was there before, a delete on one side cannot be told from a new file on
+     * the other). [reversePlan] is then the target-to-source half.
+     */
+    val twoWay: Boolean = false,
+    /** The second direction of a two-way sync (target -> source); null one-way. */
+    val reversePlan: SyncPlan? = null,
 )
 
 /** How a finished mirror turned out, for the line shown when it is done. */

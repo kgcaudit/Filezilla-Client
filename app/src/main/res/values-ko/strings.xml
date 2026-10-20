@@ -614,6 +614,9 @@
     <string name="sync_overlap">원본 폴더와 대상 폴더가 겹칩니다. 이대로면 한쪽이 다른 쪽을 삼킵니다</string>
     <string name="sync_scan_failed">폴더를 살펴보지 못했습니다</string>
     <string name="sync_direction">%1$s → %2$s</string>
+    <string name="sync_direction_two_way">%1$s ↔ %2$s</string>
+    <string name="sync_two_way">양방향 동기화</string>
+    <string name="sync_two_way_detail">양쪽을 서로 맞춥니다. 같은 파일은 최신본이 이깁니다. 삭제는 하지 않습니다.</string>
     <string name="sync_copy_count">복사할 파일 %1$d개</string>
     <string name="sync_make_count">만들 폴더 %1$d개</string>
     <string name="sync_delete_count">삭제할 항목 %1$d개</string>

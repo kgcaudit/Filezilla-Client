@@ -1088,6 +1088,7 @@ private fun AppScreen(
         SyncPreviewDialog(
             state = state,
             onToggleDelete = model::setSyncDeleteExtras,
+            onToggleTwoWay = model::setSyncTwoWay,
             onRun = model::runSync,
             onStop = model::stopSync,
             onDismiss = model::dismissSync,

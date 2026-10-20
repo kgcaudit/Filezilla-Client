@@ -622,6 +622,9 @@
     <string name="sync_overlap">The source and target folders overlap, so one would eat the other</string>
     <string name="sync_scan_failed">The folders could not be read</string>
     <string name="sync_direction">%1$s → %2$s</string>
+    <string name="sync_direction_two_way">%1$s ↔ %2$s</string>
+    <string name="sync_two_way">Two-way sync</string>
+    <string name="sync_two_way_detail">Make both sides match; for a file on both, the newer wins. Nothing is deleted.</string>
     <string name="sync_copy_count">%1$d files to copy</string>
     <string name="sync_make_count">%1$d folders to make</string>
     <string name="sync_delete_count">%1$d items to delete</string>
