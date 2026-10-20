@@ -48,7 +48,18 @@ class WebDavClientTest {
                 basePath = "/",
             ),
         )
-        client.connect()
+        // Apache opens the port a moment before it answers HTTP.
+        var lastError: Exception? = null
+        repeat(20) {
+            try {
+                client.connect()
+                return
+            } catch (e: Exception) {
+                lastError = e
+                Thread.sleep(500)
+            }
+        }
+        throw lastError ?: IllegalStateException("WebDAV server did not become ready")
     }
 
     @AfterAll
