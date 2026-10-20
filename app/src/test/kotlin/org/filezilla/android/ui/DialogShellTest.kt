@@ -57,7 +57,7 @@ class DialogShellTest {
             listOf("ArchiveScreen.kt", "BrowseMenus.kt", "BrowseScreen.kt", "CertificateUi.kt",
                    "ConflictDialog.kt", "CopyProgressBadge.kt", "FilePanes.kt", "HostKeyUi.kt", "MainActivity.kt",
                    "OpenWith.kt", "PdfViewerScreen.kt", "PermissionsDialog.kt", "PhotoInfoSheet.kt",
-                   "ScheduledSyncScreen.kt", "ServerWork.kt",
+                   "ScheduledSyncScreen.kt", "ServerWork.kt", "SettingsScreen.kt",
                    "SiteEditor.kt", "SyncPreviewDialog.kt", "ViewingDialogs.kt"),
             users,
         )
@@ -166,7 +166,7 @@ class TextFieldShellTest {
 
         assertEquals(
             listOf("ArchiveScreen.kt", "BrowseScreen.kt", "Dialogs.kt", "ScheduledSyncScreen.kt",
-                   "SiteEditor.kt", "TextViewerScreen.kt"),
+                   "SettingsScreen.kt", "SiteEditor.kt", "TextViewerScreen.kt"),
             users,
         )
     }

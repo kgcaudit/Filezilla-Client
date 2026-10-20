@@ -4,7 +4,6 @@ import androidx.annotation.DrawableRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -337,7 +336,13 @@ fun StoragePlaces(
                     onClick = { onOpenScreen(Screen.SCHEDULED_SYNC); onDismiss() },
                     modifier = Modifier.weight(1f),
                 )
-                Spacer(modifier = Modifier.weight(1f))
+                ToolCell(
+                    glyph = R.drawable.ic_tile_settings,
+                    colour = MaterialTheme.tiles.code,
+                    title = stringResource(R.string.title_settings),
+                    onClick = { onOpenScreen(Screen.SETTINGS); onDismiss() },
+                    modifier = Modifier.weight(1f),
+                )
             }
 
             TextButton(

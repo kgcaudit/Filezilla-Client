@@ -1553,6 +1553,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // null when the current screen was not reached through the sheet.
     private var reopenSheetPane: PaneId? = null
 
+    // ------------------------------------------------------- the app lock
+
+    /** Whether the app asks for a fingerprint or the device PIN before it opens. */
+    var appLockEnabled by mutableStateOf(graph.preferences.appLockEnabled)
+        private set
+
+    fun setAppLock(on: Boolean) {
+        graph.preferences.appLockEnabled = on
+        appLockEnabled = on
+    }
+
     /** Opens [id]'s storage sheet. */
     fun openStorageSheet(id: PaneId) {
         storageSheetPane = id
@@ -1929,6 +1940,68 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Opens a site for editing, decrypting its password for the form only. */
     fun draftOf(site: SiteEntity): SiteDraft = SiteDraft.of(site, graph.passwords)
+
+    // ----------------------------------------------- backup and restore
+
+    /**
+     * Writes the saved servers and favourites to [uri] as a backup sealed under
+     * [passphrase]. The passphrase is wiped once used, success or not; the
+     * callback gets how many of each were written.
+     */
+    fun exportBackup(
+        uri: android.net.Uri,
+        passphrase: CharArray,
+        onDone: (sites: Int, bookmarks: Int) -> Unit,
+        onError: () -> Unit,
+    ) {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val sites = graph.database.sites().all()
+                    val bookmarks = graph.preferences.bookmarks()
+                    val bytes = org.filezilla.android.data.SettingsBackup.export(
+                        passphrase, sites, graph.passwords, bookmarks,
+                    )
+                    getApplication<Application>().contentResolver.openOutputStream(uri)?.use {
+                        it.write(bytes)
+                    } ?: error("could not write the backup")
+                    sites.size to bookmarks.size
+                }
+            }
+            passphrase.fill('\u0000')
+            result.onSuccess { (s, b) -> onDone(s, b) }.onFailure { onError() }
+        }
+    }
+
+    /**
+     * Restores servers and favourites from the backup at [uri], opened with
+     * [passphrase] and re-sealed under this device's keystore. The passphrase is
+     * wiped once used; a wrong one (or a damaged file) reaches [onError] cleanly.
+     */
+    fun importBackup(
+        uri: android.net.Uri,
+        passphrase: CharArray,
+        onDone: (sites: Int, bookmarks: Int) -> Unit,
+        onError: () -> Unit,
+    ) {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val bytes = getApplication<Application>().contentResolver.openInputStream(uri)
+                        ?.use { it.readBytes() } ?: error("could not read the backup")
+                    val dao = graph.database.sites()
+                    val restored = org.filezilla.android.data.SettingsBackup.import(
+                        bytes, passphrase, graph.passwords, dao.nextPosition(),
+                    )
+                    for (site in restored.sites) dao.upsert(site)
+                    for (mark in restored.bookmarks) graph.preferences.addBookmark(mark)
+                    restored.sites.size to restored.bookmarks.size
+                }
+            }
+            passphrase.fill('\u0000')
+            result.onSuccess { (s, b) -> onDone(s, b) }.onFailure { onError() }
+        }
+    }
 
     fun deleteSite(site: SiteEntity) {
         viewModelScope.launch {

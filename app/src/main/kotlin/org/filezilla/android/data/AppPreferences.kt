@@ -185,6 +185,18 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_WIFI_ONLY, false)
         set(value) = prefs.edit().putBoolean(KEY_WIFI_ONLY, value).apply()
 
+    /**
+     * Whether the app asks for a fingerprint or the device PIN before it opens.
+     *
+     * Off by default: a lock nobody asked for is a door that will not open for
+     * the one person who should get in. On, it is checked on launch and again
+     * each time the app returns from the background. The secret it protects is
+     * the saved servers and their passwords -- see [PasswordCipher].
+     */
+    var appLockEnabled: Boolean
+        get() = prefs.getBoolean(KEY_APP_LOCK, false)
+        set(value) = prefs.edit().putBoolean(KEY_APP_LOCK, value).apply()
+
     /** The same setting as the queue reads it. */
     val networkPolicy: NetworkPolicy
         get() = if (wifiOnly) NetworkPolicy.UNMETERED else NetworkPolicy.ANY
@@ -749,6 +761,7 @@ class AppPreferences(context: Context) {
         const val KEY_SHOW_HIDDEN = "browse_show_hidden"
         const val KEY_VIEW = "browse_view"
         const val KEY_WIFI_ONLY = "wifi_only"
+        const val KEY_APP_LOCK = "app_lock"
         const val KEY_SERVER_THUMBS = "server_thumbnails"
         const val KEY_SERVER_THUMBS_WIFI = "server_thumbnails_wifi_only"
         const val KEY_READ_ONLY_WARNED = "viewing_read_only_warned"

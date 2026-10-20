@@ -81,7 +81,7 @@ import org.filezilla.android.service.TransferService
 import org.filezilla.android.storage.ConflictChoice
 import org.filezilla.android.ui.theme.OloTheme
 
-class MainActivity : ComponentActivity() {
+class MainActivity : androidx.fragment.app.FragmentActivity() {
 
     /**
      * The screen something outside the app asked for, until it is honoured.
@@ -119,7 +119,15 @@ class MainActivity : ComponentActivity() {
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         setContent {
             OloTheme {
-                AppScreen(openAt = openAt, openUri = openUri)
+                // Read once at launch: turning the lock on takes effect next
+                // time the app opens, which is when a lock is checked anyway.
+                val context = androidx.compose.ui.platform.LocalContext.current
+                val locked = androidx.compose.runtime.remember {
+                    org.filezilla.android.AppGraph.of(context).preferences.appLockEnabled
+                }
+                AppLockGate(enabled = locked) {
+                    AppScreen(openAt = openAt, openUri = openUri)
+                }
             }
         }
     }
@@ -611,7 +619,7 @@ private fun AppScreen(
                             )
                         }
 
-                            Screen.SITES, Screen.FILES, Screen.SCHEDULED_SYNC -> Unit
+                            Screen.SITES, Screen.FILES, Screen.SCHEDULED_SYNC, Screen.SETTINGS -> Unit
                         }
                     },
                 )
@@ -791,6 +799,8 @@ private fun AppScreen(
             Screen.TRASH -> TrashScreen(model = model, modifier = Modifier.padding(padding))
 
             Screen.SCHEDULED_SYNC -> ScheduledSyncScreen(model = model, modifier = Modifier.padding(padding))
+
+            Screen.SETTINGS -> SettingsScreen(model = model, modifier = Modifier.padding(padding))
         }
     }
 
@@ -1269,6 +1279,7 @@ private fun titleFor(screen: Screen): String = when (screen) {
     Screen.RECENTS -> stringResource(R.string.title_recents)
     Screen.TRASH -> stringResource(R.string.title_trash)
     Screen.SCHEDULED_SYNC -> stringResource(R.string.sched_title)
+    Screen.SETTINGS -> stringResource(R.string.title_settings)
     // Never asked for: the files screen carries no bar. Named rather than
     // left to an else, so adding a screen is a compile error here.
     Screen.FILES -> ""

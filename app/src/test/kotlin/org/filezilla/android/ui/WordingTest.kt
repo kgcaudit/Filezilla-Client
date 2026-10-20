@@ -208,6 +208,9 @@ class WordingTest {
             // and on its own app bar -- the row answers the screen, same as
             // recents and trash above.
             "sched_title",
+            // The settings screen's name, on the storage tool that opens it and
+            // on its own app bar -- the tool answers the screen, as above.
+            "title_settings",
             // "Delete items only on the target": the one-shot mirror's preview
             // switch and the scheduled job's editor switch, the one destructive
             // option, worded the same in the two places a mirror is set up.

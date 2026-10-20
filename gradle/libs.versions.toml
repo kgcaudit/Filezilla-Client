@@ -49,6 +49,10 @@ androidx-exifinterface = { module = "androidx.exifinterface:exifinterface", vers
 # vector XML, so the image viewer renders it to a bitmap through this instead.
 androidsvg = { module = "com.caverock:androidsvg-aar", version.ref = "androidsvg" }
 
+# Fingerprint / device-credential prompt for the app lock. Brings androidx
+# fragment, which is why MainActivity is a FragmentActivity.
+androidx-biometric = { module = "androidx.biometric:biometric", version = "1.1.0" }
+
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
 androidx-lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "androidx-lifecycle" }

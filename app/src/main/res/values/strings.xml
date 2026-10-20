@@ -115,6 +115,37 @@
     <string name="filter_none">Nothing matches "%1$s"</string>
     <string name="browse_connecting">Connecting to the server…</string>
     <string name="browse_listing">Loading the folder…</string>
+
+    <!-- App lock -->
+    <string name="lock_title">App is locked</string>
+    <string name="lock_subtitle">Unlock with your fingerprint or device PIN</string>
+    <string name="lock_unlock">Unlock</string>
+
+    <!-- Settings -->
+    <string name="title_settings">Settings</string>
+    <string name="settings_security_section">Security</string>
+    <string name="settings_lock_title">App lock</string>
+    <string name="settings_lock_subtitle">Require a fingerprint or device PIN to open</string>
+    <string name="settings_lock_unavailable">Set a fingerprint or screen lock on the device to use this</string>
+    <string name="settings_backup_section">Backup</string>
+    <string name="settings_export">Export servers &amp; settings</string>
+    <string name="settings_export_subtitle">Save a password-protected backup file</string>
+    <string name="settings_import">Import from a backup</string>
+    <string name="settings_import_subtitle">Restore servers and favorites from a backup file</string>
+
+    <!-- Backup / restore -->
+    <string name="backup_export_title">Backup password</string>
+    <string name="backup_export_hint">The backup is encrypted with this password. You will need it to restore.</string>
+    <string name="backup_import_title">Backup password</string>
+    <string name="backup_import_hint">Enter the password this backup was made with.</string>
+    <string name="backup_password_label">Password</string>
+    <string name="backup_create">Create backup</string>
+    <string name="backup_restore">Restore</string>
+    <string name="backup_default_name">olo-explorer-backup.olobak</string>
+    <string name="backup_exported">Exported %1$d servers and %2$d favorites</string>
+    <string name="backup_imported">Imported %1$d servers and %2$d favorites</string>
+    <string name="backup_failed">Backup failed</string>
+    <string name="backup_import_failed">Import failed: wrong password or a damaged file</string>
     <string name="props_title">Properties</string>
     <string name="props_kind">Kind</string>
     <string name="props_kind_folder">Folder</string>
