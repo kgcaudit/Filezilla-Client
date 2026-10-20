@@ -3,6 +3,8 @@ package org.filezilla.android.ui
 import org.filezilla.android.R
 import org.filezilla.ftp.protocol.FtpCommandException
 import org.filezilla.ftp.protocol.FtpReply
+import org.filezilla.ftp.sftp.SftpStatusException
+import org.filezilla.ftp.smb.SmbStatusException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -125,6 +127,57 @@ class ConnectionFailureTest {
         // Nothing is known about this one, so the class name is all there is
         // to offer -- and it is offered, rather than swallowed.
         assertTrue("IllegalStateException" in failure.detailArg)
+    }
+
+    @Test
+    fun `an SMB missing share is named, not shown as a raw status`() {
+        val failure = describeFailure(
+            SmbStatusException(SmbStatusException.Kind.SHARE_NOT_FOUND, "STATUS_BAD_NETWORK_NAME"),
+            online = true,
+        )
+        assertEquals(R.string.fail_share, failure.title)
+        assertEquals("STATUS_BAD_NETWORK_NAME", failure.detailArg)
+        assertEquals(R.string.detail_plain, failure.detailFormat)
+    }
+
+    @Test
+    fun `an SMB login failure reads as a rejected login, even offline`() {
+        // The server answered, so this is settled before the offline check and
+        // is not reported as a dropped connection.
+        val failure = describeFailure(
+            SmbStatusException(SmbStatusException.Kind.LOGIN_FAILED, "STATUS_LOGON_FAILURE"),
+            online = false,
+        )
+        assertEquals(R.string.fail_login, failure.title)
+    }
+
+    @Test
+    fun `an SMB access denial is a permission problem`() {
+        assertEquals(
+            R.string.fail_denied,
+            describeFailure(
+                SmbStatusException(SmbStatusException.Kind.ACCESS_DENIED, "STATUS_ACCESS_DENIED"),
+                online = true,
+            ).title,
+        )
+    }
+
+    @Test
+    fun `an SFTP permission denial is named rather than left unknown`() {
+        val failure = describeFailure(
+            SftpStatusException(3, "permission denied"),
+            online = true,
+        )
+        assertEquals(R.string.fail_denied, failure.title)
+        assertEquals("permission denied", failure.detailArg)
+    }
+
+    @Test
+    fun `an SFTP missing file is a path problem`() {
+        assertEquals(
+            R.string.fail_not_found,
+            describeFailure(SftpStatusException(2, "no such file"), online = true).title,
+        )
     }
 
     @Test

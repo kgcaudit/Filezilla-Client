@@ -6,6 +6,7 @@ import com.hierynomus.msfscc.fileinformation.FileIdBothDirectoryInformation
 import com.hierynomus.mssmb2.SMB2CreateDisposition
 import com.hierynomus.mssmb2.SMB2Dialect
 import com.hierynomus.mssmb2.SMB2ShareAccess
+import com.hierynomus.mserref.NtStatus
 import com.hierynomus.mssmb2.SMBApiException
 import com.hierynomus.smbj.SMBClient
 import com.hierynomus.smbj.SmbConfig
@@ -66,6 +67,36 @@ class SmbClient(private val settings: SmbSettings) : Closeable {
 
     private val disk: DiskShare get() = share ?: throw java.io.IOException("not connected")
 
+    /**
+     * Runs an smbj call, turning its server-side [SMBApiException] into an
+     * [SmbStatusException] the app can read -- the SMB parallel of
+     * [org.filezilla.ftp.sftp.SftpEngine]'s `operation`. A dropped connection is
+     * smbj's own `TransportException`, an `IOException`, and is left to pass
+     * through so a transfer retries it.
+     */
+    private inline fun <T> op(block: () -> T): T = try {
+        block()
+    } catch (e: SMBApiException) {
+        throw translate(e)
+    }
+
+    private fun translate(e: SMBApiException): SmbStatusException {
+        val kind = when (e.status) {
+            NtStatus.STATUS_LOGON_FAILURE,
+            NtStatus.STATUS_ACCOUNT_DISABLED,
+            NtStatus.STATUS_PASSWORD_EXPIRED,
+            NtStatus.STATUS_LOGON_TYPE_NOT_GRANTED,
+            -> SmbStatusException.Kind.LOGIN_FAILED
+            NtStatus.STATUS_BAD_NETWORK_NAME -> SmbStatusException.Kind.SHARE_NOT_FOUND
+            NtStatus.STATUS_ACCESS_DENIED -> SmbStatusException.Kind.ACCESS_DENIED
+            NtStatus.STATUS_OBJECT_NAME_NOT_FOUND,
+            NtStatus.STATUS_OBJECT_PATH_NOT_FOUND,
+            -> SmbStatusException.Kind.NOT_FOUND
+            else -> SmbStatusException.Kind.OTHER
+        }
+        return SmbStatusException(kind, e.message ?: "SMB error", e)
+    }
+
     // -------------------------------------------------------------- connect
 
     fun connect() {
@@ -101,8 +132,8 @@ class SmbClient(private val settings: SmbSettings) : Closeable {
             settings.password.toCharArray(),
             settings.domain?.takeIf { it.isNotBlank() },
         )
-        val newSession = newConnection.authenticate(auth)
-        val newShare = newSession.connectShare(settings.share) as? DiskShare
+        val newSession = op { newConnection.authenticate(auth) }
+        val newShare = op { newSession.connectShare(settings.share) } as? DiskShare
             ?: throw java.io.IOException("'${settings.share}' is not a disk share")
         client = newClient
         connection = newConnection
@@ -113,19 +144,20 @@ class SmbClient(private val settings: SmbSettings) : Closeable {
     // ------------------------------------------------------------- browsing
 
     /** The entries of [dirPath] (an app path relative to the share). */
-    fun list(dirPath: String): List<DirectoryEntry> =
+    fun list(dirPath: String): List<DirectoryEntry> = op {
         disk.list(smbPath(dirPath))
             .filterNot { it.fileName == "." || it.fileName == ".." }
             .map { it.toDirectoryEntry() }
+    }
 
-    fun makeDirectory(path: String) = disk.mkdir(smbPath(path))
+    fun makeDirectory(path: String) = op { disk.mkdir(smbPath(path)) }
 
-    fun removeDirectory(path: String) = disk.rmdir(smbPath(path), false)
+    fun removeDirectory(path: String) = op { disk.rmdir(smbPath(path), false) }
 
-    fun deleteFile(path: String) = disk.rm(smbPath(path))
+    fun deleteFile(path: String) = op { disk.rm(smbPath(path)) }
 
     /** Renames [from] to [to], both app paths; the folder may change. */
-    fun rename(from: String, to: String) {
+    fun rename(from: String, to: String) = op {
         disk.open(
             smbPath(from),
             setOf(AccessMask.DELETE, AccessMask.FILE_READ_ATTRIBUTES),
@@ -159,7 +191,7 @@ class SmbClient(private val settings: SmbSettings) : Closeable {
      * Streams [path] to [out] from [offset], so a half-finished download
      * resumes. Returns the total size the server reported.
      */
-    fun download(path: String, offset: Long, out: OutputStream, onProgress: (Long) -> Unit): Long {
+    fun download(path: String, offset: Long, out: OutputStream, onProgress: (Long) -> Unit): Long = op {
         disk.openFile(
             smbPath(path),
             setOf(AccessMask.GENERIC_READ),
@@ -178,7 +210,7 @@ class SmbClient(private val settings: SmbSettings) : Closeable {
                 position += read
                 onProgress(position)
             }
-            return total
+            total
         }
     }
 
@@ -187,7 +219,7 @@ class SmbClient(private val settings: SmbSettings) : Closeable {
      * resumes. At offset 0 the file is created or truncated; at a non-zero
      * offset the existing file is opened and written onto.
      */
-    fun upload(path: String, input: InputStream, offset: Long, onProgress: (Long) -> Unit) {
+    fun upload(path: String, input: InputStream, offset: Long, onProgress: (Long) -> Unit) = op {
         val disposition =
             if (offset > 0) SMB2CreateDisposition.FILE_OPEN else SMB2CreateDisposition.FILE_OVERWRITE_IF
         disk.openFile(

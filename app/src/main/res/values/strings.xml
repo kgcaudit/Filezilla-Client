@@ -249,6 +249,10 @@
     <string name="fail_login_advice">The server refused these credentials. Check the user name and password.</string>
     <string name="fail_denied">Not available</string>
     <string name="fail_denied_advice">The server would not hand over that file or folder. It may not exist, or this account may not have permission.</string>
+    <string name="fail_share">Share not found</string>
+    <string name="fail_share_advice">The server has no share by that name. For SMB, the share is the first part of the path, e.g. /Public. Check its spelling.</string>
+    <string name="fail_not_found">Nothing at that path</string>
+    <string name="fail_not_found_advice">There is no file or folder there. Check the path, or the starting folder set for this server.</string>
     <string name="fail_busy">Server temporarily unavailable</string>
     <string name="fail_busy_advice">The server says it cannot handle this right now, which usually clears on its own. Try again shortly.</string>
     <string name="fail_refused_command">Server refused the request</string>

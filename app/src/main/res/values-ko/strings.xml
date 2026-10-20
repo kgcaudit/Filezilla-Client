@@ -247,6 +247,10 @@
     <string name="fail_login_advice">사용자 이름과 비밀번호를 확인하세요.</string>
     <string name="fail_denied">사용할 수 없습니다</string>
     <string name="fail_denied_advice">파일이나 폴더가 없거나, 이 계정에 권한이 없습니다.</string>
+    <string name="fail_share">공유를 찾을 수 없습니다</string>
+    <string name="fail_share_advice">그 이름의 공유가 서버에 없습니다. SMB에서는 경로의 첫 부분이 공유 이름입니다(예: /Public). 철자를 확인하세요.</string>
+    <string name="fail_not_found">경로를 찾을 수 없습니다</string>
+    <string name="fail_not_found_advice">해당 위치에 파일이나 폴더가 없습니다. 경로 또는 이 서버의 시작 폴더를 확인하세요.</string>
     <string name="fail_busy">서버가 일시적으로 처리할 수 없습니다</string>
     <string name="fail_busy_advice">서버가 잠시 바쁩니다. 잠시 후 다시 시도하세요.</string>
     <string name="fail_refused_command">서버가 요청을 거부했습니다</string>

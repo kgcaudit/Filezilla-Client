@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
@@ -87,6 +88,20 @@ class SmbClientTest {
         } finally {
             smb.close()
         }
+    }
+
+    @Test
+    fun `a wrong password is reported as a login failure, not a raw status`() {
+        val bad = SmbClient(settingsFor(server).copy(password = "wrong"))
+        val e = assertThrows<SmbStatusException> { bad.connect() }
+        assertEquals(SmbStatusException.Kind.LOGIN_FAILED, e.kind)
+    }
+
+    @Test
+    fun `a missing share is reported as share-not-found`() {
+        val bad = SmbClient(settingsFor(server).copy(share = "nosuchshare"))
+        val e = assertThrows<SmbStatusException> { bad.connect() }
+        assertEquals(SmbStatusException.Kind.SHARE_NOT_FOUND, e.kind)
     }
 
     @Test

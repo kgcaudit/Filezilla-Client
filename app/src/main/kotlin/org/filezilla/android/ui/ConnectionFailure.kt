@@ -4,6 +4,8 @@ import androidx.annotation.StringRes
 import org.filezilla.android.R
 import org.filezilla.ftp.net.CertificateNotTrusted
 import org.filezilla.ftp.protocol.FtpCommandException
+import org.filezilla.ftp.sftp.SftpStatusException
+import org.filezilla.ftp.smb.SmbStatusException
 import java.io.IOException
 import java.net.ConnectException
 import java.net.NoRouteToHostException
@@ -62,6 +64,16 @@ fun describeFailure(error: Throwable, online: Boolean): ConnectionFailure {
             refused.certificate.fingerprint,
         )
     }
+
+    // SMB and SFTP answer a refused request with a status, not an IOException,
+    // so they never reach the network cases below. The server plainly answered,
+    // so -- like the certificate case -- this is settled ahead of the offline
+    // check rather than being blamed on the phone's signal.
+    val smb = generateSequence(error) { it.cause }.filterIsInstance<SmbStatusException>().firstOrNull()
+    if (smb != null) return describeSmb(smb)
+
+    val sftp = generateSequence(error) { it.cause }.filterIsInstance<SftpStatusException>().firstOrNull()
+    if (sftp != null) return describeSftp(sftp)
 
     // Ahead of the offline check, because this one is not a network failure
     // at all -- nothing was sent and nothing was removed -- and the offline
@@ -137,6 +149,47 @@ private fun describeReply(error: FtpCommandException): ConnectionFailure {
     }
     return ConnectionFailure(title, advice, R.string.detail_server_reply, raw)
 }
+
+/**
+ * An SMB server's refusal, turned into a cause and a next step.
+ *
+ * The raw status text is kept underneath as evidence, the same as a server's
+ * FTP reply is -- on an awkward share it is the only thing that explains the
+ * failure. The share-not-found case is the one worth its own wording: the app
+ * carries the SMB share as the first part of the path, which a person needs
+ * telling.
+ */
+private fun describeSmb(error: SmbStatusException): ConnectionFailure {
+    val raw = error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName
+    val (title, advice) = when (error.kind) {
+        SmbStatusException.Kind.LOGIN_FAILED -> R.string.fail_login to R.string.fail_login_advice
+        SmbStatusException.Kind.SHARE_NOT_FOUND -> R.string.fail_share to R.string.fail_share_advice
+        SmbStatusException.Kind.ACCESS_DENIED -> R.string.fail_denied to R.string.fail_denied_advice
+        SmbStatusException.Kind.NOT_FOUND -> R.string.fail_not_found to R.string.fail_not_found_advice
+        SmbStatusException.Kind.OTHER -> R.string.fail_refused_command to R.string.fail_refused_command_advice
+    }
+    return ConnectionFailure(title, advice, R.string.detail_plain, raw)
+}
+
+/**
+ * An SFTP server's refusal, turned into a cause and a next step.
+ *
+ * The two codes worth distinguishing are the two a person can act on: a
+ * permission refusal and a path that is not there. The numbers are the SFTP
+ * protocol's own `SSH_FX_*` status codes, stable across servers.
+ */
+private fun describeSftp(error: SftpStatusException): ConnectionFailure {
+    val raw = error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName
+    val (title, advice) = when (error.statusCode) {
+        SSH_FX_NO_SUCH_FILE -> R.string.fail_not_found to R.string.fail_not_found_advice
+        SSH_FX_PERMISSION_DENIED -> R.string.fail_denied to R.string.fail_denied_advice
+        else -> R.string.fail_refused_command to R.string.fail_refused_command_advice
+    }
+    return ConnectionFailure(title, advice, R.string.detail_plain, raw)
+}
+
+private const val SSH_FX_NO_SUCH_FILE = 2
+private const val SSH_FX_PERMISSION_DENIED = 3
 
 /**
  * A local filesystem failure in the same shape as a connection one.
