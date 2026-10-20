@@ -62,6 +62,20 @@ data class SiteEntity(
      */
     @ColumnInfo(name = "known_host_key") val knownHostKey: String? = null,
     /**
+     * The SMB share this server connects to, e.g. `Public`. Its own column
+     * rather than the first part of [initialPath]: a share is not a folder, and
+     * making the user encode it into the path was a trap. Null on a site saved
+     * before this column existed, where the share is still read from the path
+     * for backward compatibility -- see [toSmbSettings].
+     */
+    @ColumnInfo(name = "smb_share") val smbShare: String? = null,
+    /**
+     * The NT domain or workgroup for SMB login, if any. Its own column rather
+     * than `DOMAIN\user` crammed into [user]. Null means no domain, or a site
+     * saved before this column existed (then the domain is read from [user]).
+     */
+    @ColumnInfo(name = "smb_domain") val smbDomain: String? = null,
+    /**
      * An SFTP private key in PEM form, held as ciphertext exactly like the
      * password -- see [passwordCipher]. Null means password authentication; a
      * key present means the login uses it, with the password taken as the key's
@@ -160,11 +174,24 @@ data class SiteEntity(
      *    logs in with no domain, which is what a workgroup share wants.
      */
     fun toSmbSettings(passwords: PasswordCipher): SmbSettings {
-        val path = initialPath?.trim('/').orEmpty()
-        val share = path.substringBefore('/')
-        val folder = path.substringAfter('/', "")
-        val domain = user.substringBefore('\\', "").takeIf { it.isNotBlank() && user.contains('\\') }
-        val account = if (user.contains('\\')) user.substringAfter('\\') else user
+        // Prefer the dedicated columns; fall back to the old convention (share
+        // as the first path segment, domain as DOMAIN\user) for a site saved
+        // before those columns existed, so no saved SMB site breaks.
+        val dedicatedShare = smbShare?.takeIf { it.isNotBlank() }
+        val share: String
+        val folder: String
+        if (dedicatedShare != null) {
+            share = dedicatedShare.trim('/')
+            folder = initialPath?.trim('/').orEmpty()
+        } else {
+            val path = initialPath?.trim('/').orEmpty()
+            share = path.substringBefore('/')
+            folder = path.substringAfter('/', "")
+        }
+        val legacyDomain = smbDomain == null && user.contains('\\')
+        val domain = (smbDomain ?: user.takeIf { legacyDomain }?.substringBefore('\\'))
+            ?.takeIf { it.isNotBlank() }
+        val account = if (legacyDomain) user.substringAfter('\\') else user
         return SmbSettings(
             host = host,
             port = port,

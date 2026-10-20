@@ -28,7 +28,7 @@ abstract class AppDatabase : RoomDatabase() {
          * test went stale the moment a column was added -- so every existing
          * database looked unmigratable from a test that was only out of date.
          */
-        const val VERSION = 10
+        const val VERSION = 11
 
         /**
          * Every migration, in one list.
@@ -48,7 +48,25 @@ abstract class AppDatabase : RoomDatabase() {
                 ADD_PRIVATE_KEY,
                 ADD_SYNC_JOBS,
                 ADD_TRANSFER_CREATED_AT,
+                ADD_SMB_SHARE_DOMAIN,
             )
+
+        /**
+         * Version 11 gives SMB its own share and domain columns.
+         *
+         * Until now the SMB share was carried as the first part of the initial
+         * path and the domain as `DOMAIN\user` on the username -- a convention
+         * the user had to know. These make them fields of their own. Both are
+         * nullable and seeded null: a site saved under the old convention keeps
+         * working because [SiteEntity.toSmbSettings] still reads the path and
+         * username when the columns are empty, so nothing stored is touched.
+         */
+        internal val ADD_SMB_SHARE_DOMAIN = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `sites` ADD COLUMN `smb_share` TEXT")
+                db.execSQL("ALTER TABLE `sites` ADD COLUMN `smb_domain` TEXT")
+            }
+        }
 
         /**
          * Version 10 gives each transfer the moment it was queued, so the queue

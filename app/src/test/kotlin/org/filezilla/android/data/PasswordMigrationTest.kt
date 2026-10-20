@@ -112,6 +112,9 @@ class PasswordMigrationTest {
             // Versions 3 and 4 rode along in the same open.
             assertTrue("encoding" in columns)
             assertTrue("position" in columns)
+            // Version 11's SMB columns rode along too.
+            assertTrue("smb_share" in columns)
+            assertTrue("smb_domain" in columns)
             // The reason the table is rebuilt rather than given a new column:
             // a plaintext column left behind is a plaintext column.
             assertFalse("password" in columns)

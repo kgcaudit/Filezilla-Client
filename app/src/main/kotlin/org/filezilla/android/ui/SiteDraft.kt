@@ -46,6 +46,10 @@ data class SiteDraft(
      */
     val privateKeyPem: String?,
     val initialPath: String?,
+    /** The SMB share to connect, e.g. `Public`. Blank for the other protocols. */
+    val smbShare: String? = null,
+    /** The NT domain or workgroup for SMB login, if any. Blank for the rest. */
+    val smbDomain: String? = null,
     /** Null means "negotiate", which is what most servers want. */
     val encoding: String? = null,
     /**
@@ -77,6 +81,8 @@ data class SiteDraft(
         // stores nothing and leaves the site on password authentication.
         privateKeyCipher = privateKeyPem?.ifBlank { null }?.let { passwords.encrypt(it) },
         initialPath = initialPath?.ifBlank { null },
+        smbShare = smbShare?.ifBlank { null },
+        smbDomain = smbDomain?.ifBlank { null },
         encoding = encoding?.ifBlank { null },
     )
 
@@ -102,6 +108,8 @@ data class SiteDraft(
             knownHostKey = null,
             privateKeyPem = null,
             initialPath = null,
+            smbShare = null,
+            smbDomain = null,
             encoding = null,
         )
 
@@ -121,6 +129,8 @@ data class SiteDraft(
                 knownHostKey = site.knownHostKey,
                 privateKeyPem = site.privateKeyCipher?.let { passwords.decrypt(it) },
                 initialPath = site.initialPath,
+                smbShare = site.smbShare,
+                smbDomain = site.smbDomain,
                 encoding = site.encoding,
                 passwordUnreadable = plaintext == null,
             )

@@ -490,7 +490,10 @@
     <string name="protocol_sftp">SFTP (SSH)</string>
     <string name="protocol_webdav">WebDAV</string>
     <string name="protocol_smb">SMB (Windows 공유)</string>
-    <string name="smb_note">공유 이름은 경로의 첫 부분입니다(예: /Public 또는 /Public/docs). 도메인 계정은 사용자를 DOMAIN\\사용자 형식으로 입력하세요.</string>
+    <string name="field_smb_share">공유 이름</string>
+    <string name="smb_share_hint">예: Public</string>
+    <string name="field_smb_domain">도메인 (선택)</string>
+    <string name="smb_domain_hint">NT 도메인 또는 워크그룹(있으면)</string>
     <string name="field_webdav_encryption">암호화</string>
     <string name="webdav_http">HTTP</string>
     <string name="webdav_https">HTTPS</string>

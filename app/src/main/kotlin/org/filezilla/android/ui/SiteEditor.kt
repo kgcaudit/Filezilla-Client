@@ -79,6 +79,8 @@ fun SiteEditor(
     var knownHostKey by remember { mutableStateOf(initial.knownHostKey) }
     var privateKey by remember { mutableStateOf(initial.privateKeyPem.orEmpty()) }
     var initialPath by remember { mutableStateOf(initial.initialPath.orEmpty()) }
+    var smbShare by remember { mutableStateOf(initial.smbShare.orEmpty()) }
+    var smbDomain by remember { mutableStateOf(initial.smbDomain.orEmpty()) }
 
     OloDialog(
         title = stringResource(
@@ -201,11 +203,17 @@ fun SiteEditor(
                     )
                 }
 
-                // SMB has no column of its own: the share is the first part of
-                // the path (so /Public or /Public/docs), and an NT domain, if
-                // there is one, goes on the user as DOMAIN\\user. The hint says so.
+                // SMB connects to a named share on the server, not a folder, so
+                // it is a field of its own. The initial path below is then the
+                // folder within the share, optional and empty for the root.
                 if (protocol == SiteProtocol.SMB) {
-                    Hint(stringResource(R.string.smb_note))
+                    OloTextField(
+                        value = smbShare,
+                        onValueChange = { smbShare = it },
+                        label = stringResource(R.string.field_smb_share),
+                        placeholder = stringResource(R.string.smb_share_hint),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
 
                 SectionLabel(R.string.site_section_login)
@@ -239,6 +247,17 @@ fun SiteEditor(
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                // SMB's NT domain or workgroup, if the account has one. Its own
+                // field, so the username is just the username -- no DOMAIN\\user.
+                if (protocol == SiteProtocol.SMB) {
+                    OloTextField(
+                        value = smbDomain,
+                        onValueChange = { smbDomain = it },
+                        label = stringResource(R.string.field_smb_domain),
+                        placeholder = stringResource(R.string.smb_domain_hint),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 // SFTP only, and last in the login section: paste a PEM private
                 // key to log in with it instead of a password. Left blank, the
                 // site authenticates with the password above.
@@ -302,6 +321,11 @@ fun SiteEditor(
                             knownHostKey = knownHostKey,
                             privateKeyPem = privateKey,
                             initialPath = initialPath,
+                            // Kept only for SMB, so switching a site to another
+                            // protocol and back does not leave a stale share or
+                            // domain pinned to it.
+                            smbShare = if (protocol == SiteProtocol.SMB) smbShare else null,
+                            smbDomain = if (protocol == SiteProtocol.SMB) smbDomain else null,
                         ),
                     )
                 },
