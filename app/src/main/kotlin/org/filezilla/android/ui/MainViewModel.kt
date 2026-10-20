@@ -5538,6 +5538,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * appended to it rather than asking -- the same fault as the paste, by a
      * second route.
      */
+    // ------------------------------------------- files shared in to upload
+
+    /**
+     * Files another app shared for uploading, waiting on a server folder.
+     *
+     * A share arrives before there is any way to know where it should go, so
+     * the files are held here and a bar on the files screen offers to upload
+     * them once the user has opened the server folder they belong in.
+     */
+    var sharedUploads by mutableStateOf<List<Uri>>(emptyList())
+        private set
+
+    fun receiveSharedUploads(uris: List<Uri>) {
+        if (uris.isNotEmpty()) sharedUploads = uris
+    }
+
+    fun clearSharedUploads() {
+        sharedUploads = emptyList()
+    }
+
+    /**
+     * Uploads the shared files to the folder on screen, when it is a server's.
+     * Does nothing on the phone's own side, which has no "upload".
+     */
+    fun uploadSharedTo(onQueued: (Int) -> Unit) {
+        if (browse.site == null) return
+        val uris = sharedUploads
+        sharedUploads = emptyList()
+        for (uri in uris) enqueueUpload(uri) { count -> if (count > 0) onQueued(count) }
+    }
+
     fun enqueueUpload(source: Uri, onQueued: (Int) -> Unit) {
         val site = browse.site ?: return
         val described = graph.storage.describeDocument(source) ?: return

@@ -116,6 +116,11 @@
     <string name="browse_connecting">Connecting to the server…</string>
     <string name="browse_listing">Loading the folder…</string>
 
+    <!-- Shared-in files, waiting to upload -->
+    <string name="shared_upload_prompt">%1$d file(s) shared to upload</string>
+    <string name="shared_upload_hint">Open a server folder to upload to</string>
+    <string name="shared_upload_action">Upload here</string>
+
     <!-- App lock -->
     <string name="lock_title">App is locked</string>
     <string name="lock_subtitle">Unlock with your fingerprint or device PIN</string>

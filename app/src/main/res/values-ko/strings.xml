@@ -115,6 +115,11 @@
     <string name="browse_connecting">서버에 연결하는 중…</string>
     <string name="browse_listing">폴더를 불러오는 중…</string>
 
+    <!-- 공유로 받은 파일, 업로드 대기 -->
+    <string name="shared_upload_prompt">공유된 파일 %1$d개</string>
+    <string name="shared_upload_hint">업로드할 서버 폴더를 여세요</string>
+    <string name="shared_upload_action">여기에 업로드</string>
+
     <!-- 앱 잠금 -->
     <string name="lock_title">앱이 잠겨 있습니다</string>
     <string name="lock_subtitle">지문 또는 기기 PIN으로 잠금을 해제하세요</string>

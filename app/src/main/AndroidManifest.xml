@@ -113,6 +113,22 @@
                 <data android:mimeType="application/epub+zip" />
                 <data android:mimeType="application/zip" />
             </intent-filter>
+
+            <!--
+                "Share": another app hands this one a file (or several) to send
+                to a server. Anything can be uploaded, so every type is claimed;
+                the app then asks which server folder it goes to.
+            -->
+            <intent-filter android:label="@string/app_name">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter android:label="@string/app_name">
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
         </activity>
 
         <!--

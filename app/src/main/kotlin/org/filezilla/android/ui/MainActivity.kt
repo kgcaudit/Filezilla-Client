@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -62,6 +63,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import android.content.Intent
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -96,21 +98,41 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     /** A file another app asked this one to open (an "Open with"), until it is honoured. */
     private val openUri = androidx.compose.runtime.mutableStateOf<android.net.Uri?>(null)
 
+    /** Files another app shared for uploading, until they are handed to the view model. */
+    private val sharedUris = androidx.compose.runtime.mutableStateOf<List<android.net.Uri>>(emptyList())
+
     /** The document a VIEW intent carries, or null when the intent is not one. */
     private fun viewUriFrom(intent: Intent?): android.net.Uri? =
         intent?.takeIf { it.action == Intent.ACTION_VIEW }?.data
+
+    /** The files a SEND / SEND_MULTIPLE intent carries, for uploading. */
+    private fun sharedUrisFrom(intent: Intent?): List<android.net.Uri> = when (intent?.action) {
+        Intent.ACTION_SEND ->
+            listOfNotNull(
+                androidx.core.content.IntentCompat.getParcelableExtra(
+                    intent, Intent.EXTRA_STREAM, android.net.Uri::class.java,
+                ),
+            )
+        Intent.ACTION_SEND_MULTIPLE ->
+            androidx.core.content.IntentCompat.getParcelableArrayListExtra(
+                intent, Intent.EXTRA_STREAM, android.net.Uri::class.java,
+            ).orEmpty()
+        else -> emptyList()
+    }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         openAt.value = OpenAt.screenFor(intent)
         openUri.value = viewUriFrom(intent)
+        sharedUris.value = sharedUrisFrom(intent)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         openAt.value = OpenAt.screenFor(intent)
         openUri.value = viewUriFrom(intent)
+        sharedUris.value = sharedUrisFrom(intent)
         // The app bar runs under the status bar, so the status bar itself is
         // transparent and takes the app bar's colour. Which way its icons
         // should face depends on the theme, so OloTheme decides that.
@@ -126,7 +148,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                     org.filezilla.android.AppGraph.of(context).preferences.appLockEnabled
                 }
                 AppLockGate(enabled = locked) {
-                    AppScreen(openAt = openAt, openUri = openUri)
+                    AppScreen(openAt = openAt, openUri = openUri, sharedUris = sharedUris)
                 }
             }
         }
@@ -143,6 +165,9 @@ private fun AppScreen(
     /** See [MainActivity.openUri]; null once it has been handed to the view model. */
     openUri: androidx.compose.runtime.MutableState<android.net.Uri?> =
         androidx.compose.runtime.mutableStateOf(null),
+    /** See [MainActivity.sharedUris]; emptied once handed to the view model. */
+    sharedUris: androidx.compose.runtime.MutableState<List<android.net.Uri>> =
+        androidx.compose.runtime.mutableStateOf(emptyList()),
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
@@ -179,6 +204,17 @@ private fun AppScreen(
         openUri.value?.let {
             model.openExternalDocument(it)
             openUri.value = null
+        }
+    }
+
+    // Files shared in from another app: held by the view model until the user
+    // opens the server folder to upload them to. Opened on the files screen so
+    // the upload bar has somewhere to sit.
+    LaunchedEffect(sharedUris.value) {
+        if (sharedUris.value.isNotEmpty()) {
+            model.receiveSharedUploads(sharedUris.value)
+            sharedUris.value = emptyList()
+            screen = HOME
         }
     }
     var queueSettingsOpen by remember { mutableStateOf(false) }
@@ -661,7 +697,8 @@ private fun AppScreen(
             // gesture bar and takes those insets itself -- the tab strip
             // at the top, the list at the bottom. There is nothing left
             // for the Scaffold to inset it from.
-            Screen.FILES -> FilePanes(
+            Screen.FILES -> Box(modifier = Modifier.fillMaxSize()) {
+              FilePanes(
                 model = model,
                 onNewDirectory = { creatingDirectory = true },
                 onUpload = {
@@ -757,7 +794,23 @@ private fun AppScreen(
                     }
                 },
                 modifier = Modifier.padding(padding),
-            )
+              )
+              if (model.sharedUploads.isNotEmpty()) {
+                  SharedUploadBar(
+                      count = model.sharedUploads.size,
+                      canUpload = model.browse.site != null,
+                      onUpload = {
+                          requestNotifications()
+                          model.uploadSharedTo { TransferService.start(context) }
+                          scope.launch { snackbars.showSnackbar(uploadQueuedMessage) }
+                      },
+                      onDismiss = model::clearSharedUploads,
+                      modifier = Modifier
+                          .align(Alignment.BottomCenter)
+                          .padding(padding),
+                  )
+              }
+            }
 
             Screen.QUEUE -> QueueScreen(
                 transfers = transfers,
