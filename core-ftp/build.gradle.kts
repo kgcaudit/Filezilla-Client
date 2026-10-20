@@ -40,6 +40,8 @@ dependencies {
     // constraint, so the SFTP transfer path is proven against a real server here.
     testImplementation(libs.sshd.core)
     testImplementation(libs.sshd.sftp)
+    // SMB client, for proving the SMB path against a real Samba server.
+    testImplementation(libs.smbj)
     testRuntimeOnly(libs.junit.platform.launcher)
 }
 

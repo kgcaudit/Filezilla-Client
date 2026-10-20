@@ -105,6 +105,28 @@ server was observed to do.
 Without an SDK the settings script leaves `:app` out, so `:core-ftp` still
 builds and tests on a plain JDK.
 
+### Verifying WebDAV and SMB against real servers
+
+FTP proves itself against vsftpd/Pure-FTPd and a scriptable Python server, and
+SFTP against an in-process MINA server. WebDAV and SMB have no comfortable
+in-process Java server, so they are proven against the real thing in a
+container: Apache `mod_dav` for WebDAV, Samba for SMB.
+
+`WebDavSmokeTest` and `SmbSmokeTest` (in `core-ftp`) start those containers
+themselves and walk every verb a client needs — list, make a folder, put and
+get a file, a ranged get for resuming, rename, delete. They **skip** when
+Docker is not available, the same bargain the FTP compatibility tests make with
+their binaries, so a plain CI run is unaffected; where Docker is present they
+run as part of `:core-ftp:test`.
+
+To run a server by hand while writing a client against it:
+
+```sh
+# In a container, start the daemon first: sudo dockerd >/tmp/dockerd.log 2>&1 &
+core-ftp/src/test/resources/net-servers/test-servers.sh up      # prints coordinates
+core-ftp/src/test/resources/net-servers/test-servers.sh down
+```
+
 ### What has and has not been run
 
 `:core-ftp`'s 99 tests pass, the integration ones against live FTP servers --

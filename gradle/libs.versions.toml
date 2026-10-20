@@ -35,6 +35,10 @@ jsch = { module = "com.github.mwiede:jsch", version.ref = "jsch" }
 # does for FTP.
 sshd-core = { module = "org.apache.sshd:sshd-core", version.ref = "sshd" }
 sshd-sftp = { module = "org.apache.sshd:sshd-sftp", version.ref = "sshd" }
+
+# SMB2/3 client, pure Java. Used in core-ftp tests to prove the SMB path against
+# a real Samba server in a container; the natural choice for an SMB engine too.
+smbj = { module = "com.hierynomus:smbj", version = "0.13.0" }
 androidx-test-core = { module = "androidx.test:core", version = "1.6.1" }
 
 room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
