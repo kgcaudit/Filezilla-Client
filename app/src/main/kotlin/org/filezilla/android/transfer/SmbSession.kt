@@ -35,13 +35,13 @@ class SmbSession(settings: SmbSettings) : RemoteSession {
 
     override fun list(): List<DirectoryEntry> = client.list(cwd)
 
-    override fun createDirectory(name: String) = writing { client.makeDirectory(childOf(name)) }
+    override fun createDirectory(name: String) = writing { client.makeDirectory(resolve(name)) }
 
-    override fun removeDirectory(name: String) = writing { client.removeDirectory(childOf(name)) }
+    override fun removeDirectory(name: String) = writing { client.removeDirectory(resolve(name)) }
 
-    override fun deleteFile(name: String) = writing { client.deleteFile(childOf(name)) }
+    override fun deleteFile(name: String) = writing { client.deleteFile(resolve(name)) }
 
-    override fun rename(from: String, to: String) = writing { client.rename(childOf(from), childOf(to)) }
+    override fun rename(from: String, to: String) = writing { client.rename(resolve(from), resolve(to)) }
 
     // SMB has no POSIX permission bits to set from here.
     override fun changeMode(path: String, mode: String) = Unit
@@ -58,9 +58,14 @@ class SmbSession(settings: SmbSettings) : RemoteSession {
 
     override fun close() = client.close()
 
-    /** A path as given, or resolved against the current folder when relative. */
+    /**
+     * A path as given, or resolved against the current folder when relative.
+     *
+     * The mutating operations take this -- not a bare name spliced onto the
+     * current folder -- because callers pass absolute paths: the scheduled sync
+     * walks a tree and deletes each entry by its full path, exactly as it does
+     * over FTP and SFTP. A cwd-relative-only version mangled those.
+     */
     private fun resolve(path: String): String =
         if (path.startsWith("/")) FilePath.normalize(path) else FilePath.child(cwd, path)
-
-    private fun childOf(name: String): String = FilePath.child(cwd, name)
 }

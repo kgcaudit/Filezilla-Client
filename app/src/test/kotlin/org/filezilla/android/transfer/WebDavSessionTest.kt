@@ -53,6 +53,27 @@ class WebDavSessionTest {
         assertFalse("removed folder is gone", s.list().any { it.name == "papers" })
     }
 
+    @Test
+    fun `absolute paths work for create, remove and rename, as the sync uses them`() {
+        val s = session()
+        s.changeDirectory("/")
+        for (name in listOf("tree", "forest")) if (s.list().any { it.name == name }) s.removeDirectory("/$name")
+
+        // The sync sets the folder as current, then operates on children by
+        // their full path -- the pattern that a cwd-relative-only resolve broke.
+        s.createDirectory("/tree")
+        s.changeDirectory("/tree")
+        s.createDirectory("sub")
+        s.removeDirectory("/tree/sub")
+        assertFalse("an absolute remove from a non-root folder works", s.list().any { it.name == "sub" })
+
+        s.changeDirectory("/")
+        s.rename("/tree", "/forest")
+        assertTrue("an absolute rename works", s.list().any { it.name == "forest" })
+        s.removeDirectory("/forest")
+        assertFalse(s.list().any { it.name == "forest" })
+    }
+
     companion object {
         private val server = DockerServer(
             name = "olo-test-webdav-session",

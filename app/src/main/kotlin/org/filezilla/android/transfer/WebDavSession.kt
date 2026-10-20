@@ -36,13 +36,13 @@ class WebDavSession(settings: WebDavSettings) : RemoteSession {
 
     override fun list(): List<DirectoryEntry> = client.list(cwd)
 
-    override fun createDirectory(name: String) = writing { client.makeCollection(childOf(name)) }
+    override fun createDirectory(name: String) = writing { client.makeCollection(resolve(name)) }
 
-    override fun removeDirectory(name: String) = writing { client.delete(childOf(name)) }
+    override fun removeDirectory(name: String) = writing { client.delete(resolve(name)) }
 
-    override fun deleteFile(name: String) = writing { client.delete(childOf(name)) }
+    override fun deleteFile(name: String) = writing { client.delete(resolve(name)) }
 
-    override fun rename(from: String, to: String) = writing { client.move(childOf(from), childOf(to)) }
+    override fun rename(from: String, to: String) = writing { client.move(resolve(from), resolve(to)) }
 
     // WebDAV has no permission bits to set.
     override fun changeMode(path: String, mode: String) = Unit
@@ -59,9 +59,15 @@ class WebDavSession(settings: WebDavSettings) : RemoteSession {
 
     override fun close() = Unit
 
-    /** A path as given, or resolved against the current folder when relative. */
+    /**
+     * A path as given, or resolved against the current folder when relative.
+     *
+     * The mutating operations take this -- not a bare name spliced onto the
+     * current folder -- because callers pass absolute paths: the scheduled sync
+     * walks a tree and deletes each entry by its full path, exactly as it does
+     * over FTP and SFTP (whose servers resolve an absolute argument). A
+     * cwd-relative-only version quietly mangled those into the wrong path.
+     */
     private fun resolve(path: String): String =
         if (path.startsWith("/")) FilePath.normalize(path) else FilePath.child(cwd, path)
-
-    private fun childOf(name: String): String = FilePath.child(cwd, name)
 }

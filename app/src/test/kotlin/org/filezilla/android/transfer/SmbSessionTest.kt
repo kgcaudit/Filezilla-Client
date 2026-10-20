@@ -49,6 +49,31 @@ class SmbSessionTest {
         }
     }
 
+    @Test
+    fun `absolute paths work for create, remove and rename, as the sync uses them`() {
+        val s = session()
+        try {
+            s.changeDirectory("/")
+            for (name in listOf("tree", "forest")) if (s.list().any { it.name == name }) s.removeDirectory("/$name")
+
+            // The sync sets the folder as current, then operates on children by
+            // their full path -- the pattern a cwd-relative-only resolve broke.
+            s.createDirectory("/tree")
+            s.changeDirectory("/tree")
+            s.createDirectory("sub")
+            s.removeDirectory("/tree/sub")
+            assertFalse("an absolute remove from a non-root folder works", s.list().any { it.name == "sub" })
+
+            s.changeDirectory("/")
+            s.rename("/tree", "/forest")
+            assertTrue("an absolute rename works", s.list().any { it.name == "forest" })
+            s.removeDirectory("/forest")
+            assertFalse(s.list().any { it.name == "forest" })
+        } finally {
+            s.close()
+        }
+    }
+
     companion object {
         private const val USER = "olo"
         private const val PASS = "secret"
