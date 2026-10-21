@@ -232,6 +232,20 @@ fun BrowseScreen(
             if (flashing == name) flashing = null
         }
 
+        // A new folder shows from its top. The scroll state is hoisted once and
+        // kept across navigations (so the spotlight can reach into it), which
+        // means that without this a folder entered after scrolling down the last
+        // one opens parked at that same offset -- partway down a list the user
+        // has not seen. Keyed on the path, so it fires on moving between folders
+        // but not on a pull-to-refresh of the one already open; skipped when a
+        // spotlight is about to place the view itself.
+        LaunchedEffect(state.path) {
+            if (state.spotlight == null) {
+                runCatching { listState.scrollToItem(0) }
+                runCatching { gridState.scrollToItem(0) }
+            }
+        }
+
         PullToRefreshBox(
             isRefreshing = refreshIndicatorShown(pulls, state.loading),
             onRefresh = {
