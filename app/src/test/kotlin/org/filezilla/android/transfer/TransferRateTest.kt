@@ -142,4 +142,28 @@ class TransferRateTest {
     fun `a transfer that has never reported is not stalled`() {
         assertFalse(isStalled(updatedAtMillis = 0, nowMillis = 10_000_000))
     }
+
+    /**
+     * "Reconnecting" waits longer than a plain stall. A slow link that pauses
+     * past the stall floor is not yet called reconnecting -- that word is kept
+     * for a silence close to the real read timeout -- so the two thresholds
+     * stay apart and the longer one is genuinely longer.
+     */
+    @Test
+    fun `a brief stall is not yet called reconnecting`() {
+        assertTrue(isStalled(updatedAtMillis = 1_000, nowMillis = 1_000 + STALL_AFTER_MILLIS))
+        assertFalse(looksReconnecting(updatedAtMillis = 1_000, nowMillis = 1_000 + STALL_AFTER_MILLIS))
+        assertTrue(RECONNECTING_AFTER_MILLIS > STALL_AFTER_MILLIS)
+    }
+
+    @Test
+    fun `a long silence looks reconnecting`() {
+        assertTrue(looksReconnecting(updatedAtMillis = 1_000, nowMillis = 1_000 + RECONNECTING_AFTER_MILLIS))
+        assertFalse(looksReconnecting(updatedAtMillis = 1_000, nowMillis = 1_000 + RECONNECTING_AFTER_MILLIS - 1))
+    }
+
+    @Test
+    fun `a transfer that has never reported never looks reconnecting`() {
+        assertFalse(looksReconnecting(updatedAtMillis = 0, nowMillis = 10_000_000))
+    }
 }

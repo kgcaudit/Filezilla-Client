@@ -45,6 +45,7 @@ import org.filezilla.android.R
 import org.filezilla.android.ui.theme.tiles
 import org.filezilla.android.transfer.ActiveProgress
 import org.filezilla.android.transfer.isStalled
+import org.filezilla.android.transfer.looksReconnecting
 import org.filezilla.android.transfer.secondsRemaining
 import org.filezilla.android.ui.theme.status
 import org.filezilla.ftp.journal.TransferDirection
@@ -97,12 +98,18 @@ fun QueueScreen(
             // paused would be the wrong answer at the worst moment.
             val stalled = record.state == TransferState.RUNNING &&
                 live != null && isStalled(live.updatedAtMillis, now)
+            // A longer silence than [stalled] before the word "reconnecting"
+            // appears: a slow link pauses for a few seconds with the socket
+            // fine, and only a quiet close to the read timeout is worth
+            // calling a connection in trouble. See [looksReconnecting].
+            val reconnecting = record.state == TransferState.RUNNING &&
+                live != null && looksReconnecting(live.updatedAtMillis, now)
             TransferCard(
                 record = record,
                 // One word for the whole retry loop; see [moodOf]. The queue
                 // walks through four states a second when a connection dies,
                 // and the card used to show every one of them.
-                mood = moodOf(record, stalled),
+                mood = moodOf(record, reconnecting),
                 bytes = live?.bytes ?: record.bytesTransferred,
                 total = live?.totalBytes ?: record.totalBytes,
                 // Only a running transfer has a speed; a paused or waiting one

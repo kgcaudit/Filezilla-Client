@@ -107,3 +107,23 @@ const val STALL_AFTER_MILLIS = 5_000L
  */
 fun isStalled(updatedAtMillis: Long, nowMillis: Long): Boolean =
     updatedAtMillis > 0 && nowMillis - updatedAtMillis >= STALL_AFTER_MILLIS
+
+/**
+ * How long a running transfer must be silent before the screen calls it
+ * *reconnecting* rather than merely slow.
+ *
+ * Deliberately longer than [STALL_AFTER_MILLIS]. That shorter stall only hides
+ * a speed figure that has gone stale, which is cheap to be eager about. Saying
+ * "reconnecting", though, is a claim about the connection -- and a slow
+ * international link genuinely pauses for several seconds at a time with the
+ * socket perfectly alive, so calling that reconnecting cried wolf on every
+ * long download. This sits just under the data socket's own read timeout
+ * (`FtpSettings.readTimeoutMillis`, 20 s), so the word appears about when a
+ * stall is close to becoming a dropped connection the engine will actually
+ * retry, and not before.
+ */
+const val RECONNECTING_AFTER_MILLIS = 14_000L
+
+/** Whether a running transfer has been silent long enough to look reconnecting. */
+fun looksReconnecting(updatedAtMillis: Long, nowMillis: Long): Boolean =
+    updatedAtMillis > 0 && nowMillis - updatedAtMillis >= RECONNECTING_AFTER_MILLIS
