@@ -4,6 +4,7 @@ import android.Manifest
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.Button
@@ -357,6 +359,28 @@ private fun AppScreen(
         ActivityResultContracts.RequestPermission(),
     ) { /* The transfer runs either way; without it the progress is just invisible. */ }
 
+    // Saving the connection log to a file the user keeps, for looking at a
+    // failure after the fact. The text is captured when the save is tapped
+    // (below), so it is exactly what was on screen then, and written here once
+    // the picker names a destination.
+    var pendingLogText by remember { mutableStateOf<String?>(null) }
+    val logSavedMessage = stringResource(R.string.log_saved)
+    val logSaveFailedMessage = stringResource(R.string.log_save_failed)
+    val saveLogFile = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain"),
+    ) { uri: Uri? ->
+        val text = pendingLogText
+        pendingLogText = null
+        if (uri != null && text != null) {
+            val ok = runCatching {
+                context.contentResolver.openOutputStream(uri)?.use {
+                    it.write(text.toByteArray(Charsets.UTF_8))
+                } ?: throw java.io.IOException("could not open the chosen file")
+            }.isSuccess
+            Toast.makeText(context, if (ok) logSavedMessage else logSaveFailedMessage, Toast.LENGTH_LONG).show()
+        }
+    }
+
     val uploadPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { source: Uri? ->
@@ -612,11 +636,47 @@ private fun AppScreen(
                         // wherever it is. These were both the list icon,
                         // which meant the same picture stood for two
                         // different things that were not lists.
-                        Screen.LOG -> IconButton(onClick = { model.clearLog() }) {
-                            Icon(
-                                Icons.Filled.DeleteSweep,
-                                contentDescription = stringResource(R.string.log_clear),
-                            )
+                        Screen.LOG -> {
+                            IconButton(
+                                enabled = logLines.isNotEmpty(),
+                                onClick = {
+                                    // A short header -- version, device, time --
+                                    // so a saved log explains itself later, then
+                                    // the lines exactly as the screen shows them.
+                                    val header = buildString {
+                                        append("OLO Explorer ")
+                                            .append(org.filezilla.android.BuildConfig.VERSION_NAME).append('\n')
+                                        append("Android ").append(Build.VERSION.RELEASE)
+                                            .append(" (API ").append(Build.VERSION.SDK_INT).append(")\n")
+                                        append(Build.MANUFACTURER).append(' ').append(Build.MODEL).append('\n')
+                                        append("saved ").append(
+                                            java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
+                                                .format(java.util.Date()),
+                                        ).append("\n\n")
+                                    }
+                                    pendingLogText = header + logLinesToText(logLines)
+                                    val name = "olo-explorer-log-" +
+                                        java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US)
+                                            .format(java.util.Date()) + ".txt"
+                                    if (runCatching { saveLogFile.launch(name) }.isFailure) {
+                                        pendingLogText = null
+                                        scope.launch {
+                                            snackbars.showSnackbar(context.getString(R.string.picker_no_app))
+                                        }
+                                    }
+                                },
+                            ) {
+                                Icon(
+                                    Icons.Filled.SaveAlt,
+                                    contentDescription = stringResource(R.string.log_save),
+                                )
+                            }
+                            IconButton(onClick = { model.clearLog() }) {
+                                Icon(
+                                    Icons.Filled.DeleteSweep,
+                                    contentDescription = stringResource(R.string.log_clear),
+                                )
+                            }
                         }
 
                         // The same broom, now offering two ways to clear the

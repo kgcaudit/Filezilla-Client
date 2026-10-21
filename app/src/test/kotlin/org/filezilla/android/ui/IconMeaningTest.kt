@@ -103,6 +103,9 @@ class IconMeaningTest {
         // this in words now -- three kinds of clearing no three pictures
         // would tell apart -- so the broom is the log screen's alone.
         "DeleteSweep" to setOf("log_clear", "recents_clear"),
+        // Writing the connection log out to a file, kept beside the broom on
+        // the log screen: a download-to-disk tray, not the pane's fetch arrow.
+        "SaveAlt" to setOf("log_save"),
         // Emptying the trash: not a list being forgotten but files being
         // erased for good, so the stronger bin-with-a-cross, not the broom.
         "DeleteForever" to setOf("trash_empty"),

@@ -273,6 +273,9 @@
     <string name="log_empty_title">아직 기록이 없습니다</string>
     <string name="log_empty_detail">접속하면 주고받은 명령과 응답이 여기에 표시됩니다.</string>
     <string name="log_clear">로그 삭제</string>
+    <string name="log_save">로그 저장</string>
+    <string name="log_saved">로그를 저장했습니다</string>
+    <string name="log_save_failed">로그를 저장하지 못했습니다</string>
     <plurals name="conflict_title">
         <item quantity="other">같은 이름의 파일이 %d개 있습니다</item>
     </plurals>

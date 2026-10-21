@@ -275,6 +275,9 @@
     <string name="log_empty_title">Nothing logged yet</string>
     <string name="log_empty_detail">Every command sent and every reply received shows up here once you connect.</string>
     <string name="log_clear">Clear log</string>
+    <string name="log_save">Save log</string>
+    <string name="log_saved">Log saved</string>
+    <string name="log_save_failed">Could not save the log</string>
     <plurals name="conflict_title">
         <item quantity="one">A file of this name is already there</item>
         <item quantity="other">%d files of these names are already there</item>

@@ -63,6 +63,14 @@ fun LogScreen(lines: List<LogLine>, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * The log as plain text, each line the way the screen shows it, for saving to a
+ * file. The same time, level marker and message, so a saved log reads exactly
+ * like the one on screen.
+ */
+fun logLinesToText(lines: List<LogLine>): String =
+    lines.joinToString("\n") { "${formatLogTime(it.atMillis)} ${prefixFor(it.level)} ${it.message}" }
+
 private fun prefixFor(level: LogLevel): String = when (level) {
     LogLevel.COMMAND -> ">"
     LogLevel.REPLY -> "<"
