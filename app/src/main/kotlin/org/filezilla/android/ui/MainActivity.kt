@@ -323,13 +323,13 @@ private fun AppScreen(
 
     fun requestStorageAccess() {
         val intent = model.storageSettingsIntent()
-        if (intent != null) {
-            storageSettings.launch(intent)
-        } else {
-            model.storagePermissionsToRequest()
-                .takeIf { it.isNotEmpty() }
-                ?.let(storagePermission::launch)
-        }
+        // The settings intent is resolve-checked before it gets here, but a
+        // launch can still race the handler going away; fall through to the
+        // plain permission request rather than crash if it will not open.
+        if (intent != null && runCatching { storageSettings.launch(intent) }.isSuccess) return
+        model.storagePermissionsToRequest()
+            .takeIf { it.isNotEmpty() }
+            ?.let(storagePermission::launch)
     }
 
     // Granting all-files access happens in Settings, so the user leaves the
@@ -712,7 +712,12 @@ private fun AppScreen(
                 onNewDirectory = { creatingDirectory = true },
                 onUpload = {
                     requestNotifications()
-                    uploadPicker.launch(arrayOf("*/*"))
+                    // A phone with no document picker (DocumentsUI stripped or
+                    // disabled) throws ActivityNotFoundException from launch();
+                    // say so rather than letting the upload button crash the app.
+                    if (runCatching { uploadPicker.launch(arrayOf("*/*")) }.isFailure) {
+                        scope.launch { snackbars.showSnackbar(context.getString(R.string.picker_no_app)) }
+                    }
                 },
                 onOpenScreen = { screen = it },
                 onOpenLog = { screen = Screen.LOG },

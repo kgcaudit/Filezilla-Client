@@ -215,6 +215,10 @@ class WordingTest {
             // switch and the scheduled job's editor switch, the one destructive
             // option, worded the same in the two places a mirror is set up.
             "sync_delete_extras",
+            // "No file picker on this phone": shown when the document picker
+            // is missing, by the upload button and by both backup pickers --
+            // one thing has gone wrong, said the same way wherever it is hit.
+            "picker_no_app",
         ).sorted()
 
         assertEquals(allowed, shared)

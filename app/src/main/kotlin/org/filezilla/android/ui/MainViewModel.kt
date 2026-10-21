@@ -832,7 +832,7 @@ class MainViewModel @JvmOverloads constructor(
     fun resolveUploadConflicts(choice: ConflictChoice, onQueued: (Int) -> Unit) {
         val pending = pendingUploadConflicts ?: return
         pendingUploadConflicts = null
-        viewModelScope.launch {
+        fireAndForget("Queuing the uploads") {
             onQueued(
                 queueUploads(
                     pending.files,
@@ -910,7 +910,10 @@ class MainViewModel @JvmOverloads constructor(
         sourceFolders: List<String> = emptyList(),
         onQueued: (Int) -> Unit,
     ) {
-        viewModelScope.launch {
+        // Guarded: remoteNames is caught below, but the queueUploads in its
+        // onSuccess (journal.put) is not, so a write that throws there is
+        // logged rather than crashing the upload.
+        fireAndForget("Preparing the upload") {
             runCatching { remoteNames(site, remoteDirectory, files) }
                 .onSuccess { existing ->
                     val conflicts = files.filter { it.name in existing }.map { file ->
@@ -1392,7 +1395,7 @@ class MainViewModel @JvmOverloads constructor(
         // press until the first finishes is less surprising than garbling it.
         if (localPaste != null) return
         val target = pane(id).path
-        viewModelScope.launch {
+        fireAndForget("Preparing the paste") {
             val conflicts = withContext(io) {
                 localPasteConflicts(target, held.directory, held.names.toList())
             }
@@ -1935,7 +1938,7 @@ class MainViewModel @JvmOverloads constructor(
 
     /** Encrypts the password on its way to the row; see [SiteDraft]. */
     fun saveSite(draft: SiteDraft) {
-        viewModelScope.launch {
+        fireAndForget("Saving the server") {
             val dao = graph.database.sites()
             // A site being edited keeps where the user put it. Only a new one
             // needs a place, and its place is the end -- see [SiteDao.nextPosition].
@@ -1959,7 +1962,7 @@ class MainViewModel @JvmOverloads constructor(
      */
     fun moveSite(site: SiteEntity, towards: Move) {
         val order = SiteOrder.moved(sites.value.map { it.id }, site.id, towards) ?: return
-        viewModelScope.launch { graph.database.sites().reorder(order) }
+        fireAndForget("Reordering the servers") { graph.database.sites().reorder(order) }
     }
 
     /** Opens a site for editing, decrypting its password for the form only. */
@@ -2059,7 +2062,7 @@ class MainViewModel @JvmOverloads constructor(
     }
 
     fun deleteSite(site: SiteEntity) {
-        viewModelScope.launch {
+        fireAndForget("Deleting the server") {
             graph.database.sites().delete(site)
             graph.transfers.forget(site)
             if (browse.site?.id == site.id) browse = BrowseState()
@@ -2565,7 +2568,7 @@ class MainViewModel @JvmOverloads constructor(
      */
     fun reconcileRecents() {
         recents = graph.preferences.recents()
-        viewModelScope.launch {
+        fireAndForget("Reconciling recents") {
             val resolved = withContext(io) { resolveRecents(removeMissing = false) }
             if (resolved != null) recents = resolved
         }
@@ -2573,7 +2576,7 @@ class MainViewModel @JvmOverloads constructor(
 
     /** Heals what can be found and clears the records whose file is gone for good. */
     fun clearMissingRecents() {
-        viewModelScope.launch {
+        fireAndForget("Clearing missing recents") {
             val resolved = withContext(io) { resolveRecents(removeMissing = true) }
             recents = resolved ?: graph.preferences.recents()
         }
@@ -2675,7 +2678,7 @@ class MainViewModel @JvmOverloads constructor(
         if (recentAvailability(entry, file) == RecentAvailability.PRESENT) {
             return openResolved(file, pane)
         }
-        viewModelScope.launch {
+        fireAndForget("Opening a recent file") {
             val found = withContext(io) {
                 if (entry.hasFingerprint) {
                     RecentLocator.find(
@@ -2690,7 +2693,7 @@ class MainViewModel @JvmOverloads constructor(
             }
             if (found == null) {
                 removeRecent(entry.path)
-                return@launch
+                return@fireAndForget
             }
             healRecentPath(entry.path, found.path)
             openResolved(found, pane)?.let { pendingScreen = it }
@@ -4464,7 +4467,7 @@ class MainViewModel @JvmOverloads constructor(
     fun trustCertificate() {
         val question = certificateQuestion ?: return
         certificateQuestion = null
-        viewModelScope.launch {
+        fireAndForget("Trusting the certificate") {
             val pinned = question.site.copy(
                 pinnedCertificate = question.certificate.fingerprint,
             )
@@ -4509,7 +4512,7 @@ class MainViewModel @JvmOverloads constructor(
     fun trustHostKey() {
         val question = hostKeyQuestion ?: return
         hostKeyQuestion = null
-        viewModelScope.launch {
+        fireAndForget("Trusting the host key") {
             val pinned = question.site.copy(knownHostKey = question.hostKey.fingerprint)
             graph.database.sites().upsert(pinned)
             graph.transfers.forget(question.site)
@@ -5351,7 +5354,10 @@ class MainViewModel @JvmOverloads constructor(
 
         browse = browse.copy(loading = true, error = null)
         val stop = Stoppable()
-        viewModelScope.launch {
+        // Guarded: the inner runCatching surfaces a planning failure to the
+        // pane, but the enqueue in its onSuccess (journal.put) runs outside it,
+        // and a write that throws there must be logged, not crash the app.
+        fireAndForget("Preparing the download") {
             runCatching {
                 val plan = if (FolderDownload.needsRemoteWalk(picks)) {
                     // One connection for the whole walk: a session per folder
@@ -5417,7 +5423,7 @@ class MainViewModel @JvmOverloads constructor(
     fun resolveConflicts(choice: ConflictChoice, onQueued: (DownloadPlan) -> Unit) {
         val pending = pendingConflicts ?: return
         pendingConflicts = null
-        viewModelScope.launch {
+        fireAndForget("Queuing the downloads") {
             val queued =
                 enqueuePlan(pending.plan, pending.site, pending.folder, choice, pending.moving)
             if (pending.moving && queued.files.isNotEmpty()) {
@@ -5693,15 +5699,38 @@ class MainViewModel @JvmOverloads constructor(
         )
     }
 
-    fun pause(id: String) = viewModelScope.launch { graph.transfers.pause(id) }.let { }
+    /**
+     * Runs a one-shot journal or database write and forgets it, logging rather
+     * than crashing if it throws.
+     *
+     * The queue controls, the site writes and the trust toggles each dispatch a
+     * short write that nothing is waiting on. A disk-full or locked-database
+     * error there reached the top of a bare `launch` and force-closed the app;
+     * here the tap becomes a no-op instead, which is the right outcome for a
+     * write with no result to return. Cancellation is let through so the scope
+     * still tears down cleanly.
+     */
+    private fun fireAndForget(what: String, block: suspend () -> Unit) {
+        viewModelScope.launch {
+            try {
+                block()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (e: Exception) {
+                graph.log.log(org.filezilla.ftp.protocol.LogLevel.ERROR, "$what did not complete: ${e.message}")
+            }
+        }
+    }
 
-    fun resume(id: String) = viewModelScope.launch { graph.transfers.resume(id) }.let { }
+    fun pause(id: String) = fireAndForget("Pausing a transfer") { graph.transfers.pause(id) }
 
-    fun cancel(id: String) = viewModelScope.launch { graph.transfers.cancel(id) }.let { }
+    fun resume(id: String) = fireAndForget("Resuming a transfer") { graph.transfers.resume(id) }
 
-    fun clearCompleted() = viewModelScope.launch { graph.transfers.clearCompleted() }.let { }
+    fun cancel(id: String) = fireAndForget("Cancelling a transfer") { graph.transfers.cancel(id) }
 
-    fun pauseAll() = viewModelScope.launch { graph.transfers.pauseAll() }.let { }
+    fun clearCompleted() = fireAndForget("Clearing finished transfers") { graph.transfers.clearCompleted() }
+
+    fun pauseAll() = fireAndForget("Pausing all transfers") { graph.transfers.pauseAll() }
 
     /**
      * Sets everything outstanding going again.
@@ -5710,14 +5739,14 @@ class MainViewModel @JvmOverloads constructor(
      * service. Ordered, because a service that drains the queue before the
      * records say PENDING drains an empty one and stops.
      */
-    fun startAll(onReady: () -> Unit) = viewModelScope.launch {
+    fun startAll(onReady: () -> Unit) = fireAndForget("Starting all transfers") {
         graph.transfers.startAll()
         onReady()
-    }.let { }
+    }
 
-    fun clearFailed() = viewModelScope.launch { graph.transfers.clearFailed() }.let { }
+    fun clearFailed() = fireAndForget("Clearing failed transfers") { graph.transfers.clearFailed() }
 
-    fun clearAllTransfers() = viewModelScope.launch { graph.transfers.clearAll() }.let { }
+    fun clearAllTransfers() = fireAndForget("Clearing the transfer list") { graph.transfers.clearAll() }
 
     fun clearLog() = graph.log.clear()
 

@@ -101,11 +101,13 @@ class StorageAccess(
             Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
             Uri.fromParts("package", context.packageName, null),
         )
-        return if (perApp.resolveActivity(context.packageManager) != null) {
-            perApp
-        } else {
-            Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-        }
+        if (perApp.resolveActivity(context.packageManager) != null) return perApp
+        // The whole-list fallback is resolve-checked too: launching it unchecked
+        // throws ActivityNotFoundException on a ROM that has neither screen, and
+        // a null here sends the caller to the plain permission request instead
+        // of crashing.
+        val allApps = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+        return allApps.takeIf { it.resolveActivity(context.packageManager) != null }
     }
 
     private companion object {

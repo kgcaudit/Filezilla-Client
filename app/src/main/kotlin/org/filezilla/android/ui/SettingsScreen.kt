@@ -127,7 +127,12 @@ fun SettingsScreen(model: MainViewModel, modifier: Modifier = Modifier) {
             onConfirm = { pass ->
                 askExport = false
                 pendingExportPass = pass
-                createFile.launch(defaultName)
+                // No document picker on this phone throws from launch(); clear
+                // the held passphrase and say so rather than crash.
+                if (runCatching { createFile.launch(defaultName) }.isFailure) {
+                    pendingExportPass = null
+                    Toast.makeText(context, context.getString(R.string.picker_no_app), Toast.LENGTH_LONG).show()
+                }
             },
         )
     }
@@ -140,7 +145,10 @@ fun SettingsScreen(model: MainViewModel, modifier: Modifier = Modifier) {
             onConfirm = { pass ->
                 askImport = false
                 pendingImportPass = pass
-                openFile.launch(arrayOf("*/*"))
+                if (runCatching { openFile.launch(arrayOf("*/*")) }.isFailure) {
+                    pendingImportPass = null
+                    Toast.makeText(context, context.getString(R.string.picker_no_app), Toast.LENGTH_LONG).show()
+                }
             },
         )
     }

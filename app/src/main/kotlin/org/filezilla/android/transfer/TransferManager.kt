@@ -685,13 +685,26 @@ class TransferManager(
             log.log(LogLevel.STATUS, "Saved $name to $saved")
             return MovedSource.Delivery.SAVED
         } catch (e: IOException) {
-            log.log(
-                LogLevel.ERROR,
-                "Downloaded $name but could not save it to the chosen folder (${e.message}); " +
-                    "it is kept on the device and will be saved on the next run",
-            )
-            return MovedSource.Delivery.NOT_YET
+            return keptAfterSaveFailure(name, e)
+        } catch (e: SecurityException) {
+            // The chosen folder was reached through a picker grant the user has
+            // since taken back (cleared it, or pulled the card it was on). Not
+            // an IOException, so it was escaping this catch -- and at queue
+            // startup (republishUnpublished) that was outside any per-transfer
+            // guard. Handled like any other save failure: the bytes stay on the
+            // device and the copy is retried once the folder is reachable again.
+            return keptAfterSaveFailure(name, e)
         }
+    }
+
+    /** Keeps a downloaded-but-unsaved copy for the next run, and says so. */
+    private fun keptAfterSaveFailure(name: String, e: Exception): MovedSource.Delivery {
+        log.log(
+            LogLevel.ERROR,
+            "Downloaded $name but could not save it to the chosen folder (${e.message}); " +
+                "it is kept on the device and will be saved on the next run",
+        )
+        return MovedSource.Delivery.NOT_YET
     }
 
     private fun republishUnpublished() {

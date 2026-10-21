@@ -328,6 +328,7 @@
     <string name="paste_go_somewhere">%1$d개 복사함. 붙여넣을 폴더를 여세요.</string>
     <string name="paste_go_somewhere_cut">%1$d개 잘라냄. 옮길 폴더를 여세요.</string>
     <string name="open_no_app">이 파일을 열 수 있는 앱이 없습니다</string>
+    <string name="picker_no_app">이 휴대폰에는 파일을 고를 수 있는 앱이 없습니다</string>
     <string name="exit_confirm">한 번 더 누르면 종료됩니다</string>
     <string name="action_back">뒤로</string>
     <string name="action_rotate">화면 회전</string>

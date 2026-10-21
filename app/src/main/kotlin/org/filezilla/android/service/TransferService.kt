@@ -107,6 +107,27 @@ class TransferService : LifecycleService() {
         return START_STICKY
     }
 
+    /**
+     * The system's time limit for a background `dataSync` service is up.
+     *
+     * Android 15 caps a `dataSync` foreground service at a few hours within a
+     * day; when that elapses it calls this, and then force-crashes the app if
+     * the service is still in the foreground. So the queue is parked and the
+     * service steps down: the transfer in flight is marked interrupted with its
+     * offset kept, exactly as a user stop does, so it and the rest of the queue
+     * resume the next time the app is on screen (see MainActivity's resume).
+     * Only ever called on Android 15 and later; a no-op override elsewhere.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        graph.log.log(
+            LogLevel.STATUS,
+            "Transfers paused: the system's time limit for background transfers was reached",
+        )
+        graph.transfers.requestStop()
+        queueJob?.cancel()
+        stopSelf()
+    }
+
     private fun startQueue() {
         if (queueJob?.isActive == true) return
         queueJob = lifecycleScope.launch {
@@ -122,6 +143,20 @@ class TransferService : LifecycleService() {
                 // to somebody who has just cancelled is the app arguing with
                 // them.
                 QueueNotice.of(outcome)?.let { notifications.announce(it) }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                // The user pressed stop, or a timeout cancelled us. Let it run
+                // its course -- the finally still steps the service down.
+                throw cancelled
+            } catch (e: Exception) {
+                // Each transfer already catches its own failure (runOne), so a
+                // throw this far out is the queue machinery itself -- a journal
+                // read, a move sweep, a stale destination at republish. One such
+                // slip must not take the app down; the records keep their
+                // offsets and the queue picks up again next time it is started.
+                graph.log.log(
+                    LogLevel.ERROR,
+                    "The transfer queue stopped on an unexpected error: ${e.message}",
+                )
             } finally {
                 // Whether the queue drained or the job was cancelled, there is
                 // no longer a reason to hold the process in the foreground.
