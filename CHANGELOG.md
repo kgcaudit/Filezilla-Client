@@ -18,6 +18,103 @@ marks the build a feature first shipped in.
 
 ---
 
+## 0.1.85 — 서버 탐색 속도 개선 · Faster server browsing
+
+**한국어**
+- **잠깐 보다가 다시 이동할 때 느린 재접속을 줄였습니다.** 서버 탐색에
+  쓰는 연결을 유휴 상태로 유지하는 시간을 1분에서 3분으로 늘렸습니다.
+  폴더를 열어 두고 잠깐 읽은 뒤 다른 폴더로 가도 기존 접속을 재사용하므로,
+  느린 서버에서 매번 다시 로그인하느라 기다리는 일이 줄어듭니다. (연달아
+  이동할 때는 전부터 접속을 재사용해 이미 빨랐습니다. 특정 폴더 첫 진입이
+  느린 것은 서버 쪽 지연이라 앱에서 줄일 수 없습니다.)
+
+**English**
+- **Fewer slow reconnects when you come back after a pause.** The idle
+  connection used for browsing a server is now kept for three minutes instead
+  of one. Open a folder, read for a moment, then move on, and the app reuses
+  the existing login rather than making you wait for a fresh one on a slow
+  server. (Back-to-back navigation already reused the connection and was fast.
+  A slow first entry into some folders is server-side latency the app cannot
+  shorten.)
+
+## 0.1.80–0.1.82 — 로그 저장·탐색 다듬기 · Log export & browsing polish
+
+**한국어**
+- **접속 로그를 파일로 저장.** 접속 로그 화면 우상단의 저장 버튼으로 로그를
+  텍스트 파일로 내보냅니다. 앱 버전·기기·시각이 머리글로 붙어, 나중에 문제가
+  생겼을 때 그대로 공유해 원인을 확인할 수 있습니다.
+- **폴더에 들어가면 목록 최상단부터.** 이전 폴더에서 아래로 스크롤했더라도,
+  새 폴더는 맨 위 항목부터 열립니다.
+- **"다시 연결하는 중" 표시 완화.** 느린 국제선 연결에서 데이터가 몇 초
+  멈추기만 해도 바로 "다시 연결하는 중"으로 바뀌던 것을, 실제로 끊김에
+  가까워졌을 때(읽기 타임아웃 직전)만 표시하도록 했습니다. 실제 전송
+  복원력은 그대로입니다.
+
+**English**
+- **Save the connection log to a file.** The save button at the top of the log
+  screen exports the log as a text file, headed with the app version, device
+  and time — so when something goes wrong later, you can share it to track
+  down the cause.
+- **Folders open at the top.** Even if you scrolled down the previous folder, a
+  new one opens from its first row.
+- **Calmer "reconnecting" label.** A few seconds of silence on a slow
+  international link no longer flips the card straight to "reconnecting" — it
+  now says so only when a stall is genuinely close to a dropped connection
+  (near the read timeout). The actual transfer resilience is unchanged.
+
+## 0.1.79 — 수정: 다운로드 버튼 앱 종료 · Fix: download-button crash
+
+**한국어**
+- **서버에서 다운로드 버튼을 누르면 앱이 꺼지던 문제를 고쳤습니다(Android
+  13 이상).** 앱 잠금(지문)에 쓰이는 라이브러리가 끌어오던 오래된 구성요소가
+  최신 구성요소와 충돌해, 다운로드 시 알림 권한을 요청하는 순간 앱이
+  종료됐습니다. 라이브러리 버전을 맞춰 해결했습니다.
+
+**English**
+- **Fixed the app closing when you tapped download on a server (Android 13+).**
+  An old component pulled in by the app-lock (fingerprint) library clashed with
+  a newer one, so the app crashed the moment a download asked for notification
+  permission. Aligning the library versions fixes it.
+
+## 0.1.78 — 크래시 원인 기록 · Crash reporting
+
+**한국어**
+- **앱이 예기치 않게 종료되면 그 원인을 기록합니다.** 다음에 앱을 열면 접속
+  로그 화면 맨 위에 직전 종료의 원인이 표시되고, 위 저장 기능으로 공유할 수
+  있습니다. 시스템의 종료 안내 등 동작은 그대로이며, 기록만 더해집니다.
+
+**English**
+- **Records why the app closed, if it ever does unexpectedly.** The next time
+  you open it, the reason for the last crash appears at the top of the
+  connection log, ready to export with the save feature above. The system's own
+  behavior is unchanged; this only adds a record.
+
+## 0.1.73–0.1.77 — 안정성 점검·보강 · Stability audit & hardening
+
+**한국어**
+- **전반 코드 점검.** 다운로드 중 파일 핸들 누수, 연결 테스트의 정확성,
+  일부 파일명(`+` 포함)의 디코딩 등을 바로잡았습니다.
+- **앱이 꺼지던 여러 지점 보강.** 미처리 예외가 앱을 강제 종료시키던
+  경로들(포그라운드 서비스 시작, 열 수 있는 앱이 없는 인텐트, 저장소 권한
+  회수, 전송 큐잉, 휴지통 등)을 감싸, 드문 오류 상황에서도 크래시 대신
+  안내나 무시로 처리합니다.
+- **빠른 스크롤 배지 다듬기.** 긴 목록을 드래그할 때 뜨는 글자 배지를,
+  글자 폭에 따라 늘어나던 투박한 사각형에서 고정 크기의 둥근 배지로
+  바꿨습니다.
+
+**English**
+- **A broad code audit.** Fixed a file-handle leak during downloads, the
+  accuracy of the connection test, and the decoding of some filenames (those
+  with `+`).
+- **Hardened several spots where the app could close.** Paths where an uncaught
+  error force-closed the app (starting the foreground service, intents with no
+  app to handle them, a revoked storage grant, transfer queuing, the trash, and
+  more) are now wrapped, so a rare error is handled with a message or a no-op
+  instead of a crash.
+- **Refined the fast-scroll badge.** The letter badge shown while dragging a
+  long list is now a fixed-size rounded badge instead of a blunt rectangle that
+  stretched with the letter.
+
 ## 0.1.70 — 내부 안정화 · Internal stabilization
 
 **한국어**
