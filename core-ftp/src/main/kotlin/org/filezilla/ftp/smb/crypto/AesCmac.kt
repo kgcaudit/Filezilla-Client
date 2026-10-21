@@ -64,7 +64,7 @@ class AesCmac : Mac {
             // only input that is certainly followed by more is folded in, so the
             // final block is always still in hand at doFinal.
             if (pendingLen == BLOCK) {
-                foldBlock(pending, 0)
+                foldBlock(pending)
                 pendingLen = 0
             }
             val take = minOf(BLOCK - pendingLen, left)
@@ -96,9 +96,9 @@ class AesCmac : Mac {
         pendingLen = 0
     }
 
-    /** X := E(X xor block). */
-    private fun foldBlock(block: ByteArray, offset: Int) {
-        for (i in 0 until BLOCK) x[i] = (x[i].toInt() xor block[offset + i].toInt()).toByte()
+    /** X := E(X xor block), where block is one whole AES block. */
+    private fun foldBlock(block: ByteArray) {
+        for (i in 0 until BLOCK) x[i] = (x[i].toInt() xor block[i].toInt()).toByte()
         val enc = encryptBlock(x)
         System.arraycopy(enc, 0, x, 0, BLOCK)
     }

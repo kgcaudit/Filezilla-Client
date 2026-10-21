@@ -127,6 +127,17 @@ class WebDavClientTest {
     }
 
     @Test
+    fun `a name with a plus sign round-trips (plus is not a space)`() {
+        // A path's '+' is a literal plus, not a form-encoded space; decoding it
+        // as a space would list the wrong name and then 404 on fetch.
+        client.makeCollection("/plus")
+        val name = "a+b c.txt"
+        client.upload("/plus/$name", ByteArrayInputStream("x".toByteArray()), 1) {}
+        val names = client.list("/plus").map { it.name }
+        assertTrue(names.contains(name), "a '+' name should round-trip unchanged, got $names")
+    }
+
+    @Test
     fun `fingerprint reports size and time`() {
         client.makeCollection("/fp")
         client.upload("/fp/f.bin", ByteArrayInputStream(ByteArray(42)), 42) {}

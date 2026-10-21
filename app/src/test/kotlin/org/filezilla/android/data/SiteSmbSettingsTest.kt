@@ -67,6 +67,22 @@ class SiteSmbSettingsTest {
     }
 
     @Test
+    fun `a dedicated domain strips any DOMAIN-prefix left in the username`() {
+        val s = site(user = "CORP\\alice", initialPath = null, smbShare = "Public", smbDomain = "CORP")
+            .toSmbSettings(passwords)
+        assertEquals("alice", s.user)
+        assertEquals("CORP", s.domain)
+    }
+
+    @Test
+    fun `a blank domain column falls back to the username's domain`() {
+        val s = site(user = "WORKGROUP\\bob", initialPath = "/Public", smbShare = null, smbDomain = "")
+            .toSmbSettings(passwords)
+        assertEquals("bob", s.user)
+        assertEquals("WORKGROUP", s.domain)
+    }
+
+    @Test
     fun `a legacy site without a domain or subfolder still resolves`() {
         val s = site(user = "bob", initialPath = "/Public").toSmbSettings(passwords)
         assertEquals("Public", s.share)

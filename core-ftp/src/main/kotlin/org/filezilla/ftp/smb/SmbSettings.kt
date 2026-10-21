@@ -24,7 +24,7 @@ data class SmbSettings(
     val share: String,
     /** The folder within the share the root maps to, e.g. "/" or "/docs". */
     val basePath: String = "/",
-    val connectTimeoutMillis: Int = 20_000,
+    /** Socket read timeout, applied to smbj's transaction and SO timeouts. */
     val readTimeoutMillis: Int = 60_000,
 ) {
     companion object {

@@ -17,9 +17,10 @@ import org.filezilla.ftp.transfer.TransferProgressListener
  * loop over the WebDAV engine.
  *
  * A fresh engine per attempt, as for SFTP: a WebDAV engine holds no connection
- * of its own worth keeping (the JDK HTTP client pools underneath), so there is
- * nothing to carry across a retry. A download resumes from the partial file's
- * size on a later attempt; an upload starts over, since WebDAV cannot append.
+ * of its own worth keeping (each request opens and closes its own socket), so
+ * there is nothing to carry across a retry. A download resumes from the partial
+ * file's size on a later attempt; an upload starts over, since WebDAV cannot
+ * append.
  */
 class WebDavResilientTransfer(
     private val settings: WebDavSettings,

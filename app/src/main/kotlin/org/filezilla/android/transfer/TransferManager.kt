@@ -1551,6 +1551,16 @@ class TransferManager(
     }
 
     /**
+     * Opens a throwaway connection outside the browse pool to check a site's
+     * settings, runs [block] on it, and closes it. For the editor's "test
+     * connection": the pool would reuse a kept connection and answer for the
+     * old settings, so verification must not go through it.
+     */
+    suspend fun <T> verifyConnection(site: SiteEntity, block: (RemoteSession) -> T): T = withContext(io) {
+        browseConnections.withFreshSession(site) { session -> runInterruptible { block(session) } }
+    }
+
+    /**
      * Fetches one file into [into] so it can be looked at, and nothing else.
      *
      * Not through the queue, deliberately. The queue is for things the user

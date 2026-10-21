@@ -108,6 +108,26 @@ class BrowseConnections<S : java.io.Closeable>(
         }
     }
 
+    /**
+     * Runs [block] on a brand-new connection outside the pool, then closes it.
+     *
+     * For verifying a site's settings before they are saved. The pool keys on
+     * only a subset of a site's fields ([keyFor] leaves out password, SMB share
+     * and domain, private key and initial path), so a pooled reuse would answer
+     * for the *old* settings and report a changed share or password as working.
+     * This opens its own connection with exactly these settings, never consults
+     * or stores anything in the pool, and closes it when done -- so it also
+     * cannot evict a live browsing connection.
+     */
+    suspend fun <T> withFreshSession(site: SiteEntity, block: suspend (S) -> T): T {
+        val session = open(site)
+        return try {
+            block(session)
+        } finally {
+            runCatching { session.close() }
+        }
+    }
+
     /** Closes everything, for a pane that has been pointed somewhere else. */
     suspend fun closeAll() {
         val all = lock.withLock { kept.values.toList().also { kept.clear() } }

@@ -40,6 +40,9 @@ class FileTransferWriter(
     override fun openAt(offset: Long): OutputStream {
         require(offset >= 0) { "negative resume offset: $offset" }
         file.parentFile?.mkdirs()
+        // A second openAt (e.g. a download that had to restart from zero) must
+        // not strand the first handle: close it before taking a new one.
+        raf?.let { runCatching { it.close() } }
         val handle = RandomAccessFile(file, "rw")
         // Anything already past the resume point is stale: a previous attempt
         // wrote it but the offset says it is not accounted for.

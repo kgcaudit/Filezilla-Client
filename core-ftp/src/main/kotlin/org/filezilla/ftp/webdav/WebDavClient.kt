@@ -17,7 +17,6 @@ import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URI
-import java.net.URLDecoder
 import java.text.SimpleDateFormat
 import java.util.Base64
 import java.util.Locale
@@ -376,7 +375,7 @@ class WebDavClient(private val settings: WebDavSettings) {
         for (i in 0 until responses.length) {
             val response = responses.item(i) as Element
             val href = textOf(response, "href") ?: continue
-            val path = URLDecoder.decode(URI.create(href).rawPath, Charsets.UTF_8)
+            val path = percentDecode(URI.create(href).rawPath)
             val isDir = element(response, "resourcetype")
                 ?.let { element(it, "collection") != null } ?: false
             val size = textOf(response, "getcontentlength")?.toLongOrNull() ?: -1
@@ -567,3 +566,34 @@ private fun encodeSegment(segment: String): String = buildString {
 
 private fun Char.isUnreserved(): Boolean =
     this in 'A'..'Z' || this in 'a'..'z' || this in '0'..'9' || this in "-._~"
+
+/**
+ * Decodes a URL path's percent-escapes, and only those.
+ *
+ * A path is not a query string: `+` is a literal plus (a legal path character),
+ * not an encoded space. `java.net.URLDecoder` applies form rules and turns `+`
+ * into a space, which renamed any listed file whose name contained `+` and then
+ * 404'd when it was fetched back. This decodes `%XX` and leaves everything else,
+ * `+` included, exactly as the server sent it.
+ */
+private fun percentDecode(path: String): String {
+    if ('%' !in path) return path
+    val bytes = java.io.ByteArrayOutputStream(path.length)
+    var i = 0
+    while (i < path.length) {
+        val c = path[i]
+        if (c == '%' && i + 2 < path.length) {
+            val hi = Character.digit(path[i + 1], 16)
+            val lo = Character.digit(path[i + 2], 16)
+            if (hi >= 0 && lo >= 0) {
+                bytes.write((hi shl 4) or lo)
+                i += 3
+                continue
+            }
+        }
+        // A non-escape character: its UTF-8 bytes pass through unchanged.
+        bytes.write(c.toString().toByteArray(Charsets.UTF_8))
+        i++
+    }
+    return bytes.toString("UTF-8")
+}

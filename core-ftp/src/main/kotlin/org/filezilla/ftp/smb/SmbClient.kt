@@ -127,18 +127,29 @@ class SmbClient(private val settings: SmbSettings) : Closeable {
             .build()
         val newClient = SMBClient(config)
         val newConnection = newClient.connect(settings.host, settings.port)
-        val auth = AuthenticationContext(
-            settings.user,
-            settings.password.toCharArray(),
-            settings.domain?.takeIf { it.isNotBlank() },
-        )
-        val newSession = op { newConnection.authenticate(auth) }
-        val newShare = op { newSession.connectShare(settings.share) } as? DiskShare
-            ?: throw java.io.IOException("'${settings.share}' is not a disk share")
-        client = newClient
-        connection = newConnection
-        session = newSession
-        share = newShare
+        // If login or the tree connect fails -- a wrong password is the most
+        // common error of all -- the connection and client are not yet in the
+        // fields, so close() would not reach them. Close them here, or every
+        // failed attempt (and the pool/queue retry it) leaks a socket, a
+        // packet-reader thread and a client thread pool.
+        try {
+            val auth = AuthenticationContext(
+                settings.user,
+                settings.password.toCharArray(),
+                settings.domain?.takeIf { it.isNotBlank() },
+            )
+            val newSession = op { newConnection.authenticate(auth) }
+            val newShare = op { newSession.connectShare(settings.share) } as? DiskShare
+                ?: throw java.io.IOException("'${settings.share}' is not a disk share")
+            client = newClient
+            connection = newConnection
+            session = newSession
+            share = newShare
+        } catch (e: Throwable) {
+            runCatching { newConnection.close() }
+            runCatching { newClient.close() }
+            throw e
+        }
     }
 
     // ------------------------------------------------------------- browsing

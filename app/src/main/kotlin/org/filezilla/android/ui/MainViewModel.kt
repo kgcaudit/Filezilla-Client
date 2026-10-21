@@ -1968,7 +1968,11 @@ class MainViewModel @JvmOverloads constructor(
     suspend fun testConnection(draft: SiteDraft): SiteTestResult {
         val site = draft.toEntity(graph.passwords)
         return try {
-            graph.transfers.browse(site) { it.currentDirectory() }
+            // A fresh connection outside the pool: a pooled reuse would answer
+            // for the saved site's old settings, so editing a share or password
+            // and testing it could falsely report success. verifyConnection also
+            // closes its own connection, so it never evicts a live browse one.
+            graph.transfers.verifyConnection(site) { it.currentDirectory() }
             SiteTestResult.Success
         } catch (e: Exception) {
             val (cert, hostKey) = acceptableFirstMeeting(e)
@@ -1977,8 +1981,6 @@ class MainViewModel @JvmOverloads constructor(
                 acceptCertificate = cert,
                 acceptHostKey = hostKey,
             )
-        } finally {
-            graph.transfers.forget(site)
         }
     }
 

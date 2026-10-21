@@ -37,7 +37,11 @@ class WebDavEngine(private val settings: WebDavSettings) : Closeable {
         writer: TransferWriter,
         progress: TransferProgressListener?,
         forcedResumeOffset: Long?,
-    ): TransferOutcome {
+    ): TransferOutcome = writer.use {
+        // writer.use, as the SFTP and SMB engines do: openAt's stream has a
+        // no-op close (FileTransferWriter releases its file only on close()),
+        // so closing the writer here is what frees the file handle rather than
+        // leaking one per download.
         val total = client.fingerprint(remoteFile).size
         var offset = forcedResumeOffset ?: writer.existingSize ?: 0L
         if (offset < 0) offset = 0
@@ -60,7 +64,7 @@ class WebDavEngine(private val settings: WebDavSettings) : Closeable {
         }
 
         val finalSize = total ?: client.fingerprint(remoteFile).size
-        return TransferOutcome(
+        TransferOutcome(
             disposition = if (startedAt > 0) TransferDisposition.RESUMED else TransferDisposition.TRANSFERRED,
             resumeOffset = startedAt,
             bytesTransferred = (finalSize ?: 0L) - startedAt,
@@ -88,6 +92,7 @@ class WebDavEngine(private val settings: WebDavSettings) : Closeable {
         )
     }
 
-    // HttpClient pools and closes its own connections; there is nothing to hold.
+    // Each request opens and closes its own socket (Connection: close), so the
+    // engine holds no connection of its own; there is nothing to close here.
     override fun close() {}
 }

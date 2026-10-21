@@ -130,13 +130,20 @@ object ScheduledSync {
             }.onSuccess { queued++ }.onFailure { failed++ }
         }
 
-        val deleted = if (job.deleteExtras) {
+        val removals = if (job.deleteExtras) {
             deleteRemoteExtras(graph, site, job.remoteRoot, topLevelDeletes(plan.actions))
         } else {
-            0
+            RemoteDeletes(0, 0)
         }
+        failed += removals.failed
 
-        return ScheduledSyncResult(made = made, queued = queued, deleted = deleted, failed = failed, truncated = truncated)
+        return ScheduledSyncResult(
+            made = made,
+            queued = queued,
+            deleted = removals.removed,
+            failed = failed,
+            truncated = truncated,
+        )
     }
 
     // --------------------------------------------------------- server -> phone
@@ -149,6 +156,7 @@ object ScheduledSync {
         if (plan.isNoop) return ScheduledSyncResult(noop = true, truncated = truncated)
 
         var queued = 0
+        var failed = 0
         for (copy in plan.actions.filterIsInstance<SyncAction.Copy>()) {
             val parentRel = copy.rel.substringBeforeLast('/', "")
             runCatching {
@@ -160,7 +168,7 @@ object ScheduledSync {
                     subPath = if (parentRel.isEmpty()) emptyList() else parentRel.split('/'),
                     onConflict = ConflictChoice.OVERWRITE,
                 )
-            }.onSuccess { queued++ }.onFailure { /* counted below via local result */ }
+            }.onSuccess { queued++ }.onFailure { failed++ }
         }
 
         // The queue makes the folders a file needs but not the empty ones, and
@@ -179,7 +187,7 @@ object ScheduledSync {
             made = local.made,
             queued = queued,
             deleted = local.deleted,
-            failed = local.failed,
+            failed = local.failed + failed,
             truncated = truncated,
         )
     }
@@ -201,15 +209,19 @@ object ScheduledSync {
         return deletes.filter { it.rel.substringBeforeLast('/', "").let { p -> p.isEmpty() || p !in rels } }
     }
 
+    /** How a round of remote-extra deletion went: what went and what wouldn't. */
+    private data class RemoteDeletes(val removed: Int, val failed: Int)
+
     private suspend fun deleteRemoteExtras(
         graph: AppGraph,
         site: SiteEntity,
         remoteRoot: String,
         extras: List<SyncAction.Delete>,
-    ): Int {
-        if (extras.isEmpty()) return 0
+    ): RemoteDeletes {
+        if (extras.isEmpty()) return RemoteDeletes(0, 0)
         return graph.transfers.browse(site) { session ->
             var removed = 0
+            var failed = 0
             for (extra in extras) {
                 val parentRel = extra.rel.substringBeforeLast('/', "")
                 val directory = if (parentRel.isEmpty()) remoteRoot else FilePath.child(remoteRoot, parentRel)
@@ -220,9 +232,12 @@ object ScheduledSync {
                     } else {
                         session.deleteFile(FilePath.child(directory, name))
                     }
-                }.onSuccess { removed++ }
+                    // A delete the server refuses (permission, a dir that would
+                    // not empty) must count as a failure, or a mirror left with
+                    // extras still reports a clean run.
+                }.onSuccess { removed++ }.onFailure { failed++ }
             }
-            removed
+            RemoteDeletes(removed, failed)
         }
     }
 

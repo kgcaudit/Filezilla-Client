@@ -188,10 +188,13 @@ data class SiteEntity(
             share = path.substringBefore('/')
             folder = path.substringAfter('/', "")
         }
-        val legacyDomain = smbDomain == null && user.contains('\\')
-        val domain = (smbDomain ?: user.takeIf { legacyDomain }?.substringBefore('\\'))
-            ?.takeIf { it.isNotBlank() }
-        val account = if (legacyDomain) user.substringAfter('\\') else user
+        // The account is the username without any `DOMAIN\` prefix, whichever
+        // way the domain was given. The domain is the dedicated column when set
+        // (blank counts as unset, matching the share above), else the `DOMAIN`
+        // part of a legacy `DOMAIN\user` username.
+        val account = user.substringAfterLast('\\')
+        val domain = smbDomain?.takeIf { it.isNotBlank() }
+            ?: user.substringBefore('\\', "").takeIf { user.contains('\\') && it.isNotBlank() }
         return SmbSettings(
             host = host,
             port = port,
