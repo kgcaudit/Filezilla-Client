@@ -101,6 +101,13 @@ android {
                 storePassword = keystoreProperties.getProperty("storePassword")
                 keyAlias = keystoreProperties.getProperty("keyAlias")
                 keyPassword = keystoreProperties.getProperty("keyPassword")
+                // Sign with the v1 (JAR) scheme as well as v2/v3. For minSdk 26
+                // AGP disables v1 by default, leaving a v2-only APK -- which some
+                // devices refuse to sideload with a generic "invalid package"
+                // error, especially on the manual update path. v1 costs a little
+                // size and makes the APK installable everywhere.
+                enableV1Signing = true
+                enableV2Signing = true
             }
         }
     }
