@@ -2,6 +2,7 @@ package org.filezilla.android.ui
 
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CardDefaults
+import androidx.annotation.DrawableRes
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.clickable
@@ -31,6 +32,7 @@ import androidx.compose.ui.res.stringResource
 import org.filezilla.android.R
 import androidx.compose.ui.unit.dp
 import org.filezilla.android.data.SiteEntity
+import org.filezilla.android.data.SiteProtocol
 import org.filezilla.ftp.protocol.FtpSecurity
 
 @Composable
@@ -101,28 +103,15 @@ fun SitesScreen(
                             // tapping it, and it was a line of small blue
                             // text that read like a protocol note. A shield
                             // or a warning says which of the two it is
-                            // without being read.
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                val plain = site.securityEnum == FtpSecurity.PLAIN
-                                Icon(
-                                    painter = painterResource(
-                                        if (plain) R.drawable.ic_flat_warning
-                                        else R.drawable.ic_flat_secure,
-                                    ),
-                                    contentDescription = null,
-                                    // Unbounded, or Material flattens the
-                                    // artwork to one colour and the amber and
-                                    // the green become the same mark.
-                                    tint = Color.Unspecified,
-                                    modifier = Modifier.size(14.dp),
-                                )
-                                Text(
-                                    securityLabel(site.securityEnum),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(start = 4.dp),
-                                )
-                            }
+                            // without being read -- but only for the protocols
+                            // that have a clear-vs-encrypted answer to give,
+                            // and in each one's own words. The security field
+                            // means FTPS modes for FTP and http/https for
+                            // WebDAV; SFTP is always encrypted; SMB has no
+                            // FTP-style grade at all. Read as FTP vocabulary
+                            // everywhere, the line named every WebDAV server
+                            // "FTPS implicit" and every SMB server "Plain FTP".
+                            SecurityBadge(site)
                         }
                         IconButton(onClick = { onEdit(site) }) {
                             Icon(
@@ -165,6 +154,68 @@ fun SitesScreen(
                 onEdit(null)
             },
             onTest = onTest,
+        )
+    }
+}
+
+/**
+ * The one-line security note under a server's address, in the protocol's own
+ * terms.
+ *
+ *  - FTP keeps the FTPS-mode wording and the shield/warning split on whether
+ *    the login is plain.
+ *  - WebDAV is http or https, told apart by the same [FtpSecurity.PLAIN] flag
+ *    the editor stores: plain is http (a warning), anything else https (a
+ *    shield). The security *label* is WebDAV's http/https, not FTP's.
+ *  - SFTP runs over SSH and is always encrypted, so there is no clear-text
+ *    mode to warn about -- a shield and the protocol's name.
+ *  - SMB negotiates SMB 3 encryption opportunistically rather than as a
+ *    user-chosen grade (see SmbClient's `withEncryptData`), so neither a green
+ *    shield (which would promise encryption that may not happen) nor an amber
+ *    warning (which would call an often-encrypted link plain) tells the truth.
+ *    The row names the share instead, with a neutral folder glyph; a legacy
+ *    site that kept its share in the path has none to show, so the line is
+ *    simply left off.
+ */
+@Composable
+private fun SecurityBadge(site: SiteEntity) {
+    val plain = site.securityEnum == FtpSecurity.PLAIN
+    val secureGlyph = R.drawable.ic_flat_secure
+    val warningGlyph = R.drawable.ic_flat_warning
+    when (site.protocolEnum) {
+        SiteProtocol.FTP ->
+            CardBadge(if (plain) warningGlyph else secureGlyph, securityLabel(site.securityEnum))
+        SiteProtocol.WEBDAV ->
+            CardBadge(if (plain) warningGlyph else secureGlyph, webdavEncryptionLabel(site.securityEnum))
+        SiteProtocol.SFTP ->
+            CardBadge(secureGlyph, protocolLabel(SiteProtocol.SFTP))
+        SiteProtocol.SMB ->
+            site.smbShare?.takeIf { it.isNotBlank() }?.let { share ->
+                CardBadge(R.drawable.ic_flat_folder, share)
+            }
+    }
+}
+
+/**
+ * A flat glyph and a line of label text, the shape the security note has worn
+ * since it stopped being blue protocol text. The glyph is drawn unbounded, or
+ * Material flattens the two-tone artwork to one colour and the amber warning
+ * and the green shield become the same mark.
+ */
+@Composable
+private fun CardBadge(@DrawableRes glyph: Int, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            painter = painterResource(glyph),
+            contentDescription = null,
+            tint = Color.Unspecified,
+            modifier = Modifier.size(14.dp),
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 4.dp),
         )
     }
 }

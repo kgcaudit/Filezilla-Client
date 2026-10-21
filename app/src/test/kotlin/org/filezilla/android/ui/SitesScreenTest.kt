@@ -50,6 +50,7 @@ class SitesScreenTest {
         user: String,
         protocol: SiteProtocol,
         security: FtpSecurity = FtpSecurity.PLAIN,
+        smbShare: String? = null,
     ) = SiteEntity(
         id = id,
         name = name,
@@ -61,11 +62,11 @@ class SitesScreenTest {
         transferMode = TransferMode.DEFAULT.name,
         protocol = protocol.name,
         initialPath = null,
-        smbShare = null,
+        smbShare = smbShare,
         smbDomain = null,
     )
 
-    private val nas = site("1", "Office NAS", "nas.local", 445, "bob", SiteProtocol.SMB)
+    private val nas = site("1", "Office NAS", "nas.local", 445, "bob", SiteProtocol.SMB, smbShare = "Public")
     private val dav = site("2", "Cloud", "dav.example.org", 443, "ann", SiteProtocol.WEBDAV, FtpSecurity.IMPLICIT_TLS)
 
     private class Recorder {
@@ -109,6 +110,50 @@ class SitesScreenTest {
         compose.onNodeWithText("bob@nas.local:445").assertIsDisplayed()
         compose.onNodeWithText("Cloud").assertIsDisplayed()
         compose.onNodeWithText("ann@dav.example.org:443").assertIsDisplayed()
+    }
+
+    @Test
+    fun `each protocol names its security in its own words`() {
+        val ftp = site("3", "Archive", "ftp.example.org", 21, "cat", SiteProtocol.FTP, FtpSecurity.PLAIN)
+        val ftps = site("4", "Vault", "ftps.example.org", 990, "dog", SiteProtocol.FTP, FtpSecurity.IMPLICIT_TLS)
+        val sftp = site("5", "Shell", "sftp.example.org", 22, "eve", SiteProtocol.SFTP)
+        val davPlain = site("6", "Intranet", "dav.local", 80, "foo", SiteProtocol.WEBDAV, FtpSecurity.PLAIN)
+        show(listOf(ftp, ftps, sftp, davPlain, dav, nas))
+
+        // FTP keeps the FTPS-mode wording it always had.
+        compose.onNodeWithText(text(R.string.security_plain)).assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.security_implicit)).assertIsDisplayed()
+        // SFTP reads as the encrypted protocol it is, not an FTP mode.
+        compose.onNodeWithText(text(R.string.protocol_sftp)).assertIsDisplayed()
+        // WebDAV reads as http/https, not FTPS.
+        compose.onNodeWithText(text(R.string.webdav_http)).assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.webdav_https)).assertIsDisplayed()
+        // SMB names its share rather than claiming an FTP security grade.
+        compose.onNodeWithText("Public").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a non-FTP server is not labelled with FTP vocabulary`() {
+        // The WebDAV-over-https and SMB servers both carry a security value
+        // (IMPLICIT_TLS, PLAIN) that the old shared label would have printed as
+        // "FTPS implicit" and "Plain FTP" -- the bug this screen had.
+        show(listOf(dav, nas))
+
+        compose.onNodeWithText(text(R.string.security_implicit)).assertDoesNotExist()
+        compose.onNodeWithText(text(R.string.security_plain)).assertDoesNotExist()
+        compose.onNodeWithText(text(R.string.security_explicit)).assertDoesNotExist()
+    }
+
+    @Test
+    fun `an SMB server without a share omits the security line`() {
+        // A site saved before the share column existed keeps its share in the
+        // path, so the card has no share to name -- and must still not fall
+        // back to an FTP security label.
+        val legacy = site("7", "Legacy NAS", "old.local", 445, "bob", SiteProtocol.SMB, smbShare = null)
+        show(listOf(legacy))
+
+        compose.onNodeWithText("Legacy NAS").assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.security_plain)).assertDoesNotExist()
     }
 
     @Test
