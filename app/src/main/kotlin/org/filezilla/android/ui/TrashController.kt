@@ -35,7 +35,31 @@ class TrashController(
     private val scope: CoroutineScope,
     private val recentSource: (String) -> String,
     private val relistLocalPanes: () -> Unit,
+    /** Where a trash action's unexpected failure is noted instead of crashing. */
+    private val logError: (String) -> Unit,
 ) {
+
+    /**
+     * Runs a trash action off the main thread, noting a rare storage slip rather
+     * than crashing on it.
+     *
+     * The file moves and deletes already catch their own failure in the blocking
+     * helpers; what is left unguarded is the preferences read-back and clear
+     * around them. A failure there is near-impossible and nothing waits on it,
+     * so the list simply redraws correctly the next time the screen opens --
+     * which is a far better end than a force-close. Cancellation is let through.
+     */
+    private fun guarded(what: String, block: suspend () -> Unit) {
+        scope.launch {
+            try {
+                block()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (e: Exception) {
+                logError("$what did not complete: ${e.message}")
+            }
+        }
+    }
 
     /**
      * The trashed files, most recently deleted first -- what the trash screen
@@ -131,7 +155,7 @@ class TrashController(
     fun restoreSelected() {
         val picked = selected()
         if (picked.isEmpty()) return
-        scope.launch {
+        guarded("Restoring the selected files") {
             withContext(Dispatchers.IO) { picked.forEach(::restoreEntryBlocking) }
             entries = preferences.trash()
             exitSelection()
@@ -143,7 +167,7 @@ class TrashController(
     fun deleteSelectedForever() {
         val picked = selected()
         if (picked.isEmpty()) return
-        scope.launch {
+        guarded("Erasing the selected files") {
             withContext(Dispatchers.IO) { picked.forEach(::deleteEntryBlocking) }
             entries = preferences.trash()
             exitSelection()
@@ -175,7 +199,7 @@ class TrashController(
      * local panes when done, so a restore into the open folder shows at once.
      */
     fun restore(entry: TrashEntry) {
-        scope.launch {
+        guarded("Restoring a file") {
             withContext(Dispatchers.IO) { restoreEntryBlocking(entry) }
             entries = preferences.trash()
             relistLocalPanes()
@@ -184,7 +208,7 @@ class TrashController(
 
     /** Erases one trashed file for good and drops it from the list. */
     fun deleteForever(entry: TrashEntry) {
-        scope.launch {
+        guarded("Erasing a file") {
             withContext(Dispatchers.IO) { deleteEntryBlocking(entry) }
             entries = preferences.trash()
         }
@@ -222,7 +246,7 @@ class TrashController(
 
     /** Erases everything in the trash for good. */
     fun empty() {
-        scope.launch {
+        guarded("Emptying the trash") {
             withContext(Dispatchers.IO) {
                 // Each entry's own file, since the trash is now spread across a
                 // hidden folder per volume rather than one folder to list.

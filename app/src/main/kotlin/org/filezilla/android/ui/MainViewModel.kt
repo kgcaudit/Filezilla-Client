@@ -266,6 +266,7 @@ class MainViewModel @JvmOverloads constructor(
         viewModelScope,
         ::recentSource,
         ::relistLocalPanes,
+        logError = { graph.log.log(org.filezilla.ftp.protocol.LogLevel.ERROR, it) },
     )
 
     /**

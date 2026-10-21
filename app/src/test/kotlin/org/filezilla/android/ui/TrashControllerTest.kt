@@ -57,7 +57,7 @@ class TrashControllerTest {
     private fun controller(
         recentSource: (String) -> String = { "" },
         relistLocalPanes: () -> Unit = {},
-    ) = TrashController(app, volumes, prefs, scope, recentSource, relistLocalPanes)
+    ) = TrashController(app, volumes, prefs, scope, recentSource, relistLocalPanes, logError = {})
 
     private fun fileIn(prefix: String, name: String, content: String): File {
         val dir = Files.createTempDirectory(prefix).toFile()
