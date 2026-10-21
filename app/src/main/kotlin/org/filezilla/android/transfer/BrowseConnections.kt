@@ -171,10 +171,18 @@ class BrowseConnections<S : java.io.Closeable>(
          *
          * Servers commonly drop an idle control connection after five
          * minutes and say nothing about it; vsftpd's default is 300
-         * seconds. Well under that, so the common case is a connection that
-         * is certainly alive, and the retry below covers the rest.
+         * seconds. This sits well under that, so a reused connection is
+         * almost certainly still alive and the retry below covers the rest.
+         *
+         * A minute was too eager: reading a few pages of a comic, or pausing
+         * to think, routinely passes it, and the next tap then pays for a full
+         * re-login -- and on a slow NAS over an international link that login
+         * is several seconds (its welcome banner alone measured ~4 s). Three
+         * minutes keeps the connection through an ordinary reading pause while
+         * staying comfortably under the five-minute server default, so almost
+         * every navigation reuses the login instead of making a new one.
          */
-        const val IDLE_LIMIT_MILLIS = 60_000L
+        const val IDLE_LIMIT_MILLIS = 180_000L
 
         /**
          * The pool the app uses: sessions opened against a real server, of
