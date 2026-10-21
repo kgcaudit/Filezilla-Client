@@ -209,6 +209,10 @@ dependencies {
     implementation(libs.androidx.exifinterface)
     implementation(libs.androidsvg)
     implementation(libs.androidx.biometric)
+    // Forces a fragment version that works with the activity-result API; see
+    // the note in libs.versions.toml. Without it biometric drags in fragment
+    // 1.2.5, whose FragmentActivity crashes on a permission/picker launch.
+    implementation(libs.androidx.fragment)
     ksp(libs.room.compiler)
 
     implementation(platform(libs.compose.bom))

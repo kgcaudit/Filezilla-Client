@@ -5,6 +5,7 @@ junit = "5.11.3"
 agp = "8.7.3"
 androidx-core = "1.15.0"
 androidx-activity = "1.9.3"
+androidx-fragment = "1.8.5"
 androidx-lifecycle = "2.8.7"
 androidx-documentfile = "1.0.1"
 compose-bom = "2024.12.01"
@@ -56,6 +57,15 @@ androidsvg = { module = "com.caverock:androidsvg-aar", version.ref = "androidsvg
 # Fingerprint / device-credential prompt for the app lock. Brings androidx
 # fragment, which is why MainActivity is a FragmentActivity.
 androidx-biometric = { module = "androidx.biometric:biometric", version = "1.1.0" }
+
+# Pinned ahead of what biometric 1.1.0 drags in (fragment 1.2.5). That old
+# FragmentActivity caps an Activity-result request code at 16 bits, but the
+# modern androidx.activity result registry (1.9.x) hands out codes well above
+# that -- so launching a permission request or a picker threw "Can only use
+# lower 16 bits for requestCode" and crashed the app (the download button's
+# notification-permission request was the one that hit it). Fragment 1.8.x
+# routes those launches through the registry without the legacy 16-bit check.
+androidx-fragment = { module = "androidx.fragment:fragment", version.ref = "androidx-fragment" }
 
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
