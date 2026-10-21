@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -127,13 +128,19 @@ fun FastScroller(
                     .coerceIn(0, rail.size - 1)].label
             }
             label?.let { text ->
-                val lift = with(androidx.compose.ui.platform.LocalDensity.current) { 28.dp.roundToPx() }
-                val left = with(androidx.compose.ui.platform.LocalDensity.current) { 64.dp.roundToPx() }
+                val density = androidx.compose.ui.platform.LocalDensity.current
+                val sizePx = with(density) { BUBBLE_SIZE.roundToPx() }
+                val left = with(density) { 56.dp.roundToPx() }
+                // Centred on the fingertip and held wholly on screen, so the
+                // badge never climbs off the top at the first row nor slides
+                // under the bottom edge at the last.
+                val y = (pointerY.roundToInt() - sizePx / 2)
+                    .coerceIn(0, (heightPx.roundToInt() - sizePx).coerceAtLeast(0))
                 Bubble(
                     label = text,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .offset { IntOffset(x = -left, y = pointerY.roundToInt() - lift) },
+                        .offset { IntOffset(x = -left, y = y) },
                 )
             }
         }
@@ -200,19 +207,40 @@ private fun PlainThumb(state: LazyListState, rowCount: Int, modifier: Modifier =
 
 private val THUMB_HEIGHT = 44.dp
 
-/** What is under the finger, big enough to read past the finger. */
+/** The round badge's diameter; one glyph sits in the middle of it. */
+private val BUBBLE_SIZE = 48.dp
+
+/**
+ * What is under the finger, big enough to read past the finger.
+ *
+ * The shape a fast-scroll popup has worn since it was a system widget: a round
+ * field with the corner nearest the rail drawn to a point, lifted off the list
+ * with a shadow so the letter carries past the fingertip. The size is fixed and
+ * the one glyph is centred in it, so a wide letter and a narrow one make the
+ * same badge rather than a box that stretches to whatever is in it -- which is
+ * what read as blunt.
+ */
 @Composable
 private fun Bubble(label: String, modifier: Modifier = Modifier) {
     Surface(
         color = MaterialTheme.colorScheme.primary,
         contentColor = MaterialTheme.colorScheme.onPrimary,
-        shape = RoundedCornerShape(14.dp),
-        modifier = modifier,
+        shape = RoundedCornerShape(
+            topStartPercent = 50,
+            topEndPercent = 50,
+            bottomStartPercent = 50,
+            bottomEndPercent = 0,
+        ),
+        shadowElevation = 6.dp,
+        modifier = modifier.size(BUBBLE_SIZE),
     ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-        )
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                label,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }

@@ -339,7 +339,15 @@ private fun AppScreen(
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) model.refreshStorageAccess()
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                model.refreshStorageAccess()
+                // A transfer start can be refused while a permission dialog has
+                // the app off-top -- Android 12+ forbids starting a foreground
+                // service from the background. Coming back is the moment it is
+                // allowed again, so a queue with work still waiting is handed to
+                // the service here; starting one already running is harmless.
+                if (model.hasQueuedWork()) TransferService.start(context)
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }

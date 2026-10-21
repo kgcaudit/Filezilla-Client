@@ -88,7 +88,17 @@ class TransferService : LifecycleService() {
             return START_NOT_STICKY
         }
 
-        startForegroundCompat()
+        // A foreground start is not always allowed: the system restarts the
+        // service (START_STICKY) into the background after the process was
+        // reclaimed, or the start was asked for while a permission dialog had
+        // taken the app off-top. There is nothing to foreground then, and
+        // pushing on would either crash here or be killed for not foregrounding
+        // in time -- so give the service up. The queue is still in the journal
+        // and resumes the next time the app is on screen (see MainActivity).
+        if (!startForegroundCompat()) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         startQueue()
 
         // START_STICKY: if the process is killed under memory pressure, come
@@ -120,7 +130,17 @@ class TransferService : LifecycleService() {
         }
     }
 
-    private fun startForegroundCompat() {
+    /**
+     * Enters the foreground, or reports that it could not.
+     *
+     * On Android 12 and later `startForeground` throws when the app is not in a
+     * state allowed to start a foreground service -- the refusal is a
+     * `ForegroundServiceStartNotAllowedException`, an [IllegalStateException].
+     * That is not a bug to crash on: it is the system saying "not now", and the
+     * one caller checks the result and gives the service up cleanly. Caught as
+     * the superclass so the API 31 type is never named on an older device.
+     */
+    private fun startForegroundCompat(): Boolean = try {
         val notification = notifications.build(graph.transfers.foremostActive(), 0, heldForNetwork())
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
@@ -131,6 +151,13 @@ class TransferService : LifecycleService() {
         } else {
             startForeground(TransferNotifications.NOTIFICATION_ID, notification)
         }
+        true
+    } catch (e: IllegalStateException) {
+        graph.log.log(
+            LogLevel.ERROR,
+            "Could not bring the transfer service to the foreground: ${e.message}",
+        )
+        false
     }
 
     /**
@@ -203,7 +230,18 @@ class TransferService : LifecycleService() {
          */
         fun start(context: Context) {
             val intent = Intent(context, TransferService::class.java)
-            context.startForegroundService(intent)
+            try {
+                context.startForegroundService(intent)
+            } catch (e: IllegalStateException) {
+                // Starting from a visible screen is allowed; this throws
+                // (ForegroundServiceStartNotAllowedException, an
+                // IllegalStateException) only when the app had just been taken
+                // off-top -- a permission dialog the start raced. Swallowing it
+                // keeps the tap from crashing the app: the transfer stays
+                // queued in the journal and is handed to the service again when
+                // the app returns to the foreground (see MainActivity's resume).
+                android.util.Log.w("TransferService", "Deferred foreground service start", e)
+            }
         }
 
         fun stop(context: Context) {

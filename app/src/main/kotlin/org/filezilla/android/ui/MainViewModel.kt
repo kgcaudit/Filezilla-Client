@@ -279,6 +279,18 @@ class MainViewModel @JvmOverloads constructor(
     val transfers: StateFlow<List<TransferRecord>> = graph.transfers.observeTransfers()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /**
+     * Whether the queue holds work the service should be running -- the states
+     * [runQueue][org.filezilla.android.transfer.TransferManager] actually
+     * drains. A paused or finished transfer is not it, so this never asks the
+     * service to start for something it would not touch; it is what the resumed
+     * screen checks before handing the queue back to the service, in case an
+     * earlier start was refused while a permission dialog had the app off-top.
+     */
+    fun hasQueuedWork(): Boolean = transfers.value.any {
+        it.state == TransferState.PENDING || it.state == TransferState.INTERRUPTED
+    }
+
     val log: StateFlow<List<LogLine>> get() = graph.log.log
 
     /**
