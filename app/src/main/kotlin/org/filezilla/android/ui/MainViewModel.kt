@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.filezilla.android.storage.ConflictChoice
@@ -225,7 +226,18 @@ data class LocalBrowseState(
     val route: AccessRoute = AccessRoute.ALL_FILES_SETTING,
 )
 
-class MainViewModel(application: Application) : AndroidViewModel(application) {
+class MainViewModel @JvmOverloads constructor(
+    application: Application,
+    /**
+     * Where blocking work -- reading an archive, listing a folder, a storage
+     * round trip -- is run, off the main thread. Injected so a test can pass a
+     * dispatcher it controls and have that work finish deterministically when it
+     * pumps the looper, rather than racing a real thread pool under load (which
+     * is what made the archive end-to-end tests flaky). Defaults to
+     * [Dispatchers.IO] in the app.
+     */
+    private val io: CoroutineDispatcher = Dispatchers.IO,
+) : AndroidViewModel(application) {
 
     private val graph = AppGraph.of(application)
 
@@ -842,7 +854,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val moving = held.mode == ClipboardMode.MOVE
         viewModelScope.launch {
             val picked = held.paths()
-            val files = withContext(Dispatchers.IO) {
+            val files = withContext(io) {
                 picked.flatMap { LocalWalk.filesUnder(it) }.map {
                     Outgoing(Uri.fromFile(java.io.File(it.path)), it.name, it.size, it.subPath)
                 }
@@ -851,14 +863,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             // holding nothing produces no files, so an upload built out of
             // files alone simply lost it -- nothing queued, nothing said,
             // and nothing on the server afterwards.
-            val folders = withContext(Dispatchers.IO) {
+            val folders = withContext(io) {
                 picked.flatMap { LocalWalk.foldersUnder(it) }.distinct()
             }
             // The folders that were cut, as paths on the phone, so the
             // sweep after the queue drains knows where to look. Only the ones
             // picked: a sweep is not licensed to wander up out of them.
             val sourceFolders = if (moving) {
-                withContext(Dispatchers.IO) { picked.filter { java.io.File(it).isDirectory } }
+                withContext(io) { picked.filter { java.io.File(it).isDirectory } }
             } else {
                 emptyList()
             }
@@ -1369,7 +1381,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (localPaste != null) return
         val target = pane(id).path
         viewModelScope.launch {
-            val conflicts = withContext(Dispatchers.IO) {
+            val conflicts = withContext(io) {
                 localPasteConflicts(target, held.directory, held.names.toList())
             }
             if (conflicts.isEmpty()) {
@@ -1408,7 +1420,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             // filesystem already knows is a moment. Starting the copy only
             // after measuring would have the user waiting on a scan to watch a
             // folder they can already see being copied.
-            val sizeScan = launch(Dispatchers.IO) {
+            val sizeScan = launch(io) {
                 val total = runCatching { paths.sumOf { LocalOperations.sizeOf(it) } }.getOrNull()
                 localPaste = localPaste?.copy(bytesTotal = total)
             }
@@ -1426,7 +1438,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            val failure = withContext(Dispatchers.IO) {
+            val failure = withContext(io) {
                 runCatching {
                     pasteLocally(
                         held.mode, paths, target, choice,
@@ -1721,7 +1733,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun writeThen(id: PaneId, block: () -> Unit) {
         update(id) { it.copy(loading = true, error = null) }
         viewModelScope.launch {
-            val failure = withContext(Dispatchers.IO) { runCatching(block).exceptionOrNull() }
+            val failure = withContext(io) { runCatching(block).exceptionOrNull() }
             // Waited for, not launched alongside: the refresh clears the
             // error field, so reporting the failure first meant the refresh
             // erased it a moment later.
@@ -1852,7 +1864,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val asked = askForListing(id)
         update(id) { it.copy(path = target, loading = true, error = null) }
         run {
-            val rows = withContext(Dispatchers.IO) {
+            val rows = withContext(io) {
                 runCatching { graph.localFiles.list(target) }
             }
             // Somewhere else was asked for while this was being read, so
@@ -1897,7 +1909,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * volume that is still there does not count, and keeps the usual error.
      */
     private suspend fun volumeIsGone(target: String): Boolean =
-        withContext(Dispatchers.IO) {
+        withContext(io) {
             graph.volumes.forget()
             graph.volumes.volumePaths().none { FilePath.isWithin(target, it) }
         }
@@ -1984,7 +1996,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         onError: () -> Unit,
     ) {
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) {
+            val result = withContext(io) {
                 runCatching {
                     val sites = graph.database.sites().all()
                     val bookmarks = graph.preferences.bookmarks()
@@ -2014,7 +2026,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         onError: () -> Unit,
     ) {
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) {
+            val result = withContext(io) {
                 runCatching {
                     val bytes = getApplication<Application>().contentResolver.openInputStream(uri)
                         ?.use { it.readBytes() } ?: error("could not read the backup")
@@ -2540,7 +2552,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun reconcileRecents() {
         recents = graph.preferences.recents()
         viewModelScope.launch {
-            val resolved = withContext(Dispatchers.IO) { resolveRecents(removeMissing = false) }
+            val resolved = withContext(io) { resolveRecents(removeMissing = false) }
             if (resolved != null) recents = resolved
         }
     }
@@ -2548,7 +2560,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Heals what can be found and clears the records whose file is gone for good. */
     fun clearMissingRecents() {
         viewModelScope.launch {
-            val resolved = withContext(Dispatchers.IO) { resolveRecents(removeMissing = true) }
+            val resolved = withContext(io) { resolveRecents(removeMissing = true) }
             recents = resolved ?: graph.preferences.recents()
         }
     }
@@ -2650,7 +2662,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return openResolved(file, pane)
         }
         viewModelScope.launch {
-            val found = withContext(Dispatchers.IO) {
+            val found = withContext(io) {
                 if (entry.hasFingerprint) {
                     RecentLocator.find(
                         graph.volumes.volumePaths().map { java.io.File(it) },
@@ -2684,8 +2696,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun openExternalDocument(uri: Uri) {
         viewModelScope.launch {
-            val name = withContext(Dispatchers.IO) { graph.storage.displayName(uri) }
-            val type = withContext(Dispatchers.IO) { graph.storage.contentType(uri) }
+            val name = withContext(io) { graph.storage.displayName(uri) }
+            val type = withContext(io) { graph.storage.contentType(uri) }
             // A sound or a film plays straight from the handed-in URI, so a large
             // video off a cloud app starts at once instead of after a full copy.
             // Everything else becomes a file, because those viewers read one.
@@ -2693,7 +2705,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 openStreamedMedia(uri, streamName(name, type))
                 return@launch
             }
-            val file = withContext(Dispatchers.IO) { graph.storage.resolveForViewing(uri) }
+            val file = withContext(io) { graph.storage.resolveForViewing(uri) }
             if (file == null) {
                 graph.log.log(
                     org.filezilla.ftp.protocol.LogLevel.ERROR,
@@ -2938,7 +2950,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         recordRecent(file)
         archiveOpening = file.name
         viewModelScope.launch {
-            val opened = withContext(Dispatchers.IO) { runCatching { Archives.open(file).use { it.entries } } }
+            val opened = withContext(io) { runCatching { Archives.open(file).use { it.entries } } }
             archiveOpening = null
             val entries = opened.getOrNull()
             if (entries == null) {
@@ -2951,7 +2963,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 archiveOutcome = ArchiveOutcome(R.string.archive_not_readable)
                 return@launch
             }
-            val next = withContext(Dispatchers.IO) { nextVolumeAfter(session) }
+            val next = withContext(io) { nextVolumeAfter(session) }
             openImageViewer(
                 images = pages,
                 index = 0,
@@ -2974,7 +2986,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun openArchiveOrComic(id: PaneId, file: java.io.File, home: String) {
         archiveOpening = file.name
         viewModelScope.launch {
-            val entries = withContext(Dispatchers.IO) {
+            val entries = withContext(io) {
                 runCatching { Archives.open(file).use { it.entries } }.getOrNull()
             }
             archiveOpening = null
@@ -3050,11 +3062,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         archiveOpening = name
         viewModelScope.launch {
-            val held = withContext(Dispatchers.IO) {
+            val held = withContext(io) {
                 runCatching { cachedArchiveEntry(outer, entry, null) }.getOrNull()
             }
             val entries = held?.let {
-                withContext(Dispatchers.IO) { runCatching { Archives.open(it).use { a -> a.entries } }.getOrNull() }
+                withContext(io) { runCatching { Archives.open(it).use { a -> a.entries } }.getOrNull() }
             }
             archiveOpening = null
             if (held == null || entries == null) {
@@ -3067,7 +3079,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 archiveOutcome = ArchiveOutcome(R.string.archive_not_readable)
                 return@launch
             }
-            val next = withContext(Dispatchers.IO) { nextVolumeAfter(inner) }
+            val next = withContext(io) { nextVolumeAfter(inner) }
             openImageViewer(
                 images = pages,
                 index = 0,
@@ -3095,7 +3107,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Reads a text file off the IO thread, or null when it is too big or unreadable. */
-    suspend fun loadText(file: java.io.File): TextFiles.Loaded? = withContext(Dispatchers.IO) {
+    suspend fun loadText(file: java.io.File): TextFiles.Loaded? = withContext(io) {
         if (file.length() > TextFiles.MAX_BYTES) return@withContext null
         runCatching { TextFiles.decode(file.readBytes()) }.getOrNull()
     }
@@ -3119,7 +3131,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         onDone: (Boolean) -> Unit,
     ) {
         viewModelScope.launch {
-            val wrote = withContext(Dispatchers.IO) {
+            val wrote = withContext(io) {
                 runCatching { file.writeBytes(TextFiles.encode(text, loaded)) }.isSuccess
             }
             if (!wrote) {
@@ -3131,7 +3143,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 onDone(true)
                 return@launch
             }
-            val sent = withContext(Dispatchers.IO) {
+            val sent = withContext(io) {
                 runCatching {
                     graph.transfers.uploadAfterEditing(
                         origin.site,
@@ -3157,7 +3169,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * a page turn was waiting on.
      */
     suspend fun loadImage(ref: ImageRef, reqWidth: Int, reqHeight: Int): android.graphics.Bitmap? =
-        withContext(Dispatchers.IO) {
+        withContext(io) {
             when (ref) {
                 is ImageRef.OnDisk -> ImageFiles.decode(ref.file, reqWidth, reqHeight)
                 is ImageRef.InArchive -> {
@@ -3178,7 +3190,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         reqWidth: Int,
         reqHeight: Int,
     ): android.graphics.drawable.Drawable? =
-        withContext(Dispatchers.IO) {
+        withContext(io) {
             when (ref) {
                 is ImageRef.OnDisk -> ImageFiles.decodeAnimated(ref.file, reqWidth, reqHeight)
                 is ImageRef.InArchive -> {
@@ -3224,7 +3236,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** [ref]'s real pixel size, read from its header alone, for planning a strip. */
-    suspend fun imageSize(ref: ImageRef): android.util.Size? = withContext(Dispatchers.IO) {
+    suspend fun imageSize(ref: ImageRef): android.util.Size? = withContext(io) {
         imageBytes(ref)?.let { ImageFiles.sizeOf(it) }
     }
 
@@ -3238,7 +3250,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * between a moment and a stall. Pages on disk are measured one by one,
      * which is already cheap. A page that will not read is a null in its place.
      */
-    suspend fun imageSizes(refs: List<ImageRef>): List<android.util.Size?> = withContext(Dispatchers.IO) {
+    suspend fun imageSizes(refs: List<ImageRef>): List<android.util.Size?> = withContext(io) {
         val session = (refs.firstOrNull() as? ImageRef.InArchive)?.session
         // The common case, and the one worth the single pass: every page is an
         // entry of the one archive. Anything else falls back to one at a time.
@@ -3258,7 +3270,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Decodes the rows [top, bottom) of [ref], shrunk by [sample], as one band of a strip. */
     suspend fun loadBand(ref: ImageRef, top: Int, bottom: Int, sample: Int): android.graphics.Bitmap? =
-        withContext(Dispatchers.IO) {
+        withContext(io) {
             imageBytes(ref)?.let { ImageFiles.decodeRegion(it, top, bottom, sample) }
         }
 
@@ -3448,7 +3460,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         recordRecent(file)
         archiveOpening = origin ?: file.name
         viewModelScope.launch {
-            val opened = withContext(Dispatchers.IO) {
+            val opened = withContext(io) {
                 runCatching { Archives.open(file).use { it.entries } }
             }
             archiveOpening = null
@@ -3530,7 +3542,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val index = images.indexOfFirst { it.name == name }
                 val comicKey = "arc\u0000${session.file.path}\u0000${session.at}"
                 viewModelScope.launch {
-                    val next = withContext(Dispatchers.IO) { nextVolumeAfter(session) }
+                    val next = withContext(io) { nextVolumeAfter(session) }
                     openImageViewer(
                         images = refs,
                         index = index,
@@ -3649,7 +3661,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             name, 0L, 0L, {},
         )
         viewModelScope.launch {
-            val opened = withContext(Dispatchers.IO) {
+            val opened = withContext(io) {
                 runCatching { cachedArchiveEntry(session, entry, password) }
             }
             archiveBusy = null
@@ -3874,7 +3886,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val file = files.first()
             archiveOpening = file.name
             viewModelScope.launch {
-                val entries = withContext(Dispatchers.IO) {
+                val entries = withContext(io) {
                     runCatching { Archives.open(file).use { it.entries } }
                 }.getOrNull()
                 archiveOpening = null
@@ -3903,7 +3915,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val file = files[index]
         archiveOpening = file.name
         viewModelScope.launch {
-            val opened = withContext(Dispatchers.IO) { runCatching { Archives.open(file).use { it.entries } } }
+            val opened = withContext(io) { runCatching { Archives.open(file).use { it.entries } } }
             archiveOpening = null
             val session = opened.getOrNull()?.let { ArchiveSession(file, file.name, file.parent ?: "", it) }
             // A new folder for each, numbered so several never collide; or the
@@ -3987,7 +3999,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .sumOf { it.size.coerceAtLeast(0) }
 
         viewModelScope.launch {
-            val outcome = withContext(Dispatchers.IO) {
+            val outcome = withContext(io) {
                 runCatching {
                     into.mkdirs()
                     extract(
@@ -4076,7 +4088,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         archiveBusy = ArchiveBusy(extracting, "", 0L, 0L, { stop.set(true) }, bytes = true)
 
         viewModelScope.launch {
-            val outcome = withContext(Dispatchers.IO) {
+            val outcome = withContext(io) {
                 runCatching {
                     into.mkdirs()
                     Archives.open(session.file).use { opened ->
@@ -4201,7 +4213,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         archiveBusy = ArchiveBusy(compressing, "", 0L, 0L, onStop = { stop.set(true) }, bytes = true)
 
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) {
+            val result = withContext(io) {
                 runCatching {
                     ArchiveWriter.zip(sources, target, flatten = flat, wrap = wrap, partBytes = splitBytes, cancelled = { stop.get() }) { done, total, name ->
                         archiveBusy = archiveBusy?.copy(done = done, total = total, path = name)
@@ -4259,7 +4271,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         archiveBusy = ArchiveBusy(joining, "", 0L, 0L, onStop = { stop.set(true) }, bytes = true)
 
         viewModelScope.launch {
-            val written = withContext(Dispatchers.IO) {
+            val written = withContext(io) {
                 runCatching {
                     SplitParts.join(parts, target, cancelled = { stop.get() }) { done, total ->
                         archiveBusy = archiveBusy?.copy(done = done, total = total, path = target.name)
@@ -4336,7 +4348,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         archiveBusy = ArchiveBusy(compressing, "", 0L, 0L, onStop = { stop.set(true) }, bytes = true)
 
         viewModelScope.launch {
-            val made = withContext(Dispatchers.IO) {
+            val made = withContext(io) {
                 var count = 0
                 for (source in sources) {
                     if (stop.get()) break
@@ -4727,7 +4739,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             // rethrown and ends this coroutine here.
             val outcome = try {
                 Result.success(
-                    withContext(Dispatchers.IO) { walkFor(state, needle) { hit -> reportHit(id, needle, hit) } },
+                    withContext(io) { walkFor(state, needle) { hit -> reportHit(id, needle, hit) } },
                 )
             } catch (cancel: kotlinx.coroutines.CancellationException) {
                 throw cancel
@@ -5043,7 +5055,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             serverWork = ServerWork(ServerWork.Kind.SCANNING, foldersRead = read, stopper = stop::stop)
         }
         return when (end) {
-            is SyncEndpoint.LocalDir -> withContext(Dispatchers.IO) {
+            is SyncEndpoint.LocalDir -> withContext(io) {
                 SyncScan.scan(
                     root = end.root,
                     lister = RemoteLister { org.filezilla.android.files.LocalFileSource("").list(it) },
@@ -5121,7 +5133,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val target = state.target
         return when {
             source is SyncEndpoint.LocalDir && target is SyncEndpoint.LocalDir ->
-                withContext(Dispatchers.IO) {
+                withContext(io) {
                     val result = syncLocally(
                         actions = effectiveActions(state),
                         sourceRoot = source.root,
@@ -5212,7 +5224,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // The queue makes the folders a file needs, but not the empty ones, and
         // it never removes anything -- so the local side handles those two here,
         // with the copies left to the queue.
-        val local = withContext(Dispatchers.IO) {
+        val local = withContext(io) {
             syncLocally(
                 actions = effectiveActions(state),
                 sourceRoot = source.root,
@@ -5407,7 +5419,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun findConflicts(plan: DownloadPlan, folder: Uri): List<DownloadConflict> =
-        withContext(Dispatchers.IO) {
+        withContext(io) {
             plan.files.mapNotNull { file ->
                 val destination = DownloadDestination(folder, file.subPath)
                 val existing = graph.storage.existingDocument(destination, file.displayName)

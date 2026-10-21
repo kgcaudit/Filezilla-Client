@@ -57,16 +57,16 @@ class OpenFromArchiveTest {
         AppGraph.sealPasswordsWith = { KeystorePasswordCipher() }
     }
 
-    private fun waitFor(what: String, seconds: Long = 60, condition: () -> Boolean) {
-        // An archive opens on a background thread and resumes on the main
-        // looper; idle() runs those continuations and the sleep yields the CPU
-        // the background thread needs to land. The same wait the other
-        // end-to-end tests use.
-        val deadline = System.currentTimeMillis() + seconds * 1_000
-        while (System.currentTimeMillis() < deadline) {
+    private fun waitFor(what: String, condition: () -> Boolean) {
+        // The archive opens on the injected dispatcher, which this test sets to
+        // Unconfined -- so the background work runs inline and its continuation
+        // lands on the main looper. Pumping the looper therefore completes it
+        // deterministically; there is no real thread to wait on, so no
+        // wall-clock sleep and no race under parallel load (which is what made
+        // this flaky before the dispatcher was injectable).
+        repeat(200) {
             shadowOf(Looper.getMainLooper()).idle()
             if (condition()) return
-            Thread.sleep(20)
         }
         throw AssertionError("timed out waiting for $what")
     }
@@ -85,7 +85,7 @@ class OpenFromArchiveTest {
     fun `a text file opened from inside a zip has an intent that can be handed off`() {
         val zip = zipWith("notes.txt", "hello from inside the archive")
 
-        val model = MainViewModel(application)
+        val model = MainViewModel(application, kotlinx.coroutines.Dispatchers.Unconfined)
         model.openArchive(PaneId.LEFT, zip, zip.parentFile!!.path)
         waitFor("the archive to open") { model.inArchive(PaneId.LEFT) }
 
@@ -130,7 +130,7 @@ class OpenFromArchiveTest {
     fun `backing out of a nested archive returns to the outer one, not the cache`() {
         val outer = nestedZip()
 
-        val model = MainViewModel(application)
+        val model = MainViewModel(application, kotlinx.coroutines.Dispatchers.Unconfined)
         model.openArchive(PaneId.LEFT, outer, outer.parentFile!!.path)
         waitFor("the outer archive's rows") {
             model.inArchive(PaneId.LEFT) && model.pane(PaneId.LEFT).entries.isNotEmpty() ||
@@ -171,7 +171,7 @@ class OpenFromArchiveTest {
     fun `the same entry a second time reuses the copy already unpacked`() {
         val zip = zipWith("notes.txt", "hello")
 
-        val model = MainViewModel(application)
+        val model = MainViewModel(application, kotlinx.coroutines.Dispatchers.Unconfined)
         model.openArchive(PaneId.LEFT, zip, zip.parentFile!!.path)
         waitFor("the archive to open") { model.inArchive(PaneId.LEFT) }
 
