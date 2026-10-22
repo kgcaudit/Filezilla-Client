@@ -316,12 +316,20 @@ private fun TransferCard(
             // vanishing with each pass -- and it says nothing the word
             // "reconnecting" above it has not already said.
             record.lastError?.takeIf { mood == TransferMood.FAILED }?.let { error ->
-                // A full server answers in protocol wording ("452 ... No space
+                // A full disk answers in protocol wording ("452 ... No space
                 // left on device") that means nothing to the person who just
-                // wanted their photo uploaded. When that is what failed it,
-                // say so in a line; everything else keeps the server's own text.
+                // wanted their photo moved. When that is what failed it, say so
+                // in a line -- and say which side ran out, the server on an
+                // upload, the phone on a download. Everything else keeps the
+                // server's own text.
                 val shown = if (looksOutOfSpace(error)) {
-                    stringResource(R.string.transfer_no_space)
+                    stringResource(
+                        if (record.direction == TransferDirection.DOWNLOAD) {
+                            R.string.transfer_no_space_device
+                        } else {
+                            R.string.transfer_no_space_server
+                        },
+                    )
                 } else {
                     error
                 }

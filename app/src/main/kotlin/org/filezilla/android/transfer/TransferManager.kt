@@ -37,6 +37,7 @@ import org.filezilla.ftp.protocol.ServerCapabilities
 import org.filezilla.ftp.sftp.SftpResilientTransfer
 import org.filezilla.ftp.transfer.ResilientTransfer
 import org.filezilla.ftp.transfer.RetryPolicy
+import org.filezilla.ftp.transfer.looksOutOfSpace
 import org.filezilla.ftp.transfer.ResilientOutcome
 import org.filezilla.ftp.transfer.TransferAbort
 import org.filezilla.ftp.transfer.TransferProgressListener
@@ -488,6 +489,14 @@ class TransferManager(
                     // cannot bring the file back, so this is a permanent
                     // failure with a line the user can act on, not an
                     // INTERRUPTED the queue would pick up and fail again.
+                    fail(record, e.message ?: e.javaClass.simpleName)
+                } else if (looksOutOfSpace(e.message)) {
+                    // The server has no room. RetryPolicy already declined to
+                    // retry inside the one pass; without this the queue would
+                    // still re-run the whole transfer MAX_QUEUE_PASSES times,
+                    // each reconnecting and getting the same 452 for a file
+                    // with nowhere to land. Permanent until the user frees
+                    // space, so fail now rather than three passes later.
                     fail(record, e.message ?: e.javaClass.simpleName)
                 } else {
                     // JournalledTransfer has already written INTERRUPTED for a
