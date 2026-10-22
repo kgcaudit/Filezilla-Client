@@ -39,7 +39,8 @@ class FtpSession(
 
     override fun changeToParent() = operations.changeToParentDirectory()
 
-    override fun list(): List<DirectoryEntry> = engine.list()
+    override fun list(onBatch: ((List<DirectoryEntry>) -> Unit)?): List<DirectoryEntry> =
+        engine.list(onBatch)
 
     override fun createDirectory(name: String) = writing { operations.createDirectory(name) }
 

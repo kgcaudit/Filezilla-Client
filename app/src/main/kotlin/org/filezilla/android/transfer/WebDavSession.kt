@@ -34,7 +34,9 @@ class WebDavSession(settings: WebDavSettings) : RemoteSession {
         cwd = FilePath.parent(cwd) ?: "/"
     }
 
-    override fun list(): List<DirectoryEntry> = client.list(cwd)
+    // WebDAV returns the whole PROPFIND result at once; nothing to stream, so
+    // the progress hook is ignored and the full list is returned at once.
+    override fun list(onBatch: ((List<DirectoryEntry>) -> Unit)?): List<DirectoryEntry> = client.list(cwd)
 
     override fun createDirectory(name: String) = writing { client.makeCollection(resolve(name)) }
 

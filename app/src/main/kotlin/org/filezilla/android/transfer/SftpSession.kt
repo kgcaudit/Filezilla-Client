@@ -31,7 +31,9 @@ class SftpSession(
 
     override fun changeToParent() = engine.changeToParent()
 
-    override fun list(): List<DirectoryEntry> = engine.list()
+    // SFTP reads its whole listing in one call, so there is nothing to stream;
+    // the progress hook is ignored and the full list is returned at once.
+    override fun list(onBatch: ((List<DirectoryEntry>) -> Unit)?): List<DirectoryEntry> = engine.list()
 
     override fun createDirectory(name: String) = writing { engine.createDirectory(name) }
 

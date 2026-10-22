@@ -4554,8 +4554,20 @@ class MainViewModel @JvmOverloads constructor(
                 return
             }
         }
+        // Moving to a different folder starts from an empty list, so a large,
+        // slow folder shows the loading state and then fills in from nothing as
+        // the listing streams in -- rather than sitting on the folder just left
+        // until the whole new one arrives. A refresh of the same folder keeps
+        // its rows and refreshes over them.
+        val navigating = path != null && path != pane(id).path
         update(id) {
-            it.copy(source = PaneSource.Remote(site), loading = true, connecting = true, error = null)
+            it.copy(
+                source = PaneSource.Remote(site),
+                loading = true,
+                connecting = true,
+                error = null,
+                entries = if (navigating) emptyList() else it.entries,
+            )
         }
         // Read before the question is asked, handed back with the answer.
         // A write that lands while this listing is in flight empties the
@@ -4581,7 +4593,21 @@ class MainViewModel @JvmOverloads constructor(
                     // enough away to notice. The ones that do not get asked.
                     val moved = if (path != null) session.changeDirectory(path) else null
                     val here = moved ?: session.currentDirectory()
-                    here to session.list()
+                    // Fill the pane as the listing streams in (FTP), so a big,
+                    // slow folder is not a blank wait. The final list is set in
+                    // onSuccess; these are the part-built views along the way,
+                    // dropped once the user has moved on.
+                    here to session.list(onBatch = { partial ->
+                        viewModelScope.launch {
+                            // Only while the load is still running: once
+                            // onSuccess has set the finished list and cleared
+                            // loading, a late part-built batch must not land on
+                            // top of it and make the list shrink.
+                            if (stillWanted(id, asked) && pane(id).loading) {
+                                update(id) { it.copy(entries = partial) }
+                            }
+                        }
+                    })
                 }
             }.onSuccess { (here, entries) ->
                 if (!stillWanted(id, asked)) return@launch

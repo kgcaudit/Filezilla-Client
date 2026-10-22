@@ -33,7 +33,9 @@ class SmbSession(settings: SmbSettings) : RemoteSession {
         cwd = FilePath.parent(cwd) ?: "/"
     }
 
-    override fun list(): List<DirectoryEntry> = client.list(cwd)
+    // SMB enumerates the directory in one call; nothing to stream, so the
+    // progress hook is ignored and the full list is returned at once.
+    override fun list(onBatch: ((List<DirectoryEntry>) -> Unit)?): List<DirectoryEntry> = client.list(cwd)
 
     override fun createDirectory(name: String) = writing { client.makeDirectory(resolve(name)) }
 

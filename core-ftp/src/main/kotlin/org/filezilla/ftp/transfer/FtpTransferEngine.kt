@@ -272,11 +272,30 @@ class FtpTransferEngine(
      * are skipped rather than turned into half-right entries, and are reported
      * in the log so an unsupported server format is visible instead of silent.
      */
-    fun list(): List<DirectoryEntry> {
+    /**
+     * Lists the current directory.
+     *
+     * @param onBatch when given, called on this thread with the entries parsed
+     *   so far, every so often as the listing streams in. A folder of thousands
+     *   of files is slow not because of the bytes but because the server stat()s
+     *   each one as it writes the line for it, so the listing arrives in a long
+     *   dribble; parsing it line by line lets the screen fill as it comes rather
+     *   than sit blank until the last line. The return value is still the
+     *   complete list. Null keeps the old behaviour (nothing until the end).
+     */
+    fun list(onBatch: ((List<DirectoryEntry>) -> Unit)? = null): List<DirectoryEntry> {
         val useMlsd = capabilities.get(server, CapabilityName.MLSD_COMMAND) == Capability.YES
         control.setTransferType(binary = true)
 
-        val lines = mutableListOf<String>()
+        val entries = mutableListOf<DirectoryEntry>()
+        var skipped = 0
+        // How often the half-built list is handed out: whichever of a count or
+        // a short time comes first, so a fast LAN listing is not flushed on
+        // every line while a slow one still updates a few times a second.
+        val batchSize = 50
+        val batchMillis = 300L
+        var flushedAt = 0L
+        var flushedSize = 0
         runTransfer(
             transferCommand = if (useMlsd) "MLSD" else "LIST",
             resumeOffset = 0,
@@ -284,19 +303,27 @@ class FtpTransferEngine(
             progress = null,
             receiving = true,
         ) { dataIn, _ ->
-            // The control connection's charset applies to the data channel too.
-            dataIn!!.bufferedReader(control.charset).forEachLine { lines += it }
-            lines.size.toLong()
+            // Parsed as each line arrives, not after the whole transfer, so the
+            // caller can show a big, slow folder filling in. The control
+            // connection's charset applies to the data channel too.
+            dataIn!!.bufferedReader(control.charset).forEachLine { raw ->
+                val line = raw.trimEnd('\r', '\n')
+                if (line.isNotBlank()) {
+                    val entry = if (useMlsd) MlsdParser.parse(line) else ListParser.parseLine(line)
+                    if (entry != null) entries += entry else skipped++
+                }
+                if (onBatch != null && entries.size > flushedSize) {
+                    val now = System.currentTimeMillis()
+                    if (entries.size - flushedSize >= batchSize || now - flushedAt >= batchMillis) {
+                        onBatch(entries.toList())
+                        flushedAt = now
+                        flushedSize = entries.size
+                    }
+                }
+            }
+            entries.size.toLong()
         }
 
-        val entries = mutableListOf<DirectoryEntry>()
-        var skipped = 0
-        for (raw in lines) {
-            val line = raw.trimEnd('\r', '\n')
-            if (line.isBlank()) continue
-            val entry = if (useMlsd) MlsdParser.parse(line) else ListParser.parseLine(line)
-            if (entry != null) entries += entry else skipped++
-        }
         if (skipped > 0) {
             logger.log(
                 LogLevel.DEBUG,

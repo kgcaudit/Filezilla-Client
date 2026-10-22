@@ -29,7 +29,16 @@ interface RemoteSession : Closeable {
 
     fun changeToParent()
 
-    fun list(): List<DirectoryEntry>
+    /**
+     * Lists the current directory.
+     *
+     * @param onBatch an optional progress hook: on a protocol that streams its
+     *   listing (FTP), it is called as entries arrive with the part parsed so
+     *   far, so a large, slow folder can be shown filling in rather than blank
+     *   until the end. The other protocols return their whole list at once and
+     *   ignore it. The return value is always the complete list.
+     */
+    fun list(onBatch: ((List<DirectoryEntry>) -> Unit)? = null): List<DirectoryEntry>
 
     fun createDirectory(name: String)
 

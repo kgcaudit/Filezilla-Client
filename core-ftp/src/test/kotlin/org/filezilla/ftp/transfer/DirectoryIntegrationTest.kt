@@ -85,6 +85,25 @@ class DirectoryIntegrationTest {
     }
 
     @Test
+    fun `a large listing is handed out in growing batches as it streams`() {
+        repeat(60) { server.putFile("file-%02d.bin".format(it), 1) }
+
+        val batchSizes = mutableListOf<Int>()
+        val entries = connected { _, engine, _ ->
+            engine.list(onBatch = { partial -> batchSizes += partial.size })
+        }
+
+        // The whole listing still comes back.
+        assertEquals(60, entries.count { it.name.startsWith("file-") })
+        // And the progress hook fired on the way -- past the batch size, so at
+        // least one partial view was offered -- each a growing prefix that never
+        // claims more than the finished list.
+        assertFalse(batchSizes.isEmpty(), "onBatch should fire for a listing past the batch size")
+        assertEquals(batchSizes.sorted(), batchSizes, "batches grow, never shrink")
+        assertTrue(batchSizes.all { it <= entries.size }, "a batch never exceeds the final size")
+    }
+
+    @Test
     fun `uses MLSD when the server advertises it`() {
         server.putFile("m.bin", 10)
         val capabilities = ServerCapabilities()
