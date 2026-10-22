@@ -1,9 +1,11 @@
 package org.filezilla.android.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -44,6 +46,15 @@ import org.filezilla.android.files.FileAssociations
  * one of them, and which one is a fact the user cannot see -- so sorting,
  * selecting and refreshing all landed on "whichever was touched last". A bar
  * belonging to a pane acts on that pane, visibly.
+ *
+ * When both panes are on screen ([splitView]) one of them is the one the
+ * system back button and the toolbar act on, and which one was a fact told
+ * only by a faint background tint -- too faint to read on a light theme, so
+ * "back" went up a folder in a pane the user could not pick out. The active
+ * pane's header now carries a bar in the accent colour along its top edge;
+ * the other reserves the same strip, empty, so the two headers still line up.
+ * On a phone, with one pane in view and a tab strip naming it, there is
+ * nothing to disambiguate, so [splitView] is false and no bar is drawn.
  */
 @Composable
 fun PaneHeader(
@@ -54,6 +65,8 @@ fun PaneHeader(
     onUpload: () -> Unit,
     onGrant: () -> Unit,
     onOpenScreen: (Screen) -> Unit,
+    splitView: Boolean = false,
+    active: Boolean = true,
 ) {
     val state = model.pane(id)
     // Held on the model, not here, so it survives the activity being recreated
@@ -73,15 +86,35 @@ fun PaneHeader(
         action()
     }
 
-    Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
-        // One row, not two. It was a title line above a path line, and the
-        // title was the third copy of a word already on the tab above it and
-        // in the first crumb of the path below it -- so the pane spent a
-        // whole line of the screen repeating itself.
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
+    Column {
+        // The active-pane marker. A 3dp bar in the accent colour along the top
+        // of the pane the back button and toolbar act on; the inactive pane
+        // reserves the same height, transparent, so both headers line up. Only
+        // with both panes in view -- otherwise there is nothing to tell apart.
+        if (splitView) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(3.dp)
+                    .background(
+                        if (active) MaterialTheme.colorScheme.primary else Color.Transparent,
+                    ),
+            )
+        }
+        Surface(
+            color = MaterialTheme.colorScheme.surface,
+            // The active header sits a touch prouder than the inactive one, so
+            // the accent bar is not the only thing separating them.
+            tonalElevation = if (splitView && !active) 0.dp else 2.dp,
         ) {
+            // One row, not two. It was a title line above a path line, and the
+            // title was the third copy of a word already on the tab above it and
+            // in the first crumb of the path below it -- so the pane spent a
+            // whole line of the screen repeating itself.
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
             // What this pane is pointed at, not a hamburger. A hamburger
             // means the app's own navigation drawer, and this opens neither
             // the app nor a drawer: it chooses whether the pane shows the
@@ -177,6 +210,7 @@ fun PaneHeader(
                         null
                     },
                 )
+                }
             }
         }
     }

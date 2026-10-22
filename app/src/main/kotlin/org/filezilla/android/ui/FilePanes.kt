@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -118,7 +119,13 @@ fun FilePanes(
 
             if (bothPanes) {
                 Row(modifier = Modifier.weight(1f)) {
-                    for (id in PaneId.entries) {
+                    for ((index, id) in PaneId.entries.withIndex()) {
+                        // A line down the middle, so the two panes read as two
+                        // regions rather than one wide list that happens to
+                        // change halfway across.
+                        if (index > 0) {
+                            VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        }
                         Box(
                             modifier = Modifier
                                 .weight(1f)
@@ -135,6 +142,11 @@ fun FilePanes(
                                         }
                                     }
                                 }
+                                // The inactive pane is dimmed behind its
+                                // listing; the active one keeps the plain
+                                // surface. The stronger cue is the accent bar
+                                // the header draws, but the tint still helps
+                                // the eye settle on the live side.
                                 .background(
                                     if (id == active) {
                                         MaterialTheme.colorScheme.surface
@@ -155,6 +167,11 @@ fun FilePanes(
                                 onNewDirectory = onNewDirectory,
                                 onUpload = onUpload,
                                 onOpenScreen = onOpenScreen,
+                                // Both panes on screen: the header draws the
+                                // active-pane bar so back and the toolbar name
+                                // the pane they act on.
+                                splitView = true,
+                                active = id == active,
                             )
                         }
                     }
@@ -512,6 +529,8 @@ private fun PaneBody(
     onNewDirectory: () -> Unit,
     onUpload: () -> Unit,
     onOpenScreen: (Screen) -> Unit,
+    splitView: Boolean = false,
+    active: Boolean = true,
 ) {
     val state = model.pane(id)
 
@@ -545,6 +564,8 @@ private fun PaneBody(
             onUpload = onUpload,
             onGrant = onGrant,
             onOpenScreen = onOpenScreen,
+            splitView = splitView,
+            active = active,
         )
         if (state.loading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
 
