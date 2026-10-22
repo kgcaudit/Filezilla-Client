@@ -11,15 +11,20 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -38,6 +43,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarResult
@@ -58,6 +64,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -456,7 +464,47 @@ private fun AppScreen(
         summariseTransfers(transfers, active.mapValues { it.value.bytes })
     }
 
+    // A menu/tool screen is a window over the files screen, not a replacement
+    // for it: on anything but the files screen it sits within the screen with a
+    // margin all round and its corners rounded, over a dimmed backdrop, rather
+    // than filling the display edge to edge. The files screen itself stays full
+    // bleed -- it is the app, not a window onto it.
+    val floatingWindow = screen != HOME
+    val menuShape = RoundedCornerShape(24.dp)
+    Box(modifier = Modifier.fillMaxSize()) {
+        if (floatingWindow) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f)),
+            )
+        }
     Scaffold(
+        modifier = if (floatingWindow) {
+            Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(12.dp)
+                .shadow(16.dp, menuShape)
+                .clip(menuShape)
+        } else {
+            Modifier.fillMaxSize()
+        },
+        // The window is a surface floating on the backdrop; the files screen
+        // keeps the app's own background.
+        containerColor = if (floatingWindow) {
+            MaterialTheme.colorScheme.surface
+        } else {
+            MaterialTheme.colorScheme.background
+        },
+        // Positioned inside the safe area already, so the Scaffold must not
+        // inset its content a second time for the system bars.
+        contentWindowInsets = if (floatingWindow) {
+            WindowInsets(0, 0, 0, 0)
+        } else {
+            ScaffoldDefaults.contentWindowInsets
+        },
         snackbarHost = { SnackbarHost(snackbars) },
         bottomBar = {
             // In the Scaffold's own bottom slot rather than at the foot of
@@ -557,6 +605,7 @@ private fun AppScreen(
                         actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     ),
+                    windowInsets = if (floatingWindow) WindowInsets(0, 0, 0, 0) else TopAppBarDefaults.windowInsets,
                 )
               } else {
                 TopAppBar(
@@ -591,6 +640,7 @@ private fun AppScreen(
                         actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     ),
+                    windowInsets = if (floatingWindow) WindowInsets(0, 0, 0, 0) else TopAppBarDefaults.windowInsets,
                     actions = {
                         when (screen) {
                             Screen.QUEUE -> {
@@ -932,6 +982,7 @@ private fun AppScreen(
 
             Screen.SETTINGS -> SettingsScreen(model = model, modifier = Modifier.padding(padding))
         }
+    }
     }
 
     model.browse.properties?.let { entry ->
