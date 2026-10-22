@@ -181,6 +181,8 @@ class IconMeaningTest {
         // that is Cancel (queue_remove) above.
         "ic_action_close" to setOf(
             "menu_select_none", "action_cancel", "filter_clear", "search_close", "bookmark_remove",
+            // The close beside a bottom sheet's title.
+            "action_close",
         ),
         // Downloading, whether the selection or a single row.
         "ic_action_download" to setOf("action_download_selected", "browse_download"),

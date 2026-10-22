@@ -383,6 +383,7 @@
     <string name="transfers_waiting">%1$d waiting to transfer</string>
     <string name="transfers_percent">%1$d%%</string>
     <string name="pane_storage">Storage and servers</string>
+    <string name="storage_sheet_title">Open</string>
     <string name="storage_section">Storage</string>
     <string name="storage_servers_section">Servers</string>
     <string name="storage_bookmarks_section">Bookmarks</string>

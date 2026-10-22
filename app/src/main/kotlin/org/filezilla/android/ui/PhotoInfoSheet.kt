@@ -64,7 +64,12 @@ fun PhotoInfoSheet(
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         SheetContent {
-            PhotoInfoBody(info, onRotate, onClearLocation, onClearAll, onOpenMap)
+            Column {
+                // The same titled header every sheet carries, with the close
+                // beside the name.
+                SheetHeader(stringResource(R.string.photo_info_title), onClose = onDismiss)
+                PhotoInfoBody(info, onRotate, onClearLocation, onClearAll, onOpenMap)
+            }
         }
     }
 }
@@ -87,14 +92,6 @@ fun PhotoInfoBody(
     val facts = info.facts
 
     Column(Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
-                Text(
-                    stringResource(R.string.photo_info_title),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(start = 20.dp, top = 6.dp, bottom = 8.dp),
-                )
-
                 Header(info)
 
                 // 촬영

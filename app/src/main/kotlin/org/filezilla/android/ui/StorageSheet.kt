@@ -67,13 +67,19 @@ fun StorageSheet(
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         SheetContent {
-        StoragePlaces(
-            id = id,
-            model = model,
-            onGrant = onGrant,
-            onOpenScreen = onOpenScreen,
-            onDismiss = onDismiss,
-        )
+            Column {
+                // Named for the button that opened it, with the close beside
+                // the name. Pinned above the scrolling list, so the sheet reads
+                // as a panel over the files rather than the screen sliding off.
+                SheetHeader(stringResource(R.string.storage_sheet_title), onClose = onDismiss)
+                StoragePlaces(
+                    id = id,
+                    model = model,
+                    onGrant = onGrant,
+                    onOpenScreen = onOpenScreen,
+                    onDismiss = onDismiss,
+                )
+            }
         }
     }
 }

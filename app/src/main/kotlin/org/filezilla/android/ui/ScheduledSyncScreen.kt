@@ -377,12 +377,11 @@ private fun ScheduledSyncEditor(
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         SheetContent {
             Column(Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
-                Text(
+                // The same titled header every sheet carries: named for what it
+                // is (a new job, or editing one), with the close beside it.
+                SheetHeader(
                     stringResource(if (existing == null) R.string.sched_new else R.string.sched_edit),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(start = 20.dp, top = 6.dp, bottom = 10.dp),
+                    onClose = onDismiss,
                 )
 
                 OloTextField(
