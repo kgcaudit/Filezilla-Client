@@ -106,7 +106,7 @@ fun SettingsScreen(model: MainViewModel, modifier: Modifier = Modifier) {
             .verticalScroll(rememberScrollState())
             .padding(vertical = 8.dp),
     ) {
-        SectionLabel(R.string.settings_transfer_section)
+        SectionLabel(R.string.settings_transfer_section, Modifier.padding(horizontal = 20.dp))
         SettingToggle(
             title = stringResource(R.string.setting_wifi_only),
             subtitle = stringResource(R.string.setting_wifi_only_detail),
@@ -115,7 +115,7 @@ fun SettingsScreen(model: MainViewModel, modifier: Modifier = Modifier) {
             onChange = { model.applyWifiOnly(it) },
         )
 
-        SectionLabel(R.string.settings_browse_section)
+        SectionLabel(R.string.settings_browse_section, Modifier.padding(horizontal = 20.dp))
         SettingToggle(
             title = stringResource(R.string.setting_server_thumbnails),
             subtitle = stringResource(R.string.setting_server_thumbnails_detail),
@@ -140,7 +140,7 @@ fun SettingsScreen(model: MainViewModel, modifier: Modifier = Modifier) {
         // trace back -- so when there is any, it says how much and offers to
         // let it go. Empty, there is nothing to show, so the row is left out.
         if (cacheBytes > 0) {
-            SectionLabel(R.string.settings_storage_section)
+            SectionLabel(R.string.settings_storage_section, Modifier.padding(horizontal = 20.dp))
             SettingActionRow(
                 title = stringResource(R.string.setting_view_cache),
                 subtitle = stringResource(R.string.setting_view_cache_detail, formatSize(cacheBytes)),
@@ -152,7 +152,7 @@ fun SettingsScreen(model: MainViewModel, modifier: Modifier = Modifier) {
             )
         }
 
-        SectionLabel(R.string.settings_security_section)
+        SectionLabel(R.string.settings_security_section, Modifier.padding(horizontal = 20.dp))
         SettingToggle(
             title = stringResource(R.string.settings_lock_title),
             subtitle = if (lockAvailable) {
@@ -165,7 +165,7 @@ fun SettingsScreen(model: MainViewModel, modifier: Modifier = Modifier) {
             onChange = { model.setAppLock(it) },
         )
 
-        SectionLabel(R.string.settings_backup_section)
+        SectionLabel(R.string.settings_backup_section, Modifier.padding(horizontal = 20.dp))
         SettingRow(
             title = stringResource(R.string.settings_export),
             subtitle = stringResource(R.string.settings_export_subtitle),
@@ -180,7 +180,7 @@ fun SettingsScreen(model: MainViewModel, modifier: Modifier = Modifier) {
         // Which build this is, where somebody holding the phone can read it.
         // Every build said "0.1" for a long run of commits, so "is this the one
         // with the fix in it" had no answer short of finding the bug again.
-        SectionLabel(R.string.settings_info_section)
+        SectionLabel(R.string.settings_info_section, Modifier.padding(horizontal = 20.dp))
         Text(
             stringResource(R.string.app_build, BuildConfig.VERSION_NAME),
             style = MaterialTheme.typography.bodySmall,
