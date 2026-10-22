@@ -62,11 +62,11 @@ class BuildIdentityTest {
     /** The app has to show it, or reading it means holding a computer. */
     @Test
     fun `the app shows its build somewhere a person can read it`() {
-        val sheet = File("src/main/kotlin/org/filezilla/android/ui/QueueSettingsSheet.kt").readText()
+        val screen = File("src/main/kotlin/org/filezilla/android/ui/SettingsScreen.kt").readText()
 
         assertTrue(
-            "the settings sheet no longer says which build this is",
-            "BuildConfig.VERSION_NAME" in sheet,
+            "the settings screen no longer says which build this is",
+            "BuildConfig.VERSION_NAME" in screen,
         )
     }
 

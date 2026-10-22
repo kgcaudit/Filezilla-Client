@@ -219,7 +219,6 @@ private fun AppScreen(
             screen = HOME
         }
     }
-    var queueSettingsOpen by remember { mutableStateOf(false) }
     var emptyingQueue by remember { mutableStateOf(false) }
     // The file waiting on a decision about which app opens it, and whether
     // the remembered choice counts. "Open with" is the way back from a
@@ -624,13 +623,17 @@ private fun AppScreen(
                                     )
                                 }
                             }
-                            QueueOverflow(
-                                actions = queue,
-                                onClearFinished = model::clearCompleted,
-                                onClearFailed = model::clearFailed,
-                                onClearAll = { emptyingQueue = true },
-                                onSettings = { queueSettingsOpen = true },
-                            )
+                            // Settings moved to the settings screen; the menu
+                            // is only the tidying actions now, so it shows only
+                            // when at least one of them applies.
+                            if (queue.hasTidying) {
+                                QueueOverflow(
+                                    actions = queue,
+                                    onClearFinished = model::clearCompleted,
+                                    onClearFailed = model::clearFailed,
+                                    onClearAll = { emptyingQueue = true },
+                                )
+                            }
                         }
                         // The same broom as above: one glyph for one verb,
                         // wherever it is. These were both the list icon,
@@ -1021,27 +1024,6 @@ private fun AppScreen(
                 onDismiss = { openingFile = null },
             )
         }
-    }
-
-    if (queueSettingsOpen) {
-        // Counted when the sheet opens rather than watched: it changes
-        // when a file is fetched and when Android takes the space back,
-        // and nothing tells the app about the second.
-        var cacheBytes by remember { mutableStateOf(model.viewCacheBytes()) }
-        QueueSettingsSheet(
-            wifiOnly = model.wifiOnly,
-            onWifiOnly = model::applyWifiOnly,
-            serverThumbnails = model.serverThumbnailsEnabled,
-            onServerThumbnails = model::applyServerThumbnails,
-            serverThumbnailsWifiOnly = model.serverThumbnailsWifiOnly,
-            onServerThumbnailsWifiOnly = model::applyServerThumbnailsWifiOnly,
-            cacheBytes = cacheBytes,
-            onEmptyCache = {
-                model.emptyViewCache()
-                cacheBytes = model.viewCacheBytes()
-            },
-            onDismiss = { queueSettingsOpen = false },
-        )
     }
 
     if (emptyingQueue) {

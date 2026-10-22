@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -34,8 +33,6 @@ import org.filezilla.ftp.journal.TransferState
  *    time is true of it, so it gets one button whose face says which.
  *  - **Tidying** -- take rows out of the list. Several of these, none
  *    urgent, all needing a word rather than a glyph, so they get a menu.
- *
- * Settings are neither and sit at the foot of that menu.
  */
 data class QueueActions(
     /** Something is actually moving, so there is something to stop. */
@@ -98,7 +95,7 @@ fun queueActionsFor(records: List<TransferRecord>): QueueActions {
 }
 
 /**
- * The tidying actions, and the settings, behind the transfer list's menu.
+ * The tidying actions behind the transfer list's menu.
  *
  * Words rather than glyphs, because "remove the finished ones", "remove the
  * failed ones" and "empty the list" are three different things that no
@@ -107,7 +104,8 @@ fun queueActionsFor(records: List<TransferRecord>): QueueActions {
  *
  * An action that would do nothing is left out rather than greyed: a menu
  * short enough to read at a glance says more than a long one with half of
- * it dimmed.
+ * it dimmed. When nothing applies the caller leaves the button out entirely,
+ * so the menu never opens on an empty list.
  *
  * It owns its own button, because a DropdownMenu hangs off its own parent
  * layout node -- left beside the button in the app bar's row, it would open
@@ -119,7 +117,6 @@ fun QueueOverflow(
     onClearFinished: () -> Unit,
     onClearFailed: () -> Unit,
     onClearAll: () -> Unit,
-    onSettings: () -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
 
@@ -145,11 +142,6 @@ fun QueueOverflow(
                     open = false
                     onClearAll()
                 }
-            }
-            if (actions.hasTidying) HorizontalDivider()
-            QueueItem(R.string.queue_settings) {
-                open = false
-                onSettings()
             }
         }
     }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,11 +28,20 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import org.filezilla.android.BuildConfig
 import org.filezilla.android.R
 
 /**
- * The settings screen: the app lock and the backup of what cannot be
- * downloaded again -- the saved servers and favourites.
+ * The settings screen: every app-wide choice in one place.
+ *
+ * The transfer and browsing switches used to live in a bottom sheet hung off
+ * the transfer list's overflow menu -- a "transfer settings" entry three taps
+ * deep inside the queue, where "fetch server thumbnails" (nothing to do with
+ * transfers) and "how much disk the preview cache holds" also ended up because
+ * there was nowhere else to put them. The app has a settings screen; these
+ * belong on it, grouped by what they govern -- transfers, browsing, storage,
+ * then the security and backup this screen already carried, and the build at
+ * the foot where a person looks for it.
  *
  * Reached from the storage sheet, and closed the same way as the other tools,
  * so back returns to the sheet it was opened from.
@@ -40,6 +50,11 @@ import org.filezilla.android.R
 fun SettingsScreen(model: MainViewModel, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val lockAvailable = remember { appLockAvailable(context) }
+
+    // Counted when the screen opens rather than watched: it changes when a
+    // file is fetched and when Android takes the space back, and nothing
+    // tells the app about the second. Re-read after emptying.
+    var cacheBytes by remember { mutableStateOf(model.viewCacheBytes()) }
 
     // The passphrase typed in the dialog, held until the file picker it launches
     // comes back with a destination. One of the two actions is live at a time.
@@ -91,6 +106,52 @@ fun SettingsScreen(model: MainViewModel, modifier: Modifier = Modifier) {
             .verticalScroll(rememberScrollState())
             .padding(vertical = 8.dp),
     ) {
+        SectionLabel(R.string.settings_transfer_section)
+        SettingToggle(
+            title = stringResource(R.string.setting_wifi_only),
+            subtitle = stringResource(R.string.setting_wifi_only_detail),
+            checked = model.wifiOnly,
+            enabled = true,
+            onChange = { model.applyWifiOnly(it) },
+        )
+
+        SectionLabel(R.string.settings_browse_section)
+        SettingToggle(
+            title = stringResource(R.string.setting_server_thumbnails),
+            subtitle = stringResource(R.string.setting_server_thumbnails_detail),
+            checked = model.serverThumbnailsEnabled,
+            enabled = true,
+            onChange = { model.applyServerThumbnails(it) },
+        )
+        // The Wi-Fi-only rule for those fetches, shown only while they are on.
+        if (model.serverThumbnailsEnabled) {
+            SettingToggle(
+                title = stringResource(R.string.setting_server_thumbnails_wifi),
+                subtitle = stringResource(R.string.setting_server_thumbnails_wifi_detail),
+                checked = model.serverThumbnailsWifiOnly,
+                enabled = true,
+                onChange = { model.applyServerThumbnailsWifiOnly(it) },
+            )
+        }
+
+        // Opening a server file leaves a copy behind so the next tap is
+        // instant. Held to a limit and dropped oldest first, but a few hundred
+        // megabytes that nothing accounts for is the kind of thing nobody can
+        // trace back -- so when there is any, it says how much and offers to
+        // let it go. Empty, there is nothing to show, so the row is left out.
+        if (cacheBytes > 0) {
+            SectionLabel(R.string.settings_storage_section)
+            SettingActionRow(
+                title = stringResource(R.string.setting_view_cache),
+                subtitle = stringResource(R.string.setting_view_cache_detail, formatSize(cacheBytes)),
+                actionLabel = stringResource(R.string.setting_view_cache_clear),
+                onAction = {
+                    model.emptyViewCache()
+                    cacheBytes = model.viewCacheBytes()
+                },
+            )
+        }
+
         SectionLabel(R.string.settings_security_section)
         SettingToggle(
             title = stringResource(R.string.settings_lock_title),
@@ -114,6 +175,17 @@ fun SettingsScreen(model: MainViewModel, modifier: Modifier = Modifier) {
             title = stringResource(R.string.settings_import),
             subtitle = stringResource(R.string.settings_import_subtitle),
             onClick = { askImport = true },
+        )
+
+        // Which build this is, where somebody holding the phone can read it.
+        // Every build said "0.1" for a long run of commits, so "is this the one
+        // with the fix in it" had no answer short of finding the bug again.
+        SectionLabel(R.string.settings_info_section)
+        Text(
+            stringResource(R.string.app_build, BuildConfig.VERSION_NAME),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
         )
     }
 
@@ -174,6 +246,31 @@ private fun SettingToggle(
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
+    }
+}
+
+/** A setting whose value is not a switch but a one-off action -- a title, a
+ *  sentence, and a button at the end that does the thing. */
+@Composable
+private fun SettingActionRow(
+    title: String,
+    subtitle: String,
+    actionLabel: String,
+    onAction: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        TextButton(onClick = onAction, shape = MaterialTheme.shapes.small) {
+            Text(actionLabel)
+        }
     }
 }
 

@@ -128,7 +128,7 @@ class WordingTest {
             // stopped saying "OK".
             "action_create", "action_change",
             // The share button's name and the title of the sheet it opens:
-            // the sheet answers the button, same as queue_settings below.
+            // the sheet answers the button.
             "action_share_selected",
             // Same again: the menu item and the title of the dialog it
             // opens. A menu that says one thing and a dialog that says
@@ -170,10 +170,6 @@ class WordingTest {
             // "Add a server": the sites screen's + button, and the + on the
             // storage sheet's servers heading that opens that same screen.
             "sites_add",
-            // The button that opens the transfer settings and the heading of
-            // the sheet it opens: one name for one place, said twice on
-            // purpose so the sheet answers the button.
-            "queue_settings",
             "prompt_name", "prompt_new_name", "prompt_rename_title", "props_unknown",
             "queue_speed_remaining", "rename_detail", "side_local", "sites_empty_detail",
             "title_log", "title_queue",

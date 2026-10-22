@@ -72,7 +72,7 @@ fun PhotoInfoSheet(
 /**
  * The sheet's contents, apart from the sheet -- so a screenshot test can render
  * it, since a modal sheet draws in a window of its own that such a test never
- * sees inside (the same reason [QueueSettings] is split from its sheet).
+ * sees inside (the same reason a sheet's body is kept apart from its sheet).
  */
 @Composable
 fun PhotoInfoBody(

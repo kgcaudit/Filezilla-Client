@@ -31,7 +31,7 @@ import org.filezilla.android.ui.BrowseOptions
 import org.filezilla.android.ui.SortKey
 import org.filezilla.android.ui.SiteDraft
 import org.filezilla.android.ui.EmptyState
-import org.filezilla.android.ui.QueueSettings
+import org.filezilla.android.ui.SettingsScreen
 import org.filezilla.android.ui.DangerButton
 import org.filezilla.android.ui.FileKind
 import org.filezilla.android.ui.FileTile
@@ -575,9 +575,10 @@ class LayoutShotTest {
     }
 
     @Test
-    fun `the queue settings`() {
-        shoot("queue-settings", height = 300) {
-            QueueSettings(wifiOnly = true, onWifiOnly = {})
+    fun `the settings screen`() {
+        val model = MainViewModel(application)
+        shoot("settings") {
+            SettingsScreen(model = model)
         }
     }
 
