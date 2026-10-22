@@ -51,6 +51,7 @@ import org.filezilla.android.ui.theme.status
 import org.filezilla.ftp.journal.TransferDirection
 import org.filezilla.ftp.journal.TransferRecord
 import org.filezilla.ftp.journal.TransferState
+import org.filezilla.ftp.transfer.looksOutOfSpace
 
 @Composable
 fun QueueScreen(
@@ -315,8 +316,17 @@ private fun TransferCard(
             // vanishing with each pass -- and it says nothing the word
             // "reconnecting" above it has not already said.
             record.lastError?.takeIf { mood == TransferMood.FAILED }?.let { error ->
+                // A full server answers in protocol wording ("452 ... No space
+                // left on device") that means nothing to the person who just
+                // wanted their photo uploaded. When that is what failed it,
+                // say so in a line; everything else keeps the server's own text.
+                val shown = if (looksOutOfSpace(error)) {
+                    stringResource(R.string.transfer_no_space)
+                } else {
+                    error
+                }
                 Text(
-                    error,
+                    shown,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(top = 2.dp),

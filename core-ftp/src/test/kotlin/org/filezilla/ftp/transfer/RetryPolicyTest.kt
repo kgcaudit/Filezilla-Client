@@ -13,8 +13,8 @@ class RetryPolicyTest {
 
     private val policy = RetryPolicy()
 
-    private fun commandFailure(code: Int) =
-        FtpCommandException(FtpReply.of(listOf("$code something happened")), "test")
+    private fun commandFailure(code: Int, text: String = "something happened") =
+        FtpCommandException(FtpReply.of(listOf("$code $text")), "test")
 
     @Test
     fun `backs off exponentially and then levels out`() {
@@ -42,6 +42,33 @@ class RetryPolicyTest {
         assertFalse(policy.shouldRetry(commandFailure(530), attempt = 1)) // not logged in
         assertFalse(policy.shouldRetry(commandFailure(550), attempt = 1)) // no such file
         assertFalse(policy.shouldRetry(commandFailure(552), attempt = 1)) // out of space
+    }
+
+    @Test
+    fun `never retries a full disk, whatever code it wears`() {
+        // The reported case: an ipTIME NAS answers a full disk with 452, a 4yz
+        // that otherwise invites a retry. Climbing the backoff against a server
+        // with nowhere to put the file helps nobody, and reads as "reconnecting"
+        // for a connection that is fine.
+        assertFalse(
+            policy.shouldRetry(
+                commandFailure(452, "Transfer aborted. No space left on device"),
+                attempt = 1,
+            ),
+        )
+        // A quota refusal means the same thing, however it is dressed.
+        assertFalse(policy.shouldRetry(commandFailure(452, "Quota exceeded"), attempt = 1))
+        // But an ordinary transient 452 -- a busy data channel, say -- is still
+        // worth another try.
+        assertTrue(policy.shouldRetry(commandFailure(452, "Requested action aborted; busy"), attempt = 1))
+    }
+
+    @Test
+    fun `reads an out-of-space reply from its words`() {
+        assertTrue(looksOutOfSpace("452 Transfer aborted. No space left on device"))
+        assertTrue(looksOutOfSpace("552 Exceeded storage allocation"))
+        assertFalse(looksOutOfSpace("226 Transfer complete"))
+        assertFalse(looksOutOfSpace(null))
     }
 
     @Test

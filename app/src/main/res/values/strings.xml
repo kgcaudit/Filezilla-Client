@@ -237,6 +237,7 @@
     <string name="state_failed">Failed</string>
     <string name="state_reconnecting">Reconnecting…</string>
     <string name="queue_attempt">attempt %1$d</string>
+    <string name="transfer_no_space">The server has no space left</string>
 
     <string name="fail_offline">No network connection</string>
     <string name="fail_offline_advice">This phone is not on a network. Turn on Wi\u2011Fi or mobile data and try again.</string>

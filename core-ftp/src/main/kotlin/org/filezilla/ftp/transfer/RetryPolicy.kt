@@ -47,11 +47,43 @@ data class RetryPolicy(
             // either -- it was moved past where it could be found, or deleted.
             is java.io.FileNotFoundException -> false
             // RFC 959 splits replies exactly this way: 4yz is a transient
-            // negative reply and invites a retry, 5yz is permanent.
-            is FtpCommandException -> error.reply.category == 4
+            // negative reply and invites a retry, 5yz is permanent -- except
+            // when the server is out of room. A full disk answers "452 ... No
+            // space left on device", a transient-looking 4yz that will say the
+            // same thing every time: retrying it only climbs the backoff while
+            // the upload has nowhere to land, and shows "reconnecting" for a
+            // connection that is perfectly fine. (A quota refusal is the same,
+            // whether the server dresses it as 452 or 552.)
+            is FtpCommandException -> error.reply.category == 4 && !looksOutOfSpace(error.reply.raw)
             // A broken connection is the case resume exists for.
             is IOException -> true
             else -> false
         }
     }
 }
+
+/**
+ * Whether a server's reply text says it has no room for the file -- a disk
+ * that is full or a quota that is spent.
+ *
+ * Matched on the message rather than the code because servers disagree on the
+ * code: the same condition comes back as 452 from one and 552 from another,
+ * and only the words ("No space left on device", "Quota exceeded") are
+ * dependable. Shared with the UI, which turns a match into one plain line
+ * rather than the raw protocol reply. Not exhaustive across every server's
+ * wording, and does not need to be: a miss simply falls back to the ordinary
+ * handling, which is a retry that fails quickly and an honest error.
+ */
+fun looksOutOfSpace(text: String?): Boolean {
+    if (text.isNullOrBlank()) return false
+    val lower = text.lowercase()
+    return OUT_OF_SPACE_MARKERS.any { it in lower }
+}
+
+private val OUT_OF_SPACE_MARKERS = listOf(
+    "no space left on device",
+    "quota exceeded",
+    "exceeded storage allocation",
+    "insufficient storage",
+    "disk full",
+)
