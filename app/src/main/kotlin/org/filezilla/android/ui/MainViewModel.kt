@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.filezilla.android.service.LocalWorkService
 import org.filezilla.android.storage.ConflictChoice
 import org.filezilla.android.storage.DownloadConflict
 import org.filezilla.android.storage.DownloadDestination
@@ -1430,6 +1431,14 @@ class MainViewModel @JvmOverloads constructor(
         clipboard = null
 
         viewModelScope.launch {
+          // Hold the process up for the length of the copy. A copy between two
+          // folders is the user's bytes moving as much as a download is, but
+          // with the screen off and nothing foregrounding the process Android
+          // freezes it and the copy stops mid-file -- the reported bug. The
+          // service keeps it alive and the CPU awake; it comes down in the
+          // finally, whichever way the copy ends.
+          LocalWorkService.start(getApplication())
+          try {
             // The size is learned alongside the copy, not before it: the copy
             // starts this instant and the ring is an indeterminate sweep until
             // the scan comes back with a total, which for lengths the
@@ -1505,6 +1514,9 @@ class MainViewModel @JvmOverloads constructor(
                     localPaste = null
                 }
             }
+          } finally {
+            LocalWorkService.stop(getApplication())
+          }
         }
     }
 

@@ -32,6 +32,14 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <!--
+        A copy or move between two folders on the device is the user's bytes
+        moving as much as a transfer is, so it too runs in a dataSync foreground
+        service; otherwise the screen going off freezes the process and the
+        copy stops. The wake lock keeps the CPU moving those bytes through a
+        screen-off doze; it is held only while a copy runs.
+    -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!--
         Audio and video keep playing after the app leaves the screen, from a
         media service that shows a playback notification with its controls.
         mediaPlayback is the foreground-service type that covers it, the same
@@ -149,6 +157,13 @@
 
         <service
             android:name=".service.TransferService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- Keeps the process alive while a local copy or move runs; see
+             LocalWorkService. Same dataSync type, for the same reason. -->
+        <service
+            android:name=".service.LocalWorkService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 

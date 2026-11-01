@@ -6,6 +6,7 @@
     <string name="notification_channel_transfers">Transfers</string>
     <string name="notification_channel_transfers_description">Progress of running uploads and downloads</string>
     <string name="notification_preparing">Preparing transfer</string>
+    <string name="notification_copying">Copying files</string>
     <string name="notification_waiting_network">Waiting for Wi‑Fi</string>
     <string name="notification_waiting_network_detail">Transfers continue when Wi‑Fi is back</string>
     <string name="notification_progress">%1$s / %2$s · %3$d%%</string>
