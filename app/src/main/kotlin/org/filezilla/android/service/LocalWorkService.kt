@@ -38,15 +38,19 @@ class LocalWorkService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         TransferNotifications(this).ensureChannel()
+        // What the work is, in the user's words: "파일 복사 중" for a paste, or
+        // the archive operation's own label ("압축 해제 중", "압축 중" ...). The
+        // app shows the real progress; this only names what is alive.
+        val label = intent?.getStringExtra(EXTRA_LABEL) ?: getString(R.string.notification_copying)
         val foregrounded = runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(
                     NOTIFICATION_ID,
-                    notification(),
+                    notification(label),
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
                 )
             } else {
-                startForeground(NOTIFICATION_ID, notification())
+                startForeground(NOTIFICATION_ID, notification(label))
             }
             true
         }.getOrDefault(false)
@@ -65,10 +69,10 @@ class LocalWorkService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun notification(): Notification =
+    private fun notification(label: String): Notification =
         NotificationCompat.Builder(this, TransferNotifications.CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_sync)
-            .setContentTitle(getString(R.string.notification_copying))
+            .setContentTitle(label)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             // Indeterminate: the view model owns the real progress and shows it
@@ -104,17 +108,20 @@ class LocalWorkService : Service() {
     companion object {
         private const val NOTIFICATION_ID = 3
         private const val WAKE_LOCK_TAG = "olo-explorer:local-copy"
+        private const val EXTRA_LABEL = "label"
 
         /** One hour: a safety net for a crash, well past any same-device copy. */
         private const val WAKE_LOCK_TIMEOUT_MILLIS = 60L * 60L * 1000L
 
         /**
-         * Raise the keep-alive for a local copy. Legal because the caller is the
-         * app acting on a tap, so it is on screen; the catch covers the one
-         * window where it was just taken off-top, exactly as [TransferService].
+         * Raise the keep-alive for a local operation, named by [label] in its
+         * notification (null falls back to "copying"). Legal because the caller
+         * is the app acting on a tap, so it is on screen; the catch covers the
+         * one window where it was just taken off-top, exactly as [TransferService].
          */
-        fun start(context: Context) {
+        fun start(context: Context, label: String? = null) {
             val intent = Intent(context, LocalWorkService::class.java)
+            if (label != null) intent.putExtra(EXTRA_LABEL, label)
             try {
                 context.startForegroundService(intent)
             } catch (e: IllegalStateException) {

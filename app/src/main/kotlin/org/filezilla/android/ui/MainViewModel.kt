@@ -3413,8 +3413,30 @@ class MainViewModel @JvmOverloads constructor(
         val args: List<Any> = emptyList(),
     )
 
-    var archiveBusy by mutableStateOf<ArchiveBusy?>(null)
-        private set
+    private val _archiveBusy = mutableStateOf<ArchiveBusy?>(null)
+
+    /**
+     * The archive operation under way -- extract, compress, join, or opening a
+     * file out of an archive -- with its progress, or null when none runs.
+     *
+     * Setting it raises the same keep-alive a local paste uses, for the same
+     * reason: unpacking or building a large archive is the user's bytes moving
+     * on the device, and with the screen off and no foreground service holding
+     * the process up Android freezes it and the work stops mid-file. The cover
+     * goes up when an operation starts (null to non-null) and comes down when
+     * it ends (non-null to null); the progress updates in between, which keep
+     * the value non-null, do not toggle it.
+     */
+    var archiveBusy: ArchiveBusy?
+        get() = _archiveBusy.value
+        private set(value) {
+            val wasActive = _archiveBusy.value != null
+            _archiveBusy.value = value
+            when {
+                value != null && !wasActive -> LocalWorkService.start(getApplication(), value.title)
+                value == null && wasActive -> LocalWorkService.stop(getApplication())
+            }
+        }
 
     /**
      * The name of an archive being opened, while its index is read.
